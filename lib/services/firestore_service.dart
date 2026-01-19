@@ -562,31 +562,18 @@ class FirestoreService {
     return newCollectionRef.id;
   }
 
-  /// Get collections from users that current user follows
-  Future<List<CollectionEntity>> getFollowingCollections(String userId) async {
-    // Get user's following list
-    final userDoc = await _usersRef.doc(userId).get();
-    if (!userDoc.exists) return [];
-
-    final userData = userDoc.data() as Map<String, dynamic>;
-    final following = List<String>.from(userData['following'] ?? []);
-
-    if (following.isEmpty) return [];
-
-    // Firestore 'in' queries are limited to 30 items
-    final limitedFollowing = following.take(30).toList();
-
-    final snapshot = await _collectionsRef
-        .where('userId', whereIn: limitedFollowing)
-        .where('isPublic', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .limit(50)
-        .get();
-
-    return snapshot.docs
-        .map((doc) => CollectionEntity.fromMap(
-            doc.data() as Map<String, dynamic>, doc.id))
-        .toList();
+  /// Check if user is following another user
+  Future<bool> isFollowing(String currentUserId, String targetUserId) async {
+    try {
+      final doc = await _usersRef.doc(currentUserId).get();
+      if (!doc.exists) return false;
+      
+      final data = doc.data() as Map<String, dynamic>;
+      final following = List<String>.from(data['following'] ?? []);
+      return following.contains(targetUserId);
+    } catch (e) {
+      return false;
+    }
   }
 
 
@@ -641,7 +628,6 @@ class FirestoreService {
         .toList();
   }
 
-  /// Get collections by category
   Future<List<CollectionEntity>> getCollectionsByCategory(
       String category, {int limit = 20}) async {
     final snapshot = await _collectionsRef
@@ -657,13 +643,60 @@ class FirestoreService {
         .toList();
   }
 
+  /// Get collections from followed users
+  Future<List<CollectionEntity>> getFollowingCollections(String userId) async {
+    try {
+      // 1. Get following list
+      final userDoc = await _usersRef.doc(userId).get();
+      if (!userDoc.exists) return [];
+      
+      final data = userDoc.data() as Map<String, dynamic>;
+      final following = List<String>.from(data['following'] ?? []);
+      
+      if (following.isEmpty) return [];
+
+      // 2. Chunk processing (Firestore limit of 10 for IN queries)
+      List<CollectionEntity> allCollections = [];
+      const int batchSize = 10;
+      
+      for (int i = 0; i < following.length; i += batchSize) {
+        final end = (i + batchSize < following.length) ? i + batchSize : following.length;
+        final chunk = following.sublist(i, end);
+        
+        if (chunk.isEmpty) continue;
+
+        final snapshot = await _collectionsRef
+            .where('userId', whereIn: chunk)
+            .where('isPublic', isEqualTo: true)
+            .orderBy('createdAt', descending: true)
+            .limit(10) // Limit per chunk to avoid fetching too many
+            .get();
+            
+        final chunkCollections = snapshot.docs.map((doc) => 
+          CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id)
+        ).toList();
+        
+        allCollections.addAll(chunkCollections);
+      }
+      
+      // 3. Sort merged results in memory
+      allCollections.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      
+      return allCollections;
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error fetching following collections: $e');
+      return [];
+    }
+  }
+
   /// Get open collaboration collections
-  Future<List<CollectionEntity>> getOpenCollaborationCollections() async {
+  Future<List<CollectionEntity>> getOpenCollaborationCollections({int limit = 20}) async {
     final snapshot = await _collectionsRef
         .where('isPublic', isEqualTo: true)
         .where('isOpenForContribution', isEqualTo: true)
         .orderBy('createdAt', descending: true)
-        .limit(20)
+        .limit(limit)
         .get();
 
     return snapshot.docs

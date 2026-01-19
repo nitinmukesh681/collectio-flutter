@@ -36,6 +36,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   bool _showSearch = false;
   String _currentUserName = '';
 
+  bool _isFollowing = false;
+  
   @override
   void initState() {
     super.initState();
@@ -55,18 +57,45 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     try {
       final collection = await _firestoreService.getCollection(widget.collectionId);
       if (collection != null) {
-        setState(() {
-          _collection = collection.copyWith(
-            isLiked: collection.likedBy.contains(widget.currentUserId),
-          );
-          _isOwner = collection.userId == widget.currentUserId;
-        });
+        final isFollowing = await _firestoreService.isFollowing(
+          widget.currentUserId, 
+          collection.userId
+        );
+        
+        if (mounted) {
+          setState(() {
+            _collection = collection.copyWith(
+              isLiked: collection.likedBy.contains(widget.currentUserId),
+            );
+            _isOwner = collection.userId == widget.currentUserId;
+            _isFollowing = isFollowing;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error loading collection: $e');
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
+  }
 
+  Future<void> _toggleFollowUser() async {
+    if (_collection == null) return;
+    final targetUserId = _collection!.userId;
+    
+    // Optimistic update
+    setState(() => _isFollowing = !_isFollowing);
+    
+    try {
+      await _firestoreService.followUser(
+        widget.currentUserId,
+        targetUserId,
+        _currentUserName
+      );
+    } catch (e) {
+      // Revert
+      if (mounted) setState(() => _isFollowing = !_isFollowing);
+      debugPrint('Error toggling follow: $e');
+    }
   }
 
   Future<void> _toggleLike() async {
@@ -433,19 +462,26 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         ),
                       ),
                       const Spacer(),
-                      if (!_isOwner)
-                        OutlinedButton(
-                          onPressed: () {
-                            // Follow user
-                          },
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
+                        if (!_isOwner)
+                          OutlinedButton(
+                            onPressed: _toggleFollowUser,
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              side: _isFollowing 
+                                ? BorderSide(color: Colors.grey[400]!) 
+                                : const BorderSide(color: AppColors.primaryPurple),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              _isFollowing ? 'Following' : 'Follow',
+                              style: TextStyle(
+                                color: _isFollowing ? Colors.grey[700] : AppColors.primaryPurple,
+                                fontWeight: _isFollowing ? FontWeight.normal : FontWeight.bold,
+                              ),
+                            ),
                           ),
-                          child: const Text('Follow'),
-                        ),
                     ],
                   ),
                   const SizedBox(height: 16),

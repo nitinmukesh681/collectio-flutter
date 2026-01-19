@@ -12,6 +12,7 @@ import 'create_collection_screen.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
+import 'open_collaborations_screen.dart';
 
 /// Home screen with feed of collections
 class HomeScreen extends StatefulWidget {
@@ -62,12 +63,34 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadFeed() async {
     setState(() => _isLoadingFeed = true);
     try {
-      // For now fetching public feed. 
-      // Ideally this should mix following + recommended
-      final feed = await _firestoreService.getPublicCollectionsList(limit: 20);
+      final auth = context.read<AuthProvider>();
+      
+      // 1. Fetch Following Feed
+      final followingStored = await _firestoreService.getFollowingCollections(auth.userId);
+      
+      // 2. Fetch Public Feed (Explore/Recommended)
+      final publicStored = await _firestoreService.getPublicCollectionsList(limit: 20);
+      
+      // 3. Merge & Deduplicate
+      final Map<String, CollectionEntity> mergedMap = {};
+      
+      for (var c in followingStored) {
+        mergedMap[c.id] = c;
+      }
+      for (var c in publicStored) {
+        if (!mergedMap.containsKey(c.id)) {
+          mergedMap[c.id] = c;
+        }
+      }
+      
+      final combinedList = mergedMap.values.toList();
+      
+      // 4. Sort by CreatedAt Descending
+      combinedList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
       if (mounted) {
         setState(() {
-          _feedCollections = feed;
+          _feedCollections = combinedList;
           _isLoadingFeed = false;
         });
       }
@@ -144,7 +167,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                // Navigate to see all collabs
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const OpenCollaborationsScreen(),
+                                  ),
+                                );
                               },
                               child: const Row(
                                 children: [
