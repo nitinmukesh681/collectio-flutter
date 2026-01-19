@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/collection_entity.dart';
 import '../theme/app_theme.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -87,11 +88,26 @@ class FeedCollectionCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.more_horiz),
-                    color: Colors.grey,
-                    onPressed: () {
-                      // TODO: Show options menu
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_horiz, color: Colors.grey),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(Icons.share_outlined, size: 20, color: Colors.grey),
+                            SizedBox(width: 12),
+                            Text('Share'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'share') {
+                        Share.share(
+                          'Check out ${collection.title} on Finds: https://collectio-b6b15.web.app/collection/${collection.id}',
+                        );
+                      }
                     },
                   ),
                 ],
