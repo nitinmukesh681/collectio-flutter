@@ -37,6 +37,17 @@ class FirestoreService {
     await _usersRef.doc(userId).update({'userName': username});
   }
 
+  /// Get user email by username
+  Future<String?> getUserEmailByUsername(String username) async {
+    final querySnapshot = await _usersRef
+        .where('userName', isEqualTo: username)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) return null;
+    return (querySnapshot.docs.first.data() as Map<String, dynamic>)['email'] as String?;
+  }
+
   /// Follow a user
   Future<void> followUser(String currentUserId, String targetUserId, String currentUsername) async {
     debugPrint('FirestoreService: followUser $currentUserId -> $targetUserId');
@@ -55,7 +66,7 @@ class FirestoreService {
       // (For private profiles, requestFollowUser should be used instead - logic handled in UI)
       final notificationRef = _firestore.collection('notifications').doc();
       batch.set(notificationRef, {
-        'type': 'follow',
+        'type': 'NEW_FOLLOWER',
         'toUserId': targetUserId,
         'fromUserId': currentUserId,
         'fromUsername': currentUsername,
@@ -651,8 +662,8 @@ class FirestoreService {
     final snapshot = await _collectionsRef
         .where('isPublic', isEqualTo: true)
         .where('isOpenForContribution', isEqualTo: true)
-        .orderBy('contributorCount', descending: true)
-        .limit(10)
+        .orderBy('createdAt', descending: true)
+        .limit(20)
         .get();
 
     return snapshot.docs

@@ -24,132 +24,129 @@ class FeedCollectionCard extends StatelessWidget {
     final previewImages = collection.previewImageUrls;
     final hasImages = previewImages.isNotEmpty;
     
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: User Info
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
-                  backgroundImage: collection.userAvatarUrl != null
-                      ? CachedNetworkImageProvider(collection.userAvatarUrl!)
-                      : null,
-                  child: collection.userAvatarUrl == null
-                      ? Text(
-                          collection.userName[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: AppColors.primaryPurple,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '@${collection.userName}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        timeago.format(
-                          DateTime.fromMillisecondsSinceEpoch(collection.createdAt),
-                        ),
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.more_horiz),
-                  color: Colors.grey,
-                  onPressed: () {
-                    // TODO: Show options menu
-                  },
-                ),
-              ],
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-
-          // Title & Description
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  collection.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800, // Extra bold for premium feel
-                    height: 1.2,
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: User Info
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
+                    backgroundImage: collection.userAvatarUrl != null
+                        ? CachedNetworkImageProvider(collection.userAvatarUrl!)
+                        : null,
+                    child: collection.userAvatarUrl == null
+                        ? Text(
+                            collection.userName[0].toUpperCase(),
+                            style: const TextStyle(
+                              color: AppColors.primaryPurple,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
                   ),
-                ),
-                if (collection.description != null && collection.description!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    collection.description!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      height: 1.4,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '@${collection.userName}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          timeago.format(
+                            DateTime.fromMillisecondsSinceEpoch(collection.createdAt),
+                          ),
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.more_horiz),
+                    color: Colors.grey,
+                    onPressed: () {
+                      // TODO: Show options menu
+                    },
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-          
-          const SizedBox(height: 16),
 
-          // Images Grid
-          // Layout: 
-          // If 1 image: Full width
-          // If 2 images: 50/50 split vertical
-          // If 3+ images: Big one left (66%), two stacked right (33%)
-          if (hasImages)
-            GestureDetector(
-              onTap: onTap,
-              child: SizedBox(
+            // Title & Description
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    collection.title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800, // Extra bold for premium feel
+                      height: 1.2,
+                    ),
+                  ),
+                  if (collection.description != null && collection.description!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      collection.description!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        height: 1.4,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+
+            // Images Grid
+            // Layout: 
+            // If 1 image: Full width
+            // If 2 images: 50/50 split vertical
+            // If 3+ images: Big one left (66%), two stacked right (33%)
+            if (hasImages)
+              SizedBox(
                 height: 280, // Fixed height for the grid
                 width: double.infinity,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: _buildImageGrid(previewImages),
                 ),
-              ),
-            )
-          else if (collection.coverImageUrl != null)
-            GestureDetector(
-              onTap: onTap,
-              child: Container(
+              )
+            else if (collection.coverImageUrl != null)
+              Container(
                 height: 220,
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
@@ -160,76 +157,76 @@ class FeedCollectionCard extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
 
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // Footer: Chips & Actions
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              children: [
-                // Tags chips
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        // Main category chip
-                        _buildChip(collection.category.name),
-                        // Additional tags
-                        ...collection.tags.take(2).map((tag) => 
-                          Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: _buildChip(tag),
-                          )
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // Actions
-                Row(
-                  children: [
-                    GestureDetector( // Like
-                      onTap: onLike,
+            // Footer: Chips & Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                children: [
+                  // Tags chips
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          Icon(
-                            collection.isLiked ? Icons.favorite : Icons.favorite_border,
-                            color: collection.isLiked ? AppColors.heartSalmon : Colors.grey[600],
-                            size: 22,
+                          // Main category chip
+                          _buildChip(collection.category.name),
+                          // Additional tags
+                          ...collection.tags.take(2).map((tag) => 
+                            Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: _buildChip(tag),
+                            )
                           ),
-                          if (collection.likes > 0) ...[
-                            const SizedBox(width: 4),
-                            Text(
-                              '${collection.likes}',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
-                    const SizedBox(width: 20),
-                    GestureDetector( // Save
-                      onTap: onSave,
-                      child: Icon(
-                        collection.isSaved ? Icons.bookmark : Icons.bookmark_border,
-                        color: collection.isSaved ? AppColors.primaryPurple : Colors.grey[600],
-                        size: 22,
+                  ),
+                  
+                  // Actions
+                  Row(
+                    children: [
+                      GestureDetector( // Like
+                        onTap: onLike,
+                        child: Row(
+                          children: [
+                            Icon(
+                              collection.isLiked ? Icons.favorite : Icons.favorite_border,
+                              color: collection.isLiked ? AppColors.heartSalmon : Colors.grey[600],
+                              size: 22,
+                            ),
+                            if (collection.likes > 0) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '${collection.likes}',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 20),
+                      GestureDetector( // Save
+                        onTap: onSave,
+                        child: Icon(
+                          collection.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                          color: collection.isSaved ? AppColors.primaryPurple : Colors.grey[600],
+                          size: 22,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

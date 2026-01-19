@@ -109,35 +109,46 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     String title;
     String? subtitle;
 
+    final fromUsername = data['fromUsername'] as String? ?? 'Someone';
+    final collectionTitle = data['collectionTitle'] as String?;
+
     switch (type) {
       case 'follow':
+      case 'FOLLOW':
+      case 'NEW_FOLLOWER':
         icon = Icons.person_add;
         iconColor = AppColors.primaryPurple;
-        title = '${data['fromUserName'] ?? 'Someone'} started following you';
+        title = '$fromUsername started following you';
         break;
       case 'like':
+      case 'LIKE_COLLECTION':
+      case 'LIKE_ITEM':
         icon = Icons.favorite;
         iconColor = AppColors.heartSalmon;
-        title = '${data['fromUserName'] ?? 'Someone'} liked your collection';
-        subtitle = data['collectionTitle'];
+        title = '$fromUsername liked your collection';
+        subtitle = collectionTitle;
         break;
       case 'save':
+      case 'SAVE_COLLECTION': // Assuming hypothetical android type
         icon = Icons.bookmark;
         iconColor = Colors.amber;
-        title = '${data['fromUserName'] ?? 'Someone'} saved your collection';
-        subtitle = data['collectionTitle'];
+        title = '$fromUsername saved your collection';
+        subtitle = collectionTitle;
         break;
       case 'new_item':
+      case 'NEW_COLLECTION': // Mapping NEW_COLLECTION to this for now or separate
         icon = Icons.add_circle;
         iconColor = Colors.green;
-        title = '${data['fromUserName'] ?? 'Someone'} added an item to your collection';
-        subtitle = data['collectionTitle'];
+        title = '$fromUsername created a new collection';
+        subtitle = collectionTitle;
         break;
       case 'collaborate':
+      case 'COLLABORATION_INVITE':
+      case 'COLLABORATOR_ADDED':
         icon = Icons.group_add;
         iconColor = Colors.blue;
-        title = '${data['fromUserName'] ?? 'Someone'} invited you to collaborate';
-        subtitle = data['collectionTitle'];
+        title = '$fromUsername invited you to collaborate';
+        subtitle = collectionTitle;
         break;
       default:
         icon = Icons.notifications;
@@ -152,10 +163,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         children: [
           CircleAvatar(
             backgroundColor: iconColor.withOpacity(0.2),
-            backgroundImage: data['fromUserAvatar'] != null
-                ? CachedNetworkImageProvider(data['fromUserAvatar'])
+            backgroundImage: data['fromUserAvatarUrl'] != null
+                ? CachedNetworkImageProvider(data['fromUserAvatarUrl'])
                 : null,
-            child: data['fromUserAvatar'] == null
+            child: data['fromUserAvatarUrl'] == null
                 ? Icon(icon, color: iconColor, size: 24)
                 : null,
           ),

@@ -84,13 +84,28 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sign in with email and password
-  Future<bool> signInWithEmail(String email, String password) async {
-    if (_authService == null) return false;
+  /// Sign in with email/username and password
+  Future<bool> signInWithEmail(String emailOrUsername, String password) async {
+    if (_authService == null || _firestoreService == null) return false;
     _setLoading(true);
     _error = null;
     try {
-      debugPrint('Attempting sign in with email: $email');
+      debugPrint('Attempting sign in with: $emailOrUsername');
+      
+      String email = emailOrUsername;
+      if (!email.contains('@')) {
+        // It's a username, try to find the email
+        final resolvedEmail = await _firestoreService!.getUserEmailByUsername(emailOrUsername);
+        if (resolvedEmail == null) {
+          throw FirebaseAuthException(
+            code: 'user-not-found', 
+            message: 'Username not found.'
+          );
+        }
+        email = resolvedEmail;
+        debugPrint('Resolved username $emailOrUsername to email $email');
+      }
+
       await _authService!.signInWithEmailAndPassword(
         email: email,
         password: password,
