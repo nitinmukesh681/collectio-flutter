@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "887681374750",
+    "project_id": "collectio-b6b15",
+    "storage_bucket": "collectio-b6b15.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:887681374750:android:c60011d706ac777665ec0f",
+        "android_client_info": {
+          "package_name": "com.example.collectio"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "887681374750-l39jv7kddm08ie7ofl6khms7vn002ovb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.collectio",
+            "certificate_hash": "c8eb4a26f94785a54f56da96de272415cda9a71b"
+          }
+        },
+        {
+          "client_id": "887681374750-8je7omg0bvr3be8bs1ur908s6260ag6p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZkKhpRfaQZLLfN0Sabq3d7zdcZ1dwmOE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "887681374750-8je7omg0bvr3be8bs1ur908s6260ag6p.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
