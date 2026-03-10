@@ -18,6 +18,50 @@ class FirestoreService {
   CollectionReference get _collectionItemsRef => _firestore.collection('collectionItems');
 
 
+  Future<String> _getUsername(String userId) async {
+    final userDoc = await _usersRef.doc(userId).get();
+    if (!userDoc.exists) return 'Someone';
+    final data = userDoc.data() as Map<String, dynamic>;
+    return (data['username'] as String?) ?? 'Someone';
+  }
+
+  Future<void> _createLikeNotification({
+    required String toUserId,
+    required String fromUserId,
+    required String fromUsername,
+    required String collectionId,
+    required String collectionTitle,
+    String itemId = '',
+    String itemTitle = '',
+    required String type,
+  }) async {
+    if (toUserId == fromUserId) return;
+
+    final collectionDoc = await _collectionsRef.doc(collectionId).get();
+    if (!collectionDoc.exists) return;
+    final c = collectionDoc.data() as Map<String, dynamic>;
+    final isPublic = c['isPublic'] as bool? ?? true;
+    final visibility = c['visibility'] as String?;
+    final isPrivate = !isPublic || visibility == 'PRIVATE';
+    if (isPrivate) return;
+
+    final payload = <String, dynamic>{
+      'toUserId': toUserId,
+      'type': type,
+      'fromUserId': fromUserId,
+      'fromUsername': fromUsername,
+      'collectionId': collectionId,
+      'collectionTitle': collectionTitle,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    if (itemId.isNotEmpty) payload['itemId'] = itemId;
+    if (itemTitle.isNotEmpty) payload['itemTitle'] = itemTitle;
+
+    await _firestore.collection('notifications').add(payload);
+  }
+
+
   // ==================== USER OPERATIONS ====================
 
   /// Get user by ID
@@ -27,6 +71,30 @@ class FirestoreService {
     return UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
   }
 
+  Future<List<UserEntity>> getUsersByIds(List<String> userIds) async {
+    final ids = userIds.where((e) => e.trim().isNotEmpty).toSet().toList();
+    if (ids.isEmpty) return [];
+
+    final users = <UserEntity>[];
+    for (final chunk in _chunk(ids, 10)) {
+      final snapshot = await _usersRef
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      for (final doc in snapshot.docs) {
+        users.add(UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id));
+      }
+    }
+    return users;
+  }
+
+  List<List<T>> _chunk<T>(List<T> items, int size) {
+    final chunks = <List<T>>[];
+    for (var i = 0; i < items.length; i += size) {
+      chunks.add(items.sublist(i, (i + size).clamp(0, items.length)));
+    }
+    return chunks;
+  }
+
   /// Create or update user
   Future<void> saveUser(UserEntity user) async {
     await _usersRef.doc(user.id).set(user.toMap(), SetOptions(merge: true));
@@ -34,13 +102,13 @@ class FirestoreService {
 
   /// Update username
   Future<void> updateUsername(String userId, String username) async {
-    await _usersRef.doc(userId).update({'userName': username});
+    await _usersRef.doc(userId).update({'username': username});
   }
 
   /// Get user email by username
   Future<String?> getUserEmailByUsername(String username) async {
     final querySnapshot = await _usersRef
-        .where('userName', isEqualTo: username)
+        .where('username', isEqualTo: username)
         .limit(1)
         .get();
 
@@ -52,29 +120,56 @@ class FirestoreService {
   Future<void> followUser(String currentUserId, String targetUserId, String currentUsername) async {
     debugPrint('FirestoreService: followUser $currentUserId -> $targetUserId');
     try {
-      final batch = _firestore.batch();
-      batch.update(_usersRef.doc(currentUserId), {
-        'following': FieldValue.arrayUnion([targetUserId]),
-        'followingCount': FieldValue.increment(1),
-      });
-      batch.update(_usersRef.doc(targetUserId), {
-        'followers': FieldValue.arrayUnion([currentUserId]),
-        'followersCount': FieldValue.increment(1),
-      });
-      
-      // Create notification for public profiles or general follow
-      // (For private profiles, requestFollowUser should be used instead - logic handled in UI)
-      final notificationRef = _firestore.collection('notifications').doc();
-      batch.set(notificationRef, {
-        'type': 'NEW_FOLLOWER',
-        'toUserId': targetUserId,
-        'fromUserId': currentUserId,
-        'fromUsername': currentUsername,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
+      final targetDoc = await _usersRef.doc(targetUserId).get();
+      if (!targetDoc.exists) return;
+
+      final targetData = targetDoc.data() as Map<String, dynamic>;
+      final isPrivate = targetData['isPrivateAccount'] as bool? ?? false;
+      if (isPrivate) {
+        await requestFollowUser(currentUserId, targetUserId, currentUsername);
+        return;
+      }
+
+      final currentRef = _usersRef.doc(currentUserId);
+      final targetRef = _usersRef.doc(targetUserId);
+
+      final didFollow = await _firestore.runTransaction<bool>((tx) async {
+        final currentSnap = await tx.get(currentRef);
+        final targetSnap = await tx.get(targetRef);
+        if (!currentSnap.exists || !targetSnap.exists) return false;
+
+        final currentData = currentSnap.data() as Map<String, dynamic>;
+        final targetDataTx = targetSnap.data() as Map<String, dynamic>;
+
+        final following = List<String>.from(currentData['following'] ?? const <String>[]);
+        if (following.contains(targetUserId)) {
+          return false;
+        }
+
+        final currentFollowingCount = (currentData['followingCount'] as int?) ?? 0;
+        final targetFollowerCount = (targetDataTx['followerCount'] as int?) ?? 0;
+
+        tx.update(currentRef, {
+          'following': FieldValue.arrayUnion([targetUserId]),
+          'followingCount': currentFollowingCount + 1,
+        });
+        tx.update(targetRef, {
+          'followers': FieldValue.arrayUnion([currentUserId]),
+          'followerCount': targetFollowerCount + 1,
+        });
+        return true;
       });
 
-      await batch.commit();
+      if (didFollow) {
+        await _firestore.collection('notifications').add({
+          'type': 'NEW_FOLLOWER',
+          'toUserId': targetUserId,
+          'fromUserId': currentUserId,
+          'fromUsername': currentUsername,
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
       debugPrint('FirestoreService: followUser SUCCESS');
     } catch (e) {
       debugPrint('FirestoreService: followUser ERROR: $e');
@@ -84,16 +179,44 @@ class FirestoreService {
 
   /// Unfollow a user
   Future<void> unfollowUser(String currentUserId, String targetUserId) async {
-    final batch = _firestore.batch();
-    batch.update(_usersRef.doc(currentUserId), {
-      'following': FieldValue.arrayRemove([targetUserId]),
-      'followingCount': FieldValue.increment(-1),
+    final targetDoc = await _usersRef.doc(targetUserId).get();
+    if (!targetDoc.exists) return;
+
+    final targetData = targetDoc.data() as Map<String, dynamic>;
+    final pending = List<String>.from(targetData['followRequests'] ?? const <String>[]);
+    if (pending.contains(currentUserId)) {
+      await cancelFollowRequest(currentUserId, targetUserId);
+      return;
+    }
+
+    final currentRef = _usersRef.doc(currentUserId);
+    final targetRef = _usersRef.doc(targetUserId);
+
+    await _firestore.runTransaction<void>((tx) async {
+      final currentSnap = await tx.get(currentRef);
+      final targetSnap = await tx.get(targetRef);
+      if (!currentSnap.exists || !targetSnap.exists) return;
+
+      final currentData = currentSnap.data() as Map<String, dynamic>;
+      final targetDataTx = targetSnap.data() as Map<String, dynamic>;
+
+      final following = List<String>.from(currentData['following'] ?? const <String>[]);
+      if (!following.contains(targetUserId)) {
+        return;
+      }
+
+      final currentFollowingCount = (currentData['followingCount'] as int?) ?? 0;
+      final targetFollowerCount = (targetDataTx['followerCount'] as int?) ?? 0;
+
+      tx.update(currentRef, {
+        'following': FieldValue.arrayRemove([targetUserId]),
+        'followingCount': (currentFollowingCount - 1) < 0 ? 0 : (currentFollowingCount - 1),
+      });
+      tx.update(targetRef, {
+        'followers': FieldValue.arrayRemove([currentUserId]),
+        'followerCount': (targetFollowerCount - 1) < 0 ? 0 : (targetFollowerCount - 1),
+      });
     });
-    batch.update(_usersRef.doc(targetUserId), {
-      'followers': FieldValue.arrayRemove([currentUserId]),
-      'followersCount': FieldValue.increment(-1),
-    });
-    await batch.commit();
   }
 
   // ==================== COLLECTION OPERATIONS ====================
@@ -124,21 +247,14 @@ class FirestoreService {
 
   /// Get saved collections for a user
   Future<List<CollectionEntity>> getSavedCollections(String userId) async {
-    final userDoc = await _usersRef.doc(userId).get();
-    if (!userDoc.exists) return [];
-    
-    final userData = userDoc.data() as Map<String, dynamic>;
-    final savedIds = List<String>.from(userData['savedCollections'] ?? []);
-    
-    if (savedIds.isEmpty) return [];
+    final snapshot = await _collectionsRef
+        .where('savedBy', arrayContains: userId)
+        .get();
 
-    final collections = <CollectionEntity>[];
-    for (final id in savedIds) {
-      final collection = await getCollection(id);
-      if (collection != null) {
-        collections.add(collection);
-      }
-    }
+    final collections = snapshot.docs
+        .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+    collections.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return collections;
   }
 
@@ -212,14 +328,21 @@ class FirestoreService {
 
   /// Get next order number for items in a collection
   Future<int> _getNextItemOrder(String collectionId) async {
+    // NOTE: Avoid a composite index requirement (where + orderBy) by fetching items
+    // by collectionId and determining max order client-side.
     final snapshot = await _collectionItemsRef
         .where('collectionId', isEqualTo: collectionId)
-        .orderBy('order', descending: true)
-        .limit(1)
         .get();
-    
-    if (snapshot.docs.isEmpty) return 0;
-    return ((snapshot.docs.first.data() as Map<String, dynamic>)['order'] as int? ?? 0) + 1;
+
+    var maxOrder = -1;
+    for (final doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final order = data['order'];
+      if (order is int && order > maxOrder) {
+        maxOrder = order;
+      }
+    }
+    return maxOrder + 1;
   }
 
 
@@ -232,23 +355,33 @@ class FirestoreService {
 
   /// Create a new collection
   Future<String> createCollection(CollectionEntity collection) async {
-    final docRef = await _collectionsRef.add(collection.toMap());
-    // Increment user's collection count
+    final docRef = await _collectionsRef.add({
+      ...collection.toMap(),
+      'searchKeywords': collection.searchKeywords,
+      'savedBy': collection.savedBy,
+      'contributorIds': collection.contributorIds,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
     await _usersRef.doc(collection.userId).update({
       'collectionsCount': FieldValue.increment(1),
     });
+
     return docRef.id;
   }
 
   /// Update a collection
   Future<void> updateCollection(CollectionEntity collection) async {
-    await _collectionsRef.doc(collection.id).update(collection.toMap());
+    await _collectionsRef.doc(collection.id).update({
+      ...collection.toMap(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Delete a collection
   Future<void> deleteCollection(String collectionId, String userId) async {
-    // Delete all items in the collection
-    final items = await _collectionsRef.doc(collectionId).collection('items').get();
+    final items = await _collectionItemsRef.where('collectionId', isEqualTo: collectionId).get();
     final batch = _firestore.batch();
     for (final item in items.docs) {
       batch.delete(item.reference);
@@ -277,6 +410,62 @@ class FirestoreService {
     }
   }
 
+  Future<void> toggleCollectionLike(String collectionId, String userId) async {
+    debugPrint('FirestoreService: toggleCollectionLike $collectionId by $userId');
+    try {
+      final fromUsername = await _getUsername(userId);
+      final docRef = _collectionsRef.doc(collectionId);
+
+      final result = await _firestore.runTransaction<(bool, String, String)>((tx) async {
+        final snap = await tx.get(docRef);
+        if (!snap.exists) return (false, '', '');
+
+        final data = snap.data() as Map<String, dynamic>;
+        final likedBy = List<String>.from(data['likedBy'] ?? const <String>[]);
+        final currentLikes = (data['likes'] as int?) ?? 0;
+        final ownerId = (data['userId'] as String?) ?? '';
+        final title = (data['title'] as String?) ?? '';
+
+        if (likedBy.contains(userId)) {
+          tx.update(docRef, {
+            'likedBy': FieldValue.arrayRemove([userId]),
+            'likes': (currentLikes - 1) < 0 ? 0 : (currentLikes - 1),
+          });
+          return (false, ownerId, title);
+        } else {
+          tx.update(docRef, {
+            'likedBy': FieldValue.arrayUnion([userId]),
+            'likes': currentLikes + 1,
+          });
+          return (true, ownerId, title);
+        }
+      });
+
+      if (result.$1) {
+        try {
+          await _createLikeNotification(
+            toUserId: result.$2,
+            fromUserId: userId,
+            fromUsername: fromUsername,
+            collectionId: collectionId,
+            collectionTitle: result.$3,
+            type: 'LIKE_COLLECTION',
+          );
+        } catch (e) {
+          debugPrint('FirestoreService: toggleCollectionLike notification ERROR: $e');
+        }
+      }
+      debugPrint('FirestoreService: toggleCollectionLike SUCCESS');
+    } on FirebaseException catch (e) {
+      debugPrint(
+          'FirestoreService: toggleCollectionLike FirebaseException code=${e.code} message=${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('FirestoreService: toggleCollectionLike ERROR: $e');
+      rethrow;
+    }
+  }
+
   /// Unlike a collection
   Future<void> unlikeCollection(String collectionId, String userId) async {
     debugPrint('FirestoreService: unlikeCollection $collectionId by $userId');
@@ -294,22 +483,59 @@ class FirestoreService {
 
   /// Save a collection
   Future<void> saveCollection(String collectionId, String userId) async {
-    await _usersRef.doc(userId).update({
+    final batch = _firestore.batch();
+    batch.update(_usersRef.doc(userId), {
       'savedCollections': FieldValue.arrayUnion([collectionId]),
     });
-    await _collectionsRef.doc(collectionId).update({
+    batch.update(_collectionsRef.doc(collectionId), {
+      'savedBy': FieldValue.arrayUnion([userId]),
       'saveCount': FieldValue.increment(1),
+    });
+    await batch.commit();
+  }
+
+  Future<void> toggleCollectionSave(String collectionId, String userId) async {
+    final collectionRef = _collectionsRef.doc(collectionId);
+    final userRef = _usersRef.doc(userId);
+
+    await _firestore.runTransaction<void>((tx) async {
+      final snap = await tx.get(collectionRef);
+      if (!snap.exists) return;
+      final data = snap.data() as Map<String, dynamic>;
+      final savedBy = List<String>.from(data['savedBy'] ?? const <String>[]);
+      final currentSaves = (data['saveCount'] as int?) ?? 0;
+
+      if (savedBy.contains(userId)) {
+        tx.update(collectionRef, {
+          'savedBy': FieldValue.arrayRemove([userId]),
+          'saveCount': (currentSaves - 1) < 0 ? 0 : (currentSaves - 1),
+        });
+        tx.update(userRef, {
+          'savedCollections': FieldValue.arrayRemove([collectionId]),
+        });
+      } else {
+        tx.update(collectionRef, {
+          'savedBy': FieldValue.arrayUnion([userId]),
+          'saveCount': currentSaves + 1,
+        });
+        tx.update(userRef, {
+          'savedCollections': FieldValue.arrayUnion([collectionId]),
+        });
+      }
     });
   }
 
   /// Unsave a collection
   Future<void> unsaveCollection(String collectionId, String userId) async {
-    await _usersRef.doc(userId).update({
+    final batch = _firestore.batch();
+    batch.update(_usersRef.doc(userId), {
       'savedCollections': FieldValue.arrayRemove([collectionId]),
     });
-    await _collectionsRef.doc(collectionId).update({
+    batch.update(_collectionsRef.doc(collectionId), {
+      'savedBy': FieldValue.arrayRemove([userId]),
       'saveCount': FieldValue.increment(-1),
     });
+    await batch.commit();
   }
 
   // ==================== COLLABORATOR OPERATIONS ====================
@@ -329,19 +555,24 @@ class FirestoreService {
       'collaborators': FieldValue.arrayUnion([{
         'userId': userId,
         'username': username,
-        'role': role,
+        'role': role.toUpperCase(),
+        'addedAt': FieldValue.serverTimestamp(),
       }]),
+      if (role.toUpperCase() == 'EDITOR')
+        'editors': FieldValue.arrayUnion([userId])
+      else
+        'viewers': FieldValue.arrayUnion([userId]),
     });
 
     // Create notification for the invited user
     await _firestore.collection('notifications').add({
-      'type': 'collaboration_invite',
+      'type': 'COLLABORATION_INVITE',
       'toUserId': userId,
       'fromUserId': currentUserId,
       'fromUsername': currentUsername,
       'collectionId': collectionId,
       'collectionTitle': collectionTitle,
-      'role': role,
+      'role': role.toUpperCase(),
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -364,6 +595,8 @@ class FirestoreService {
     
     await _collectionsRef.doc(collectionId).update({
       'collaborators': collaborators,
+      'editors': FieldValue.arrayRemove([userId]),
+      'viewers': FieldValue.arrayRemove([userId]),
     });
   }
 
@@ -373,12 +606,12 @@ class FirestoreService {
   Future<void> requestFollowUser(String currentUserId, String targetUserId, String currentUsername) async {
     // Add to target's pending requests
     await _usersRef.doc(targetUserId).update({
-      'pendingFollowRequests': FieldValue.arrayUnion([currentUserId]),
+      'followRequests': FieldValue.arrayUnion([currentUserId]),
     });
 
     // Create notification
     await _firestore.collection('notifications').add({
-      'type': 'follow_request',
+      'type': 'FOLLOW_REQUEST',
       'toUserId': targetUserId,
       'fromUserId': currentUserId,
       'fromUsername': currentUsername,
@@ -393,13 +626,13 @@ class FirestoreService {
     
     // Remove from pending requests
     batch.update(_usersRef.doc(currentUserId), {
-      'pendingFollowRequests': FieldValue.arrayRemove([requesterId]),
+      'followRequests': FieldValue.arrayRemove([requesterId]),
     });
     
     // Add follower relationship
     batch.update(_usersRef.doc(currentUserId), {
       'followers': FieldValue.arrayUnion([requesterId]),
-      'followersCount': FieldValue.increment(1),
+      'followerCount': FieldValue.increment(1),
     });
     batch.update(_usersRef.doc(requesterId), {
       'following': FieldValue.arrayUnion([currentUserId]),
@@ -412,14 +645,14 @@ class FirestoreService {
   /// Decline a follow request
   Future<void> declineFollowRequest(String currentUserId, String requesterId) async {
     await _usersRef.doc(currentUserId).update({
-      'pendingFollowRequests': FieldValue.arrayRemove([requesterId]),
+      'followRequests': FieldValue.arrayRemove([requesterId]),
     });
   }
 
   /// Cancel a sent follow request
   Future<void> cancelFollowRequest(String currentUserId, String targetUserId) async {
     await _usersRef.doc(targetUserId).update({
-      'pendingFollowRequests': FieldValue.arrayRemove([currentUserId]),
+      'followRequests': FieldValue.arrayRemove([currentUserId]),
     });
   }
 
@@ -445,16 +678,73 @@ class FirestoreService {
         });
   }
 
+  Future<List<CollectionItemEntity>> getCollectionItemsPreview(String collectionId, {int limit = 2}) async {
+    final snapshot = await _collectionItemsRef
+        .where('collectionId', isEqualTo: collectionId)
+        .orderBy('order')
+        .limit(limit)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => CollectionItemEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+  }
+
 
 
   /// Add item to collection
   Future<String> addCollectionItem(String collectionId, CollectionItemEntity item) async {
-    final itemWithCollectionId = item.copyWith(collectionId: collectionId);
-    final docRef = await _collectionItemsRef.add(itemWithCollectionId.toMap());
+    final docRef = _collectionItemsRef.doc();
+    final collectionRef = _collectionsRef.doc(collectionId);
 
-    // Update collection item count
-    await _collectionsRef.doc(collectionId).update({
-      'itemCount': FieldValue.increment(1),
+    await _firestore.runTransaction((tx) async {
+      final collectionSnap = await tx.get(collectionRef);
+      if (!collectionSnap.exists) {
+        throw Exception('Collection not found');
+      }
+
+      final data = collectionSnap.data() as Map<String, dynamic>;
+      final currentItemCount = (data['itemCount'] as int?) ?? 0;
+      final contributorIds = List<String>.from(data['contributorIds'] ?? const <String>[]);
+      final currentContributorCount = (data['contributorCount'] as int?) ?? 0;
+      final currentPreviewImages = List<String>.from(data['previewImageUrls'] ?? const <String>[]);
+
+      final isNewContributor = !contributorIds.contains(item.userId);
+      final computedOrder = currentItemCount;
+
+      tx.update(collectionRef, {
+        'itemCount': currentItemCount + 1,
+        if (isNewContributor) 'contributorIds': FieldValue.arrayUnion([item.userId]),
+        if (isNewContributor) 'contributorCount': currentContributorCount + 1,
+      });
+
+      if (item.imageUrls.isNotEmpty) {
+        final merged = <String>[...item.imageUrls, ...currentPreviewImages];
+        final distinct = <String>[];
+        for (final url in merged) {
+          if (!distinct.contains(url)) distinct.add(url);
+          if (distinct.length >= 5) break;
+        }
+        tx.update(collectionRef, {'previewImageUrls': distinct});
+      }
+
+      tx.set(docRef, {
+        'collectionId': collectionId,
+        'userId': item.userId,
+        'userName': item.userName,
+        'title': item.title,
+        'description': item.description,
+        'rating': item.rating,
+        'imageUrls': item.imageUrls,
+        'notes': item.notes,
+        'googleMapsUrl': item.googleMapsUrl,
+        'websiteUrl': item.websiteUrl,
+        'order': computedOrder,
+        'likes': item.likes,
+        'likedBy': item.likedBy,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
 
     return docRef.id;
@@ -462,7 +752,10 @@ class FirestoreService {
 
   /// Update an item
   Future<void> updateCollectionItem(String collectionId, CollectionItemEntity item) async {
-    await _collectionItemsRef.doc(item.id).update(item.toMap());
+    await _collectionItemsRef.doc(item.id).update({
+      ...item.toMap(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Delete an item
@@ -477,23 +770,71 @@ class FirestoreService {
 
   /// Toggle like on an item
   Future<void> toggleItemLike(String itemId, String userId) async {
-    final itemDoc = await _collectionItemsRef.doc(itemId).get();
-    if (!itemDoc.exists) return;
+    debugPrint('FirestoreService: toggleItemLike $itemId by $userId');
+    try {
+      final fromUsername = await _getUsername(userId);
+      final itemRef = _collectionItemsRef.doc(itemId);
 
-    final data = itemDoc.data() as Map<String, dynamic>;
-    final likedBy = List<String>.from(data['likedBy'] ?? []);
-    final isLiked = likedBy.contains(userId);
+      final result = await _firestore.runTransaction<(bool, String, String, String, String)>((tx) async {
+        final snap = await tx.get(itemRef);
+        if (!snap.exists) return (false, '', '', '', '');
 
-    if (isLiked) {
-      await _collectionItemsRef.doc(itemId).update({
-        'likedBy': FieldValue.arrayRemove([userId]),
-        'likes': FieldValue.increment(-1),
+        final data = snap.data() as Map<String, dynamic>;
+        final likedBy = List<String>.from(data['likedBy'] ?? const <String>[]);
+        final currentLikes = (data['likes'] as int?) ?? 0;
+        final ownerId = (data['userId'] as String?) ?? '';
+        final itemTitle = (data['title'] as String?) ?? '';
+        final collectionId = (data['collectionId'] as String?) ?? '';
+
+        var collectionTitle = '';
+        if (collectionId.isNotEmpty) {
+          final collectionRef = _collectionsRef.doc(collectionId);
+          final cSnap = await tx.get(collectionRef);
+          if (cSnap.exists) {
+            final c = cSnap.data() as Map<String, dynamic>;
+            collectionTitle = (c['title'] as String?) ?? '';
+          }
+        }
+
+        if (likedBy.contains(userId)) {
+          tx.update(itemRef, {
+            'likedBy': FieldValue.arrayRemove([userId]),
+            'likes': (currentLikes - 1) < 0 ? 0 : (currentLikes - 1),
+          });
+          return (false, ownerId, itemTitle, collectionId, collectionTitle);
+        } else {
+          tx.update(itemRef, {
+            'likedBy': FieldValue.arrayUnion([userId]),
+            'likes': currentLikes + 1,
+          });
+          return (true, ownerId, itemTitle, collectionId, collectionTitle);
+        }
       });
-    } else {
-      await _collectionItemsRef.doc(itemId).update({
-        'likedBy': FieldValue.arrayUnion([userId]),
-        'likes': FieldValue.increment(1),
-      });
+
+      if (result.$1 && result.$4.isNotEmpty) {
+        try {
+          await _createLikeNotification(
+            toUserId: result.$2,
+            fromUserId: userId,
+            fromUsername: fromUsername,
+            collectionId: result.$4,
+            collectionTitle: result.$5,
+            itemId: itemId,
+            itemTitle: result.$3,
+            type: 'LIKE_ITEM',
+          );
+        } catch (e) {
+          debugPrint('FirestoreService: toggleItemLike notification ERROR: $e');
+        }
+      }
+      debugPrint('FirestoreService: toggleItemLike SUCCESS');
+    } on FirebaseException catch (e) {
+      debugPrint(
+          'FirestoreService: toggleItemLike FirebaseException code=${e.code} message=${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('FirestoreService: toggleItemLike ERROR: $e');
+      rethrow;
     }
   }
 
@@ -628,6 +969,69 @@ class FirestoreService {
         .toList();
   }
 
+  Future<List<CollectionEntity>> getTrendingNowCollections({int limit = 10}) async {
+    final since = DateTime.now().subtract(const Duration(days: 2));
+    return getPublicCollectionsSince(since: since, limit: 50);
+  }
+
+  Future<List<CollectionEntity>> getTopLikedCollections({DateTime? since, int limit = 10}) async {
+    final prefetch = since == null ? limit : (limit * 10).clamp(50, 200);
+
+    if (since != null) {
+      try {
+        final recent = await getPublicCollectionsSince(since: since, limit: prefetch);
+        final sorted = [...recent]..sort((a, b) => b.likes.compareTo(a.likes));
+        return sorted.take(limit).toList();
+      } catch (e) {
+        debugPrint('getTopLikedCollections: createdAt-since query failed, falling back: $e');
+      }
+    }
+
+    final snapshot = await _collectionsRef
+        .where('isPublic', isEqualTo: true)
+        .orderBy('likes', descending: true)
+        .limit(prefetch)
+        .get();
+
+    final all = snapshot.docs
+        .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+    return all.take(limit).toList();
+  }
+
+  Future<List<CollectionEntity>> getPublicCollectionsSince({required DateTime since, int limit = 50}) async {
+    Query query = _collectionsRef.where('isPublic', isEqualTo: true);
+
+    try {
+      final snapshot = await query
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList();
+    } catch (e) {
+      debugPrint('getPublicCollectionsSince: Timestamp createdAt query failed: $e');
+    }
+
+    try {
+      final snapshot = await query
+          .where('createdAt', isGreaterThanOrEqualTo: since.millisecondsSinceEpoch)
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList();
+    } catch (e) {
+      debugPrint('getPublicCollectionsSince: int createdAt query failed: $e');
+      rethrow;
+    }
+  }
+
   Future<List<CollectionEntity>> getCollectionsByCategory(
       String category, {int limit = 20}) async {
     final snapshot = await _collectionsRef
@@ -655,6 +1059,26 @@ class FirestoreService {
       
       if (following.isEmpty) return [];
 
+      // 1b. Determine which followed users have accepted this user as a follower
+      final acceptedFollowerUserIds = <String>[];
+      const int userBatchSize = 10;
+      for (int i = 0; i < following.length; i += userBatchSize) {
+        final end = (i + userBatchSize < following.length) ? i + userBatchSize : following.length;
+        final chunk = following.sublist(i, end);
+        if (chunk.isEmpty) continue;
+
+        final usersSnap = await _usersRef
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        for (final doc in usersSnap.docs) {
+          final u = doc.data() as Map<String, dynamic>;
+          final followers = List<String>.from(u['followers'] ?? const <String>[]);
+          if (followers.contains(userId)) {
+            acceptedFollowerUserIds.add(doc.id);
+          }
+        }
+      }
+
       // 2. Chunk processing (Firestore limit of 10 for IN queries)
       List<CollectionEntity> allCollections = [];
       const int batchSize = 10;
@@ -676,6 +1100,26 @@ class FirestoreService {
           CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id)
         ).toList();
         
+        allCollections.addAll(chunkCollections);
+      }
+
+      // 2b. Also include FOLLOWERS-visibility collections for accepted followers
+      for (int i = 0; i < acceptedFollowerUserIds.length; i += batchSize) {
+        final end = (i + batchSize < acceptedFollowerUserIds.length)
+            ? i + batchSize
+            : acceptedFollowerUserIds.length;
+        final chunk = acceptedFollowerUserIds.sublist(i, end);
+        if (chunk.isEmpty) continue;
+
+        final snapshot = await _collectionsRef
+            .where('userId', whereIn: chunk)
+            .where('visibility', isEqualTo: 'FOLLOWERS')
+            .get();
+
+        final chunkCollections = snapshot.docs
+            .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+            .toList();
+
         allCollections.addAll(chunkCollections);
       }
       
@@ -703,6 +1147,39 @@ class FirestoreService {
         .map((doc) =>
             CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
+  }
+
+  Future<List<CollectionEntity>> getUserCollaborations(String userId) async {
+    try {
+      final results = <String, CollectionEntity>{};
+
+      final editorsSnap = await _collectionsRef
+          .where('editors', arrayContains: userId)
+          .get();
+      for (final doc in editorsSnap.docs) {
+        final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        if (c.userId != userId) {
+          results[doc.id] = c;
+        }
+      }
+
+      final viewersSnap = await _collectionsRef
+          .where('viewers', arrayContains: userId)
+          .get();
+      for (final doc in viewersSnap.docs) {
+        final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        if (c.userId != userId) {
+          results[doc.id] = c;
+        }
+      }
+
+      final list = results.values.toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
+    } catch (e) {
+      debugPrint('Error loading collaborations for user $userId: $e');
+      return const <CollectionEntity>[];
+    }
   }
 
   // ==================== NOTIFICATION OPERATIONS ====================
@@ -765,7 +1242,7 @@ class FirestoreService {
     
     final lowerQuery = query.toLowerCase();
     final snapshot = await _usersRef
-        .orderBy('userName')
+        .orderBy('username')
         .startAt([lowerQuery])
         .endAt(['$lowerQuery\uf8ff'])
         .limit(20)

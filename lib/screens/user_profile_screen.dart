@@ -4,7 +4,7 @@ import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_card.dart';
+import '../widgets/collection_grid_card.dart';
 import 'collection_detail_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -65,7 +65,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         setState(() {
           _isFollowing = false;
           _user = _user!.copyWith(
-            followersCount: _user!.followersCount - 1,
+            followerCount: _user!.followersCount - 1,
           );
         });
       } else {
@@ -79,7 +79,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         setState(() {
           _isFollowing = true;
           _user = _user!.copyWith(
-            followersCount: _user!.followersCount + 1,
+            followerCount: _user!.followersCount + 1,
           );
         });
       }
@@ -108,134 +108,154 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final isOwnProfile = widget.userId == widget.currentUserId;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF6F7FB),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 280,
+            expandedHeight: 352,
             pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primaryPurple,
-                      AppColors.primaryPurple.withOpacity(0.8),
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Avatar
-                        CircleAvatar(
-                          radius: 48,
-                          backgroundColor: Colors.white,
-                          backgroundImage: user.avatarUrl != null
-                              ? CachedNetworkImageProvider(user.avatarUrl!)
-                              : null,
-                          child: user.avatarUrl == null
-                              ? Text(
-                                  user.userName[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 36,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryPurple,
-                                  ),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(height: 16),
-                        // Username
-                        Text(
-                          '@${user.userName}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (user.bio != null && user.bio!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            user.bio!,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        // Follow button
-                        if (!isOwnProfile)
-                          SizedBox(
-                            width: 140,
-                            child: ElevatedButton(
-                              onPressed: _isFollowLoading ? null : _toggleFollow,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _isFollowing ? Colors.white : AppColors.primaryPurple,
-                                foregroundColor: _isFollowing ? AppColors.primaryPurple : Colors.white,
-                                side: BorderSide(
-                                  color: _isFollowing ? AppColors.primaryPurple : Colors.transparent,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                              ),
-                              child: _isFollowLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : Text(_isFollowing ? 'Following' : 'Follow'),
-                            ),
-                          ),
-                        const SizedBox(height: 16),
-                        // Stats
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildStat(user.collectionsCount, 'Collections'),
-                            Container(
-                              width: 1,
-                              height: 30,
-                              color: Colors.white24,
-                              margin: const EdgeInsets.symmetric(horizontal: 20),
-                            ),
-                            _buildStat(user.followersCount, 'Followers'),
-                            Container(
-                              width: 1,
-                              height: 30,
-                              color: Colors.white24,
-                              margin: const EdgeInsets.symmetric(horizontal: 20),
-                            ),
-                            _buildStat(user.followingCount, 'Following'),
-                          ],
-                        ),
-                      ],
+            backgroundColor: const Color(0xFFF6F7FB),
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: LayoutBuilder(
+              builder: (context, constraints) {
+                final collapsed = constraints.biggest.height <= (kToolbarHeight + 10);
+                return AnimatedOpacity(
+                  opacity: collapsed ? 1 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Text(
+                    '@${user.userName}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
-          ),
-
-          // Collections header
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Collections (${_collections.length})',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+            flexibleSpace: FlexibleSpaceBar(
+              background: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 44),
+                      SizedBox(
+                        width: 78,
+                        height: 78,
+                        child: ClipOval(
+                          child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                              ? CachedNetworkImage(
+                                  imageUrl: user.avatarUrl!,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (context, url, error) {
+                                    return Container(
+                                      color: Colors.white,
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                        style: const TextStyle(
+                                          fontSize: 34,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.primaryPurple,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Container(
+                                  color: Colors.white,
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                    style: const TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primaryPurple,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        user.userName,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          height: 1.1,
+                          letterSpacing: -0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '@${user.userName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      if (!isOwnProfile) ...[
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isFollowLoading ? null : _toggleFollow,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.primaryPurple,
+                              side: BorderSide(color: AppColors.primaryPurple.withOpacity(0.25)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              elevation: 0,
+                            ),
+                            child: _isFollowLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : Text(
+                                    _isFollowing ? 'Following' : 'Follow',
+                                    style: const TextStyle(fontWeight: FontWeight.w800),
+                                  ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(child: _buildStat(_collections.length, 'Collections', dark: true)),
+                            Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                            Expanded(child: _buildStat(user.followersCount, 'Followers', dark: true)),
+                            Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                            Expanded(child: _buildStat(user.followingCount, 'Following', dark: true)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -257,27 +277,33 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.86,
+                ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final collection = _collections[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: CollectionCard(
-                        collection: collection,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => CollectionDetailScreen(
-                                collectionId: collection.id,
-                                currentUserId: widget.currentUserId,
-                              ),
+                    return CollectionGridCard(
+                      collection: collection,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CollectionDetailScreen(
+                              collectionId: collection.id,
+                              currentUserId: widget.currentUserId,
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
+                      onUserTap: () {
+                        // No-op: tapping username line isn't shown on grid cards.
+                      },
                     );
                   },
                   childCount: _collections.length,
@@ -289,7 +315,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  Widget _buildStat(int count, String label) {
+  Widget _buildStat(int count, String label, {bool dark = false}) {
     return GestureDetector(
       onTap: () {
         // Navigate to followers/following screen
@@ -299,16 +325,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           Text(
             '$count',
             style: const TextStyle(
-              color: Colors.white,
               fontSize: 20,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
             ),
           ),
           Text(
             label,
             style: const TextStyle(
-              color: Colors.white70,
               fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

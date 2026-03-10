@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../models/collection_entity.dart';
 import '../theme/app_theme.dart';
 
@@ -13,6 +14,19 @@ class CollaborationCard extends StatelessWidget {
     required this.onTap,
   });
 
+  Future<String?> _resolveCoverUrl() async {
+    final raw = collection.coverImageUrl;
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.startsWith('gs://')) {
+      try {
+        return await FirebaseStorage.instance.refFromURL(raw).getDownloadURL();
+      } catch (_) {
+        return null;
+      }
+    }
+    return raw;
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -21,21 +35,34 @@ class CollaborationCard extends StatelessWidget {
         width: 280,
         margin: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          image: collection.coverImageUrl != null
-              ? DecorationImage(
-                  image: CachedNetworkImageProvider(collection.coverImageUrl!),
-                  fit: BoxFit.cover,
-                )
-              : null,
-          color: collection.coverImageUrl == null ? Colors.grey[300] : null,
+          borderRadius: BorderRadius.circular(24),
+          color: Colors.grey[300],
         ),
         child: Stack(
           children: [
+            FutureBuilder<String?>(
+              future: _resolveCoverUrl(),
+              builder: (context, snap) {
+                final url = snap.data;
+                if (url == null || url.isEmpty) return const SizedBox.shrink();
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorWidget: (context, _, __) {
+                      return Container(color: Colors.grey[300]);
+                    },
+                  ),
+                );
+              },
+            ),
             // Gradient Overlay
             Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -57,27 +84,28 @@ class CollaborationCard extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Colors.white.withOpacity(0.9),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'TRENDING',
-                          style: TextStyle(
+                        child: Text(
+                          collection.category.displayName.toUpperCase(),
+                          style: const TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
                       const Spacer(),
                       if (collection.contributorCount > 0)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.black.withOpacity(0.35),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -85,11 +113,11 @@ class CollaborationCard extends StatelessWidget {
                               const Icon(Icons.people, color: Colors.white, size: 12),
                               const SizedBox(width: 4),
                               Text(
-                                '${collection.contributorCount}',
+                                '${collection.contributorCount} contributors',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
@@ -105,8 +133,9 @@ class CollaborationCard extends StatelessWidget {
                     collection.title,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -119,7 +148,8 @@ class CollaborationCard extends StatelessWidget {
                       collection.description!,
                       style: const TextStyle(
                         color: Colors.white70,
-                        fontSize: 12,
+                        fontSize: 13,
+                        height: 1.35,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -130,23 +160,30 @@ class CollaborationCard extends StatelessWidget {
                   // Contribute Button
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.5)),
+                      color: AppColors.primaryPurple,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.18),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_circle_outline, color: Colors.white, size: 16),
+                        Icon(Icons.add, color: Colors.white, size: 18),
                         SizedBox(width: 8),
                         Text(
                           'Contribute',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ],

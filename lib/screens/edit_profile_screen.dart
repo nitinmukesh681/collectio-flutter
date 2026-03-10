@@ -70,7 +70,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       // Update user profile
       final updatedUser = auth.userEntity!.copyWith(
-        userName: _usernameController.text.trim(),
+        username: _usernameController.text.trim(),
         bio: _bioController.text.trim(),
         avatarUrl: avatarUrl,
       );

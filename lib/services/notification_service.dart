@@ -6,6 +6,29 @@ class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  Future<String?> _getFcmTokenSafely() async {
+    if (kIsWeb) {
+      return await _messaging.getToken();
+    }
+
+    try {
+      final apns = await _messaging.getAPNSToken();
+      if (apns == null || apns.isEmpty) {
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error getting APNS token: $e');
+      return null;
+    }
+
+    try {
+      return await _messaging.getToken();
+    } catch (e) {
+      debugPrint('Error getting FCM token: $e');
+      return null;
+    }
+  }
+
   Future<void> initialize() async {
     // Request permission
     NotificationSettings settings = await _messaging.requestPermission(
@@ -18,7 +41,7 @@ class NotificationService {
       debugPrint('User granted permission');
       
       // Get token
-      String? token = await _messaging.getToken();
+      final token = await _getFcmTokenSafely();
       if (token != null) {
         debugPrint('FCM Token: $token');
         // We'll save this when we identify the user
@@ -46,13 +69,13 @@ class NotificationService {
 
   Future<void> saveTokenToUser(String userId) async {
     try {
-      String? token = await _messaging.getToken();
-      if (token != null) {
-        await _firestore.collection('users').doc(userId).update({
-          'fcmTokens': FieldValue.arrayUnion([token]),
-          'lastActive': FieldValue.serverTimestamp(),
-        });
-      }
+      final token = await _getFcmTokenSafely();
+      if (token == null) return;
+
+      await _firestore.collection('users').doc(userId).update({
+        'fcmTokens': FieldValue.arrayUnion([token]),
+        'lastActive': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       debugPrint('Error saving FCM token: $e');
     }
@@ -60,10 +83,11 @@ class NotificationService {
 
   Future<void> removeTokenFromUser(String userId) async {
     try {
-      String? token = await _messaging.getToken();
+      final token = await _getFcmTokenSafely();
       if (token != null) {
         await _firestore.collection('users').doc(userId).update({
           'fcmTokens': FieldValue.arrayRemove([token]),
+          'lastActive': FieldValue.serverTimestamp(),
         });
       }
     } catch (e) {

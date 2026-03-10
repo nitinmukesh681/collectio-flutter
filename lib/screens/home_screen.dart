@@ -13,6 +13,7 @@ import 'profile_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
 import 'open_collaborations_screen.dart';
+import 'user_profile_screen.dart';
 
 /// Home screen with feed of collections
 class HomeScreen extends StatefulWidget {
@@ -25,6 +26,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   int _selectedIndex = 0;
+
+  final Set<String> _savedCollectionIds = {};
   
   // Data lists
   List<CollectionEntity> _collabCollections = [];
@@ -37,6 +40,18 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  void _navigateToUserProfile(String userId, String currentUserId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileScreen(
+          userId: userId,
+          currentUserId: currentUserId,
+        ),
+      ),
+    );
   }
 
   void _loadData() {
@@ -107,8 +122,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = auth.userEntity;
     final userName = user?.userName.split(' ').first ?? 'Curator';
 
+    if (_savedCollectionIds.isEmpty && (user?.savedCollections.isNotEmpty ?? false)) {
+      _savedCollectionIds.addAll(user!.savedCollections);
+    }
+
     return Scaffold(
-      backgroundColor: Colors.white, // Ensure clean white background
+      backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
         child: IndexedStack(
           index: _selectedIndex,
@@ -122,10 +141,42 @@ class _HomeScreenState extends State<HomeScreen> {
                 slivers: [
                   // 1. Header with Greeting
                   SliverPadding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primaryPurple,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primaryPurple,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'finds',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
                         Text(
                           'Welcome Back, $userName',
                           style: const TextStyle(
@@ -154,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (!_isLoadingCollabs && _collabCollections.isNotEmpty) ...[
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -190,9 +241,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 350, // Height for the cards
+                        height: 320, // Height for the cards
                         child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           scrollDirection: Axis.horizontal,
                           itemCount: _collabCollections.length,
                           itemBuilder: (context, index) {
@@ -211,13 +262,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   // 3. Main Feed Section Title
                   const SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      child: Text(
-                        'Your Feed',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Your Feed',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          SizedBox(
+                            width: 6,
+                            height: 6,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Color(0xFFEF4444),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -244,28 +310,98 @@ class _HomeScreenState extends State<HomeScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
-                            final collection = _feedCollections[index];
+                            final raw = _feedCollections[index];
+                            final isLiked = raw.likedBy.contains(auth.userId);
+                            final isSaved = _savedCollectionIds.contains(raw.id);
+                            final collection = raw.copyWith(
+                              isLiked: isLiked,
+                              isSaved: isSaved,
+                            );
                             return FeedCollectionCard(
                               collection: collection,
                               onTap: () => _navigateToCollection(collection.id, auth.userId),
+                              onUserTap: () => _navigateToUserProfile(collection.userId, auth.userId),
                               onLike: () async {
-                                // Optimistic update
-                                // Note: Real logic should update state
-                                await _firestoreService.likeCollection(collection.id, auth.userId);
-                                _loadFeed(); // Refresh for now
+                                final wasLiked = collection.isLiked;
+
+                                // Optimistic UI
+                                setState(() {
+                                  final current = _feedCollections[index];
+                                  final updatedLikedBy = List<String>.from(current.likedBy);
+                                  if (wasLiked) {
+                                    updatedLikedBy.remove(auth.userId);
+                                  } else {
+                                    updatedLikedBy.add(auth.userId);
+                                  }
+                                  _feedCollections[index] = current.copyWith(
+                                    likes: (current.likes + (wasLiked ? -1 : 1)).clamp(0, 1 << 31),
+                                    likedBy: updatedLikedBy,
+                                  );
+                                });
+
+                                try {
+                                  await _firestoreService.toggleCollectionLike(collection.id, auth.userId);
+                                } catch (e) {
+                                  // Revert UI
+                                  if (mounted) {
+                                    setState(() {
+                                      final current = _feedCollections[index];
+                                      final updatedLikedBy = List<String>.from(current.likedBy);
+                                      if (wasLiked) {
+                                        updatedLikedBy.add(auth.userId);
+                                      } else {
+                                        updatedLikedBy.remove(auth.userId);
+                                      }
+                                      _feedCollections[index] = current.copyWith(
+                                        likes: (current.likes + (wasLiked ? 1 : -1)).clamp(0, 1 << 31),
+                                        likedBy: updatedLikedBy,
+                                      );
+                                    });
+                                  }
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Could not update like: $e')),
+                                    );
+                                  }
+                                }
                               },
                               onSave: () async {
-                                // Optimistic update
-                                if (collection.isSaved) {
-                                  await _firestoreService.unsaveCollection(collection.id, auth.userId);
-                                } else {
-                                  await _firestoreService.saveCollection(collection.id, auth.userId);
+                                final wasSaved = collection.isSaved;
+
+                                // Optimistic UI
+                                setState(() {
+                                  if (wasSaved) {
+                                    _savedCollectionIds.remove(collection.id);
+                                  } else {
+                                    _savedCollectionIds.add(collection.id);
+                                  }
+                                });
+
+                                try {
+                                  await _firestoreService.toggleCollectionSave(collection.id, auth.userId);
+                                } catch (e) {
+                                  // Revert UI
+                                  if (mounted) {
+                                    setState(() {
+                                      if (wasSaved) {
+                                        _savedCollectionIds.add(collection.id);
+                                      } else {
+                                        _savedCollectionIds.remove(collection.id);
+                                      }
+                                    });
+                                  }
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Could not save collection: $e')),
+                                    );
+                                  }
                                 }
-                                _loadFeed(); // Refresh for now
                               },
                             );
                           },
@@ -311,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const NavigationDestination(
             icon: Icon(Icons.explore_outlined),
             selectedIcon: Icon(Icons.explore, color: AppColors.primaryPurple),
-            label: 'Search',
+            label: 'Explore',
           ),
           // Custom middle button visual
            NavigationDestination(

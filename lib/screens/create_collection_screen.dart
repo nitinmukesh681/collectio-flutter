@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import '../models/collection_entity.dart';
 import '../models/category_type.dart';
@@ -56,8 +57,18 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
       _isPublic = collection.isPublic;
       _isOpenForContribution = collection.isOpenForContribution;
       // If editing, and there's an existing cover image, check if it's an Unsplash URL
-      if (collection.coverImageUrl != null && !collection.coverImageUrl!.startsWith('gs://')) {
-        _selectedUnsplashUrl = collection.coverImageUrl;
+      if (collection.coverImageUrl != null) {
+        final raw = collection.coverImageUrl!.trim();
+        if (raw.startsWith('gs://')) {
+          FirebaseStorage.instance.refFromURL(raw).getDownloadURL().then((url) {
+            if (!mounted) return;
+            setState(() => _selectedUnsplashUrl = url);
+          }).catchError((_) {
+            // ignore
+          });
+        } else if (raw.isNotEmpty) {
+          _selectedUnsplashUrl = raw;
+        }
       }
     }
   }
@@ -166,7 +177,14 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Collection' : 'Create Collection'),
+        title: Text(
+          _isEditing ? 'Edit Collection' : 'New Collection',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _save,
@@ -180,7 +198,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                     _isEditing ? 'Save' : 'Create',
                     style: const TextStyle(
                       color: AppColors.primaryPurple,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
           ),
@@ -191,94 +209,93 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Cover image picker
-            GestureDetector(
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.photo_library),
-                        title: const Text('Gallery'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _pickImage();
-                        },
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.search),
-                        title: const Text('Unsplash'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          showDialog(
-                            context: context,
-                            builder: (context) => UnsplashSearchDialog(
-                              onImageSelected: (imageUrl, attribution) {
-                                setState(() {
-                                  _coverImage = null;
-                                  _selectedUnsplashUrl = imageUrl;
-                                });
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+            const Text(
+              'Cover Image (Optional)',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickImage,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: const Text('Upload'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: Color(0xFFE5E7EB)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                   ),
-                );
-              },
-              child: Container(
-                height: 180,
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[300]!),
-                  image: _coverImage != null
-                      ? DecorationImage(
-                          image: FileImage(_coverImage!),
-                          fit: BoxFit.cover,
-                        )
-                      : _selectedUnsplashUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(_selectedUnsplashUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : widget.existingCollection?.coverImageUrl != null
-                              ? DecorationImage(
-                                  image: NetworkImage(widget.existingCollection!.coverImageUrl!),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
                 ),
-                child: _coverImage == null && _selectedUnsplashUrl == null && widget.existingCollection?.coverImageUrl == null
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.add_photo_alternate_outlined, size: 48, color: Colors.grey[400]),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Add cover image',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      )
-                    : Align(
-                        alignment: Alignment.bottomRight,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.edit, color: Colors.white, size: 20),
-                          ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => UnsplashSearchDialog(
+                          onImageSelected: (imageUrl, attribution) {
+                            setState(() {
+                              _coverImage = null;
+                              _selectedUnsplashUrl = imageUrl;
+                            });
+                          },
                         ),
-                      ),
+                      );
+                    },
+                    icon: const Icon(Icons.image_outlined),
+                    label: const Text('Unsplash'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: Color(0xFFE5E7EB)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              height: 180,
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                image: _coverImage != null
+                    ? DecorationImage(
+                        image: FileImage(_coverImage!),
+                        fit: BoxFit.cover,
+                      )
+                    : _selectedUnsplashUrl != null
+                        ? DecorationImage(
+                            image: NetworkImage(_selectedUnsplashUrl!),
+                            fit: BoxFit.cover,
+                          )
+                        : widget.existingCollection?.coverImageUrl != null
+                            ? DecorationImage(
+                                image: NetworkImage(widget.existingCollection!.coverImageUrl!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
               ),
+              child: _coverImage == null &&
+                      _selectedUnsplashUrl == null &&
+                      widget.existingCollection?.coverImageUrl == null
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.image_outlined, size: 42, color: Colors.grey[400]),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No cover selected',
+                          style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
             ),
             const SizedBox(height: 24),
 
@@ -286,11 +303,8 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
             TextFormField(
               controller: _titleController,
               decoration: InputDecoration(
-                labelText: 'Title',
-                hintText: 'Give your collection a name',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                labelText: 'Collection Name *',
+                hintText: 'e.g., Summer Reading List',
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
@@ -305,11 +319,8 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
             TextFormField(
               controller: _descriptionController,
               decoration: InputDecoration(
-                labelText: 'Description',
+                labelText: 'Description (Optional)',
                 hintText: 'What is this collection about?',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
               maxLines: 3,
             ),
@@ -317,8 +328,8 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
 
             // Category
             const Text(
-              'Category',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              'Category *',
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -329,10 +340,10 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                 return GestureDetector(
                   onTap: () => setState(() => _selectedCategory = category),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: isSelected ? AppColors.primaryPurple : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(22),
                       border: Border.all(
                         color: isSelected ? AppColors.primaryPurple : Colors.grey[300]!,
                       ),
@@ -340,13 +351,11 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(category.emoji),
-                        const SizedBox(width: 6),
                         Text(
                           category.displayName,
                           style: TextStyle(
                             color: isSelected ? Colors.white : Colors.black,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                           ),
                         ),
                       ],
@@ -360,7 +369,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
             // Tags
             const Text(
               'Tags',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             Row(
@@ -370,23 +379,23 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                     controller: _tagController,
                     decoration: InputDecoration(
                       hintText: 'Add a tag',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
                     onSubmitted: (_) => _addTag(),
                   ),
                 ),
                 const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: _addTag,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedCornerShape(12),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryPurple,
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Text('Add', style: TextStyle(color: Colors.white)),
+                  child: IconButton(
+                    onPressed: _addTag,
+                    icon: const Icon(Icons.add, color: Colors.white),
+                  ),
                 ),
               ],
             ),
@@ -412,14 +421,18 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.grey[200]!),
               ),
               child: Column(
                 children: [
                   SwitchListTile(
-                    title: const Text('Public'),
-                    subtitle: const Text('Anyone can see this collection'),
+                    title: Text(_isPublic ? 'Public' : 'Private'),
+                    subtitle: Text(
+                      _isPublic
+                          ? 'Anyone can see this collection'
+                          : 'Only you can see this collection',
+                    ),
                     value: _isPublic,
                     onChanged: (value) => setState(() => _isPublic = value),
                     activeColor: AppColors.primaryPurple,

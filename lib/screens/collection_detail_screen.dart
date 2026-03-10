@@ -3,9 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
+import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'add_item_screen.dart';
@@ -30,19 +31,49 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   CollectionEntity? _collection;
   List<CollectionItemEntity> _items = [];
+  List<UserEntity> _contributorUsers = [];
   bool _isLoading = true;
   bool _isOwner = false;
   String _searchQuery = '';
+  final Set<String> _expandedItemIds = <String>{};
   bool _showSearch = false;
   String _currentUserName = '';
 
   bool _isFollowing = false;
+  bool _isAddToCollectionsLoading = false;
+  bool _isUnauthorized = false;
   
   @override
   void initState() {
     super.initState();
     _loadCollection();
     _loadCurrentUserName();
+  }
+
+  Widget _buildFractionalStars(double rating, {double size = 16}) {
+    final clamped = rating.clamp(0, 5).toDouble();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (i) {
+        final fill = (clamped - i).clamp(0, 1).toDouble();
+        return Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Stack(
+              children: [
+                Icon(Icons.star, size: size, color: Colors.grey[350]),
+                ClipRect(
+                  clipper: _StarFillClipper(fill),
+                  child: Icon(Icons.star, size: size, color: Colors.amber),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
   }
 
   Future<void> _loadCurrentUserName() async {
@@ -61,16 +92,22 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           widget.currentUserId, 
           collection.userId
         );
+
+        final isOwner = collection.userId == widget.currentUserId;
+        final canView = _canViewCollection(collection, isOwner: isOwner, isFollowing: isFollowing);
         
         if (mounted) {
           setState(() {
             _collection = collection.copyWith(
               isLiked: collection.likedBy.contains(widget.currentUserId),
             );
-            _isOwner = collection.userId == widget.currentUserId;
+            _isOwner = isOwner;
             _isFollowing = isFollowing;
+            _isUnauthorized = !canView;
           });
         }
+
+        await _loadContributors(collection);
       }
     } catch (e) {
       debugPrint('Error loading collection: $e');
@@ -78,22 +115,191 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  Future<void> _loadContributors(CollectionEntity collection) async {
+    final rawIds = collection.contributorIds;
+    if (rawIds.isEmpty) {
+      if (mounted) setState(() => _contributorUsers = []);
+      return;
+    }
+
+    final ids = rawIds.where((id) => id.trim().isNotEmpty && id != collection.userId).toList();
+    if (ids.isEmpty) {
+      if (mounted) setState(() => _contributorUsers = []);
+      return;
+    }
+
+    try {
+      final users = await _firestoreService.getUsersByIds(ids);
+      if (mounted) {
+        setState(() {
+          _contributorUsers = users;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading contributors: $e');
+    }
+  }
+
+  void _showContributorsSheet(CollectionEntity collection) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        final users = _contributorUsers;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Contributors',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 12),
+                if (users.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text('No other contributors yet.'),
+                  )
+                else
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.55,
+                    child: ListView.separated(
+                      itemCount: users.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final u = users[index];
+                        final name = u.userName;
+                        final avatarUrl = u.avatarUrl;
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
+                                ? CachedNetworkImage(
+                                    imageUrl: avatarUrl,
+                                    width: 36,
+                                    height: 36,
+                                    fit: BoxFit.cover,
+                                    placeholder: (_, __) => Container(
+                                      width: 36,
+                                      height: 36,
+                                      color: AppColors.primaryPurple.withOpacity(0.2),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primaryPurple,
+                                        ),
+                                      ),
+                                    ),
+                                    errorWidget: (_, __, ___) => Container(
+                                      width: 36,
+                                      height: 36,
+                                      color: AppColors.primaryPurple.withOpacity(0.2),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primaryPurple,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 36,
+                                    height: 36,
+                                    color: AppColors.primaryPurple.withOpacity(0.2),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primaryPurple,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          title: Text(
+                            '@$name',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => UserProfileScreen(
+                                  userId: u.id,
+                                  currentUserId: widget.currentUserId,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool _canViewCollection(
+    CollectionEntity c, {
+    required bool isOwner,
+    required bool isFollowing,
+  }) {
+    if (isOwner) return true;
+
+    // Public collections are always viewable.
+    if (c.isPublic || c.visibility == CollectionVisibility.public) return true;
+
+    // Followers-only visibility.
+    if (c.visibility == CollectionVisibility.followers) {
+      return isFollowing;
+    }
+
+    // Private collections: allow collaborators/editors/viewers.
+    final uid = widget.currentUserId;
+    if (c.editors.contains(uid) || c.viewers.contains(uid)) return true;
+    for (final collab in c.collaborators) {
+      final id = collab['userId'];
+      if (id is String && id == uid) return true;
+    }
+    return false;
+  }
+
   Future<void> _toggleFollowUser() async {
     if (_collection == null) return;
     final targetUserId = _collection!.userId;
-    
+ 
+    final wasFollowing = _isFollowing;
+
     // Optimistic update
-    setState(() => _isFollowing = !_isFollowing);
-    
+    setState(() => _isFollowing = !wasFollowing);
+
     try {
-      await _firestoreService.followUser(
-        widget.currentUserId,
-        targetUserId,
-        _currentUserName
-      );
+      if (wasFollowing) {
+        await _firestoreService.unfollowUser(widget.currentUserId, targetUserId);
+      } else {
+        await _firestoreService.followUser(
+          widget.currentUserId,
+          targetUserId,
+          _currentUserName,
+        );
+      }
     } catch (e) {
       // Revert
-      if (mounted) setState(() => _isFollowing = !_isFollowing);
+      if (mounted) setState(() => _isFollowing = wasFollowing);
       debugPrint('Error toggling follow: $e');
     }
   }
@@ -110,11 +316,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     });
 
     try {
-      if (wasLiked) {
-        await _firestoreService.unlikeCollection(widget.collectionId, widget.currentUserId);
-      } else {
-        await _firestoreService.likeCollection(widget.collectionId, widget.currentUserId);
-      }
+      await _firestoreService.toggleCollectionLike(widget.collectionId, widget.currentUserId);
     } catch (e) {
       // Revert on error
       setState(() {
@@ -138,11 +340,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     });
 
     try {
-      if (wasSaved) {
-        await _firestoreService.unsaveCollection(widget.collectionId, widget.currentUserId);
-      } else {
-        await _firestoreService.saveCollection(widget.collectionId, widget.currentUserId);
-      }
+      await _firestoreService.toggleCollectionSave(widget.collectionId, widget.currentUserId);
     } catch (e) {
       // Revert on error
       setState(() {
@@ -178,6 +376,133 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         _loadCollection();
       }
     });
+  }
+
+  Future<void> _showAddToCollectionsDialog(CollectionItemEntity item) async {
+    if (_isAddToCollectionsLoading) return;
+
+    setState(() => _isAddToCollectionsLoading = true);
+    List<CollectionEntity> myCollections = [];
+    try {
+      myCollections = await _firestoreService.getUserCollections(widget.currentUserId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load collections: $e')),
+        );
+      }
+      setState(() => _isAddToCollectionsLoading = false);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isAddToCollectionsLoading = false);
+
+    final selected = <String>{};
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('Add to collections'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: myCollections.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 6),
+                itemBuilder: (context, index) {
+                  final c = myCollections[index];
+                  final isChecked = selected.contains(c.id);
+                  return InkWell(
+                    onTap: () {
+                      setStateDialog(() {
+                        if (isChecked) {
+                          selected.remove(c.id);
+                        } else {
+                          selected.add(c.id);
+                        }
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: isChecked,
+                          onChanged: (value) {
+                            setStateDialog(() {
+                              if (value == true) {
+                                selected.add(c.id);
+                              } else {
+                                selected.remove(c.id);
+                              }
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            c.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.black87),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: selected.isEmpty ? null : () => Navigator.pop(context, true),
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed != true || selected.isEmpty) return;
+    if (!mounted) return;
+
+    try {
+      for (final collectionId in selected) {
+        final newItem = CollectionItemEntity(
+          id: '',
+          collectionId: collectionId,
+          userId: widget.currentUserId,
+          userName: _currentUserName,
+          title: item.title,
+          description: item.description,
+          rating: item.rating,
+          imageUrls: item.imageUrls,
+          notes: item.notes,
+          googleMapsUrl: item.googleMapsUrl,
+          websiteUrl: item.websiteUrl,
+          likes: 0,
+          likedBy: const [],
+        );
+        await _firestoreService.addCollectionItem(collectionId, newItem);
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Added to collections')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not add to collections: $e')),
+        );
+      }
+    }
   }
 
   void _navigateToEditCollection() {
@@ -313,6 +638,20 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       );
     }
 
+    if (_isUnauthorized) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: const Center(
+          child: Text('This collection is private'),
+        ),
+      );
+    }
+
     if (_collection == null) {
       return Scaffold(
         appBar: AppBar(),
@@ -321,9 +660,44 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     }
 
     final collection = _collection!;
-    final hasCoverImage = collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty;
+    bool isValidCoverUrl(String? raw) {
+      if (raw == null) return false;
+      final v = raw.trim();
+      if (v.isEmpty) return false;
+      return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('gs://');
+    }
+
+    final hasCoverImage = isValidCoverUrl(collection.coverImageUrl);
     final gradientColors = AppColors.categoryGradients[collection.category.name] ?? 
         AppColors.categoryGradients['other']!;
+
+    Future<String?> resolveOwnerAvatarUrl() async {
+      String? raw = collection.userAvatarUrl;
+      if (raw == null || raw.trim().isEmpty) {
+        try {
+          final owner = await _firestoreService.getUser(collection.userId);
+          raw = owner?.avatarUrl;
+        } catch (e) {
+          debugPrint('Failed to fetch owner avatar for ${collection.userId}: $e');
+          raw = null;
+        }
+      }
+      if (raw == null || raw.isEmpty) return null;
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return null;
+      if (trimmed.startsWith('gs://')) {
+        try {
+          return await FirebaseStorage.instance.refFromURL(trimmed).getDownloadURL();
+        } catch (e) {
+          debugPrint('Failed to resolve gs:// owner avatar url: $trimmed, error: $e');
+          return null;
+        }
+      }
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+      return null;
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -331,7 +705,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         slivers: [
           // Hero header with cover image
           SliverAppBar(
-            expandedHeight: hasCoverImage ? 220 : 0,
+            expandedHeight: hasCoverImage ? 260 : kToolbarHeight,
             pinned: true,
             backgroundColor: hasCoverImage ? Colors.transparent : Colors.white,
             leading: _buildCircleButton(
@@ -352,53 +726,116 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 icon: Icons.share_outlined,
                 onTap: _shareCollection,
               ),
-              if (_isOwner)
-                PopupMenuButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+              PopupMenuButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.3),
+                    shape: BoxShape.circle,
                   ),
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
-                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      _navigateToEditCollection();
-                    } else if (value == 'delete') {
-                      _showDeleteDialog();
-                    }
-                  },
+                  child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
                 ),
+                itemBuilder: (context) => [
+                  if (_isOwner)
+                    const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
+                  if (_isOwner)
+                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  if (!_isOwner)
+                    const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
+                ],
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _navigateToEditCollection();
+                  } else if (value == 'delete') {
+                    _showDeleteDialog();
+                  } else if (value == 'add_to_new') {
+                    _duplicateCollection();
+                  }
+                },
+              ),
 
               const SizedBox(width: 8),
             ],
             flexibleSpace: hasCoverImage
                 ? FlexibleSpaceBar(
                     background: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        CachedNetworkImage(
-                          imageUrl: collection.coverImageUrl!,
-                          fit: BoxFit.cover,
-                        ),
-                        // Bottom rounded overlay
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            height: 32,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                    fit: StackFit.expand,
+                    children: [
+                      FutureBuilder<String?>(
+                        future: () async {
+                          final raw = collection.coverImageUrl;
+                          if (raw == null || raw.isEmpty) return null;
+                          if (raw.startsWith('gs://')) {
+                            try {
+                              return await FirebaseStorage.instance.refFromURL(raw).getDownloadURL();
+                            } catch (_) {
+                              return null;
+                            }
+                          }
+                          return raw;
+                        }(),
+                        builder: (context, snap) {
+                          final url = snap.data;
+                          if (url == null || url.isEmpty) {
+                            return Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: gradientColors,
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                            );
+                          }
+                          return ClipPath(
+                            clipper: const _CoverBottomCurveClipper(),
+                            child: CachedNetworkImage(
+                              imageUrl: url,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, u, error) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: gradientColors,
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                      // Overlay gradient
+                      ClipPath(
+                        clipper: const _CoverBottomCurveClipper(),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.25),
+                                Colors.black.withOpacity(0.7),
+                              ],
                             ),
                           ),
                         ),
+                      ),
+
+                      // Rounded white sheet header (inside the app bar)
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Container(
+                          height: 48,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                          ),
+                        ),
+                      ),
                       ],
                     ),
                   )
@@ -408,8 +845,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           // Collection info
           SliverToBoxAdapter(
             child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: hasCoverImage
+                    ? BorderRadius.zero
+                    : BorderRadius.zero,
+              ),
+              padding: EdgeInsets.fromLTRB(18, hasCoverImage ? 10 : 10, 18, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -418,42 +860,118 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     children: [
                       GestureDetector(
                         onTap: () {
-                          // Navigate to user profile
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => UserProfileScreen(
+                                userId: collection.userId,
+                                currentUserId: widget.currentUserId,
+                              ),
+                            ),
+                          );
                         },
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
-                              backgroundImage: collection.userAvatarUrl != null
-                                  ? CachedNetworkImageProvider(collection.userAvatarUrl!)
-                                  : null,
-                              child: collection.userAvatarUrl == null
-                                  ? Text(
-                                      collection.userName[0].toUpperCase(),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.primaryPurple,
-                                      ),
-                                    )
-                                  : null,
+                            SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: ClipOval(
+                                child: FutureBuilder<String?>(
+                                  future: resolveOwnerAvatarUrl(),
+                                  builder: (context, snap) {
+                                    final url = snap.data;
+                                    if (url == null || url.isEmpty) {
+                                      return Container(
+                                        color: AppColors.primaryPurple.withOpacity(0.2),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          collection.userName.isNotEmpty
+                                              ? collection.userName[0].toUpperCase()
+                                              : '?',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primaryPurple,
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    return CachedNetworkImage(
+                                      imageUrl: url,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (context, url, error) {
+                                        return Container(
+                                          color: AppColors.primaryPurple.withOpacity(0.2),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            collection.userName.isNotEmpty
+                                                ? collection.userName[0].toUpperCase()
+                                                : '?',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.primaryPurple,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  collection.userName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => UserProfileScreen(
+                                              userId: collection.userId,
+                                              currentUserId: widget.currentUserId,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      child: Text(
+                                        '@${collection.userName}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_contributorUsers.isNotEmpty) ...[
+                                      const SizedBox(width: 6),
+                                      InkWell(
+                                        onTap: () => _showContributorsSheet(collection),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          child: Text(
+                                            '+ ${_contributorUsers.length} others',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                              color: AppColors.primaryPurple,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                                 Text(
                                   _getTimeAgo(collection.createdAt),
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey[600],
+                                    color: Colors.black87,
                                   ),
                                 ),
                               ],
@@ -462,26 +980,27 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         ),
                       ),
                       const Spacer(),
-                        if (!_isOwner)
-                          OutlinedButton(
-                            onPressed: _toggleFollowUser,
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              side: _isFollowing 
-                                ? BorderSide(color: Colors.grey[400]!) 
-                                : const BorderSide(color: AppColors.primaryPurple),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                      if (!_isOwner)
+                        OutlinedButton(
+                          onPressed: _toggleFollowUser,
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: _isFollowing
+                                ? AppColors.primaryPurple.withOpacity(0.08)
+                                : Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text(
-                              _isFollowing ? 'Following' : 'Follow',
-                              style: TextStyle(
-                                color: _isFollowing ? Colors.grey[700] : AppColors.primaryPurple,
-                                fontWeight: _isFollowing ? FontWeight.normal : FontWeight.bold,
-                              ),
+                            side: const BorderSide(color: AppColors.primaryPurple),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                          child: Text(
+                            _isFollowing ? 'Following' : 'Follow',
+                            style: const TextStyle(
+                              color: AppColors.primaryPurple,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -500,9 +1019,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     const SizedBox(height: 10),
                     Text(
                       collection.description!,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 15,
-                        color: Colors.grey[700],
+                        color: Colors.black87,
                       ),
                     ),
                   ],
@@ -515,19 +1034,19 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       runSpacing: 8,
                       children: [
                         ...collection.tags.map((tag) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryPurple.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '#${tag.toLowerCase()}',
-                            style: const TextStyle(
-                              color: AppColors.primaryPurple,
-                              fontSize: 12,
-                            ),
-                          ),
-                        )),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryPurple.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '#${tag.toLowerCase()}',
+                                style: const TextStyle(
+                                  color: AppColors.primaryPurple,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            )),
                         if (collection.isOpenForContribution)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -554,13 +1073,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     children: [
                       _buildStatChip(Icons.favorite, '${collection.likes} likes', AppColors.heartSalmon),
                       const SizedBox(width: 18),
-                      _buildStatChip(Icons.inventory_2_outlined, '${collection.itemCount} items', Colors.grey[700]!),
+                      _buildStatChip(Icons.inventory_2_outlined, '${collection.itemCount} items', Colors.black87),
                       const SizedBox(width: 18),
-                      _buildStatChip(
-                        Icons.language,
-                        collection.isPublic ? 'Public' : 'Private',
-                        Colors.grey[700]!,
-                      ),
+                      _buildStatChip(Icons.public, collection.isPublic ? 'Public' : 'Private', Colors.black87),
                     ],
                   ),
                 ],
@@ -601,31 +1116,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             ),
 
           // Items header
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-              child: Row(
-                children: [
-                  Text(
-                    'Items (${_filteredItems.length})',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (_isOwner || collection.isOpenForContribution)
-                    TextButton.icon(
-                      onPressed: () => _navigateToAddItem(),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add'),
-                    ),
-
-                ],
-              ),
-            ),
-          ),
-
           // Items list
           StreamBuilder<List<CollectionItemEntity>>(
             stream: _firestoreService.getCollectionItems(widget.collectionId),
@@ -680,7 +1170,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             ),
           ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
             Expanded(
@@ -693,14 +1183,18 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 ),
                 label: const Text('Like'),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(22),
                   ),
+                  side: BorderSide(color: Colors.grey[300]!),
+                  foregroundColor: Colors.black87,
+                  backgroundColor: Colors.white,
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _toggleSave,
@@ -711,49 +1205,59 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 ),
                 label: const Text('Save'),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(22),
                   ),
+                  side: BorderSide(color: Colors.grey[300]!),
+                  foregroundColor: Colors.black87,
+                  backgroundColor: Colors.white,
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
-              child: ElevatedButton.icon(
+              child: ElevatedButton(
                 onPressed: _duplicateCollection,
-                icon: const Icon(Icons.copy, size: 18),
-                label: const Text('Copy'),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.copy, size: 18),
+                    const SizedBox(width: 8),
+                    const Text('Copy'),
+                  ],
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPurple,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(22),
                   ),
                 ),
               ),
             ),
             if (_isOwner || collection.isOpenForContribution) ...[
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               SizedBox(
                 width: 52,
                 child: ElevatedButton(
                   onPressed: () => _navigateToAddItem(),
+                  child: const Icon(Icons.add, size: 22),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryPurple,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(22),
                     ),
                   ),
-                  child: const Icon(Icons.add, size: 22),
                 ),
               ),
             ],
           ],
-
         ),
       ),
     );
@@ -784,7 +1288,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         const SizedBox(width: 6),
         Text(
           text,
-          style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
         ),
       ],
     );
@@ -794,183 +1298,303 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     final hasImage = item.imageUrls.isNotEmpty;
     final isLiked = item.likedBy.contains(widget.currentUserId);
     final canEdit = _isOwner || item.userId == widget.currentUserId;
+    final isExpanded = _expandedItemIds.contains(item.id);
     
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image
-          if (hasImage)
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: CachedNetworkImage(
-                  imageUrl: item.imageUrls.first,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[200],
-                    child: const Center(child: CircularProgressIndicator()),
-                  ),
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isExpanded) {
+            _expandedItemIds.remove(item.id);
+          } else {
+            _expandedItemIds.add(item.id);
+          }
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(18, 6, 18, 6),
+        padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 28,
+              child: Text(
+                '$rank',
+                textAlign: TextAlign.center,
+                softWrap: false,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primaryPurple,
+                  fontSize: 16,
                 ),
               ),
             ),
-          
-          Padding(
-            padding: const EdgeInsets.all(16),
+          const SizedBox(width: 12),
+          if (hasImage) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: CachedNetworkImage(
+                imageUrl: item.imageUrls.first,
+                width: 56,
+                height: 56,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  width: 56,
+                  height: 56,
+                  color: const Color(0xFFF3F4F6),
+                  alignment: Alignment.center,
+                  child: const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  width: 56,
+                  height: 56,
+                  color: const Color(0xFFF3F4F6),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.broken_image_outlined, color: Colors.grey[500], size: 18),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Rank and title
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                          height: 1.2,
+                        ),
+                        maxLines: isExpanded ? null : 2,
+                        overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (item.googleMapsUrl != null && item.googleMapsUrl!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () async {
+                            final raw = item.googleMapsUrl!.trim();
+                            final uri = Uri.tryParse(raw);
+                            if (uri == null) return;
+                            try {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not open location')),
+                                );
+                              }
+                            }
+                          },
+                          child: const SizedBox(
+                            width: 26,
+                            height: 18,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: Icon(
+                                Icons.location_on_outlined,
+                                size: 18,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (item.websiteUrl != null && item.websiteUrl!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () async {
+                            var raw = item.websiteUrl!.trim();
+                            if (raw.isEmpty) return;
+                            if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+                              raw = 'https://$raw';
+                            }
+                            final uri = Uri.tryParse(raw);
+                            if (uri == null) return;
+                            try {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not open link')),
+                                );
+                              }
+                            }
+                          },
+                          child: const SizedBox(
+                            width: 26,
+                            height: 18,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: Icon(
+                                Icons.link,
+                                size: 18,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (item.rating > 0) ...[
+                  const SizedBox(height: 2),
+                  _buildFractionalStars(item.rating, size: 16),
+                ],
+                if (item.description != null && item.description!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    item.description!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black87,
+                      height: 1.3,
+                    ),
+                    maxLines: isExpanded ? null : 2,
+                    overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            children: [
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _navigateToAddItem(item);
+                  } else if (value == 'delete') {
+                    _deleteItem(item);
+                  } else if (value == 'add_to_collections') {
+                    _showAddToCollectionsDialog(item);
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (canEdit)
+                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  if (_isOwner)
+                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  const PopupMenuItem(value: 'add_to_collections', child: Text('Add to another collection')),
+                ],
+                child: const Icon(Icons.more_vert, size: 20, color: Colors.black87),
+              ),
+            ],
+          ),
+          ],
+        ),
+      ),
+    );
+
+  }
+
+  void _showItemDetailsDialog(CollectionItemEntity item, {required int rank}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E7EB),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryPurple.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$rank',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryPurple,
-                          ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '$rank',
+                        textAlign: TextAlign.center,
+                        softWrap: false,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primaryPurple,
+                          fontSize: 16,
                         ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (item.rating > 0) ...[
-                            const SizedBox(height: 4),
-                            RatingBarIndicator(
-                              rating: item.rating,
-                              itemSize: 16,
-                              itemBuilder: (context, _) => const Icon(
-                                Icons.star,
-                                color: Colors.amber,
-                              ),
-                            ),
-                          ],
-                        ],
+                      child: Text(
+                        item.title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                          height: 1.2,
+                        ),
                       ),
                     ),
                   ],
                 ),
-
-                // Description
+                if (item.rating > 0) ...[
+                  const SizedBox(height: 10),
+                  _buildFractionalStars(item.rating, size: 18),
+                ],
                 if (item.description != null && item.description!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    item.description!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-
-                // Links
-                if (item.googleMapsUrl != null || item.websiteUrl != null) ...[
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      if (item.googleMapsUrl != null)
-                        _buildLinkChip(Icons.map, 'Maps', item.googleMapsUrl!),
-                      if (item.websiteUrl != null)
-                        _buildLinkChip(Icons.link, 'Website', item.websiteUrl!),
-                    ],
-                  ),
-                ],
-
-                // Action buttons
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    // Like button
-                    GestureDetector(
-                      onTap: () => _toggleItemLike(item),
-                      child: Row(
-                        children: [
-                          Icon(
-                            isLiked ? Icons.favorite : Icons.favorite_border,
-                            size: 20,
-                            color: isLiked ? AppColors.heartSalmon : Colors.grey[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${item.likes}',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        item.description!,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black87,
+                          height: 1.35,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 24),
-                    // Edit button (only for owner or item creator)
-                    if (canEdit)
-                      GestureDetector(
-                        onTap: () => _navigateToAddItem(item),
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_outlined, size: 20, color: Colors.grey[600]),
-                            const SizedBox(width: 4),
-                            Text('Edit', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                    if (canEdit) const SizedBox(width: 24),
-                    // Delete button (only for owner)
-                    if (_isOwner)
-                      GestureDetector(
-                        onTap: () => _deleteItem(item),
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_outline, size: 20, color: Colors.grey[600]),
-                            const SizedBox(width: 4),
-                            Text('Delete', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+                  ),
+                ],
               ],
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
-
   }
 
   Widget _buildLinkChip(IconData icon, String label, String url) {
@@ -982,7 +1606,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: label.isEmpty
+            ? const EdgeInsets.all(10)
+            : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: AppColors.primaryPurple.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
@@ -991,15 +1617,17 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 14, color: AppColors.primaryPurple),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.primaryPurple,
-                fontWeight: FontWeight.w500,
+            if (label.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.primaryPurple,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -1052,4 +1680,40 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       return 'now';
     }
   }
+}
+
+class _CoverBottomCurveClipper extends CustomClipper<Path> {
+  const _CoverBottomCurveClipper();
+
+  @override
+  Path getClip(Size size) {
+    const curveDepth = 26.0;
+
+    final path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(size.width, 0);
+    path.lineTo(size.width, size.height - curveDepth);
+    // Bottom edge curves upward at the center (concave shape)
+    path.quadraticBezierTo(size.width / 2, size.height, 0, size.height - curveDepth);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+class _StarFillClipper extends CustomClipper<Rect> {
+  final double fill;
+
+  _StarFillClipper(this.fill);
+
+  @override
+  Rect getClip(Size size) {
+    final width = size.width * fill.clamp(0, 1);
+    return Rect.fromLTWH(0, 0, width, size.height);
+  }
+
+  @override
+  bool shouldReclip(covariant _StarFillClipper oldClipper) => oldClipper.fill != fill;
 }

@@ -78,8 +78,17 @@ class UnsplashService {
     if (query.isEmpty) return [];
 
     try {
+      final uri = Uri.https(
+        'api.unsplash.com',
+        '/search/photos',
+        {
+          'query': query,
+          'page': '$page',
+          'per_page': '$perPage',
+        },
+      );
       final response = await http.get(
-        Uri.parse('$_baseUrl/search/photos?query=$query&page=$page&per_page=$perPage'),
+        uri,
         headers: {
           'Authorization': 'Client-ID $_accessKey',
         },
@@ -90,7 +99,7 @@ class UnsplashService {
         final results = data['results'] as List;
         return results.map((photo) => UnsplashPhoto.fromJson(photo)).toList();
       } else {
-        throw Exception('Failed to search photos: ${response.statusCode}');
+        throw Exception('Failed to search photos: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
       throw Exception('Error searching Unsplash: $e');
@@ -100,13 +109,14 @@ class UnsplashService {
   /// Get a random photo
   Future<UnsplashPhoto?> getRandomPhoto({String? query}) async {
     try {
-      var url = '$_baseUrl/photos/random';
-      if (query != null && query.isNotEmpty) {
-        url += '?query=$query';
-      }
+      final uri = Uri.https(
+        'api.unsplash.com',
+        '/photos/random',
+        (query != null && query.isNotEmpty) ? {'query': query} : null,
+      );
 
       final response = await http.get(
-        Uri.parse(url),
+        uri,
         headers: {
           'Authorization': 'Client-ID $_accessKey',
         },

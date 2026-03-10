@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'dart:io';
 import '../widgets/unsplash_search_dialog.dart';
 import 'package:http/http.dart' as http; // Determine if network image implies http
@@ -41,6 +42,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final TextEditingController _websiteUrlController = TextEditingController();
 
   double _rating = 0;
+  final TextEditingController _ratingController = TextEditingController();
   List<File> _images = [];
   List<String> _existingImageUrls = [];
   bool _isLoading = false;
@@ -83,8 +85,79 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
       _websiteUrlController.text = item.websiteUrl ?? '';
       _rating = item.rating;
+      _ratingController.text = _rating > 0 ? _rating.toStringAsFixed(1) : '';
       _existingImageUrls = List.from(item.imageUrls);
     }
+  }
+
+  void _setRatingFromText(String value) {
+    final raw = value.trim();
+    if (raw.isEmpty) {
+      setState(() => _rating = 0);
+      return;
+    }
+    final parsed = double.tryParse(raw);
+    if (parsed == null) return;
+    final clamped = parsed.clamp(0, 5).toDouble();
+    final rounded = (clamped * 10).round() / 10.0;
+    setState(() => _rating = rounded);
+  }
+
+  void _setRatingFromStars(double rating) {
+    final clamped = rating.clamp(0, 5).toDouble();
+    final rounded = (clamped * 10).round() / 10.0;
+    setState(() {
+      _rating = rounded;
+      _ratingController.text = _rating > 0 ? _rating.toStringAsFixed(1) : '';
+    });
+  }
+
+  Widget _buildFractionalStars(double rating, {double size = 36}) {
+    final clamped = rating.clamp(0, 5).toDouble();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (i) {
+        final fill = (clamped - i).clamp(0, 1).toDouble();
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Stack(
+              children: [
+                Icon(Icons.star, size: size, color: Colors.grey[350]),
+                ClipRect(
+                  clipper: _StarFillClipper(fill),
+                  child: Icon(Icons.star, size: size, color: Colors.amber),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildFractionalStarInput() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) {
+            final x = d.localPosition.dx.clamp(0, width);
+            final raw = (x / width) * 5.0;
+            _setRatingFromStars(raw);
+          },
+          onHorizontalDragUpdate: (d) {
+            final x = d.localPosition.dx.clamp(0, width);
+            final raw = (x / width) * 5.0;
+            _setRatingFromStars(raw);
+          },
+          child: _buildFractionalStars(_rating, size: 36),
+        );
+      },
+    );
   }
 
   @override
@@ -94,6 +167,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     _notesController.dispose();
     _mapsUrlController.dispose();
     _websiteUrlController.dispose();
+    _ratingController.dispose();
     super.dispose();
   }
 
@@ -324,12 +398,34 @@ class _AddItemScreenState extends State<AddItemScreen> {
                           margin: const EdgeInsets.only(right: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            image: DecorationImage(
-                              image: item.isNetwork
-                                  ? NetworkImage(item.url!)
-                                  : FileImage(item.file!) as ImageProvider,
-                              fit: BoxFit.cover,
-                            ),
+                            color: Colors.grey[200],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: item.isNetwork
+                                ? CachedNetworkImage(
+                                    imageUrl: item.url ?? '',
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      color: Colors.grey[200],
+                                      child: const Center(
+                                        child: SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      ),
+                                    ),
+                                    errorWidget: (context, url, error) => Container(
+                                      color: Colors.grey[200],
+                                      alignment: Alignment.center,
+                                      child: Icon(Icons.broken_image_outlined, color: Colors.grey[500]),
+                                    ),
+                                  )
+                                : Image.file(
+                                    item.file!,
+                                    fit: BoxFit.cover,
+                                  ),
                           ),
                         ),
                         Positioned(
@@ -382,28 +478,30 @@ class _AddItemScreenState extends State<AddItemScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                RatingBar.builder(
-                  initialRating: _rating,
-                  minRating: 0,
-                  direction: Axis.horizontal,
-                  allowHalfRating: true,
-                  itemCount: 5,
-                  itemSize: 36,
-                  itemPadding: const EdgeInsets.symmetric(horizontal: 2),
-                  itemBuilder: (context, _) => const Icon(
-                    Icons.star,
-                    color: Colors.amber,
-                  ),
-                  onRatingUpdate: (rating) {
-                    setState(() => _rating = rating);
-                  },
-                ),
+                Expanded(child: _buildFractionalStarInput()),
                 const SizedBox(width: 12),
-                Text(
-                  _rating > 0 ? _rating.toStringAsFixed(1) : 'Not rated',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 15,
+                SizedBox(
+                  width: 64,
+                  child: TextField(
+                    controller: _ratingController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      hintText: '0-5',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]*$')),
+                    ],
+                    onChanged: _setRatingFromText,
+                    onEditingComplete: () {
+                      _setRatingFromText(_ratingController.text);
+                      _ratingController.text = _rating > 0 ? _rating.toStringAsFixed(1) : '';
+                      FocusScope.of(context).unfocus();
+                    },
                   ),
                 ),
               ],
@@ -566,6 +664,21 @@ class _AddItemScreenState extends State<AddItemScreen> {
       ),
     );
   }
+}
+
+class _StarFillClipper extends CustomClipper<Rect> {
+  final double fill;
+
+  _StarFillClipper(this.fill);
+
+  @override
+  Rect getClip(Size size) {
+    final width = size.width * fill.clamp(0, 1);
+    return Rect.fromLTWH(0, 0, width, size.height);
+  }
+
+  @override
+  bool shouldReclip(covariant _StarFillClipper oldClipper) => oldClipper.fill != fill;
 }
 
 class _ImageItem {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../screens/user_profile_screen.dart';
 
 /// Dialog for managing collection collaborators
 class ManageCollaboratorsDialog extends StatefulWidget {
@@ -265,6 +266,17 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                     final user = _searchResults[index];
                     return ListTile(
                       dense: true,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => UserProfileScreen(
+                              userId: user.id,
+                              currentUserId: widget.currentUserId,
+                            ),
+                          ),
+                        );
+                      },
                       leading: CircleAvatar(
                         radius: 16,
                         backgroundImage: user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
@@ -306,6 +318,17 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                         return ListTile(
                           dense: true,
                           contentPadding: EdgeInsets.zero,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => UserProfileScreen(
+                                  userId: collab['userId'],
+                                  currentUserId: widget.currentUserId,
+                                ),
+                              ),
+                            );
+                          },
                           leading: CircleAvatar(
                             radius: 16,
                             child: Text((collab['username'] ?? 'U')[0].toUpperCase()),

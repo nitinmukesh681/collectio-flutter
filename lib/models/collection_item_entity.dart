@@ -28,6 +28,7 @@ class CollectionItemEntity {
   final List<String> likedBy;
   final bool isLiked;
   final int createdAt;
+  final int updatedAt;
 
   CollectionItemEntity({
     required this.id,
@@ -46,7 +47,9 @@ class CollectionItemEntity {
     this.likedBy = const [],
     this.isLiked = false,
     int? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
+    int? updatedAt,
+  })  : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
+        updatedAt = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
 
   /// Create from Firestore document
   factory CollectionItemEntity.fromMap(Map<String, dynamic> map, String docId) {
@@ -66,6 +69,7 @@ class CollectionItemEntity {
       likes: map['likes'] ?? 0,
       likedBy: List<String>.from(map['likedBy'] ?? []),
       createdAt: _timestampToInt(map['createdAt']),
+      updatedAt: _timestampToInt(map['updatedAt']),
     );
   }
 
@@ -86,6 +90,7 @@ class CollectionItemEntity {
       'likes': likes,
       'likedBy': likedBy,
       'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
 
@@ -106,6 +111,7 @@ class CollectionItemEntity {
     List<String>? likedBy,
     bool? isLiked,
     int? createdAt,
+    int? updatedAt,
   }) {
     return CollectionItemEntity(
       id: id ?? this.id,
@@ -124,6 +130,7 @@ class CollectionItemEntity {
       likedBy: likedBy ?? this.likedBy,
       isLiked: isLiked ?? this.isLiked,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

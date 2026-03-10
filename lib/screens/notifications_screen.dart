@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
+import '../services/firestore_service.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -16,6 +17,88 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirestoreService _firestoreService = FirestoreService();
+
+  String _currentUsername = '';
+  final Map<String, bool> _isFollowingCache = <String, bool>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentUsername();
+  }
+
+  Widget _buildFollowBackRow(String? fromUserId) {
+    if (fromUserId == null || fromUserId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final cached = _isFollowingCache[fromUserId];
+    if (cached != null) {
+      if (cached) return const SizedBox.shrink();
+      return _followBackButton(fromUserId);
+    }
+
+    return FutureBuilder<bool>(
+      future: _firestoreService.isFollowing(widget.userId, fromUserId),
+      builder: (context, snap) {
+        final isFollowing = snap.data ?? false;
+        if (snap.connectionState == ConnectionState.done) {
+          _isFollowingCache[fromUserId] = isFollowing;
+        }
+        if (isFollowing) return const SizedBox.shrink();
+        return _followBackButton(fromUserId);
+      },
+    );
+  }
+
+  Widget _followBackButton(String fromUserId) {
+    return OutlinedButton(
+      onPressed: () async {
+        try {
+          await _firestoreService.followUser(
+            widget.userId,
+            fromUserId,
+            _currentUsername,
+          );
+
+          if (mounted) {
+            setState(() => _isFollowingCache[fromUserId] = true);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Followed back')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not follow back: $e')),
+            );
+          }
+        }
+      },
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.primaryPurple,
+        side: const BorderSide(color: AppColors.primaryPurple),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      ),
+      child: const Text(
+        'Follow Back',
+        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+      ),
+    );
+  }
+
+  Future<void> _loadCurrentUsername() async {
+    try {
+      final user = await _firestoreService.getUser(widget.userId);
+      if (mounted) {
+        setState(() => _currentUsername = user?.userName ?? '');
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,11 +189,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     // Get notification details based on type
     IconData icon;
     Color iconColor;
-    String title;
+    String actionText;
     String? subtitle;
+    bool showFollowBack = false;
 
     final fromUsername = data['fromUsername'] as String? ?? 'Someone';
     final collectionTitle = data['collectionTitle'] as String?;
+    final fromUserId = data['fromUserId'] as String?;
+    final collectionId = data['collectionId'] as String?;
 
     switch (type) {
       case 'follow':
@@ -118,28 +204,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'NEW_FOLLOWER':
         icon = Icons.person_add;
         iconColor = AppColors.primaryPurple;
-        title = '$fromUsername started following you';
+        actionText = ' started following you';
+        showFollowBack = true;
         break;
       case 'like':
       case 'LIKE_COLLECTION':
       case 'LIKE_ITEM':
         icon = Icons.favorite;
         iconColor = AppColors.heartSalmon;
-        title = '$fromUsername liked your collection';
+        actionText = ' liked your collection';
         subtitle = collectionTitle;
         break;
       case 'save':
       case 'SAVE_COLLECTION': // Assuming hypothetical android type
         icon = Icons.bookmark;
         iconColor = Colors.amber;
-        title = '$fromUsername saved your collection';
+        actionText = ' saved your collection';
         subtitle = collectionTitle;
         break;
       case 'new_item':
       case 'NEW_COLLECTION': // Mapping NEW_COLLECTION to this for now or separate
         icon = Icons.add_circle;
         iconColor = Colors.green;
-        title = '$fromUsername created a new collection';
+        actionText = ' created a new collection';
         subtitle = collectionTitle;
         break;
       case 'collaborate':
@@ -147,87 +234,179 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'COLLABORATOR_ADDED':
         icon = Icons.group_add;
         iconColor = Colors.blue;
-        title = '$fromUsername invited you to collaborate';
+        actionText = ' invited you to collaborate';
         subtitle = collectionTitle;
         break;
       default:
         icon = Icons.notifications;
         iconColor = Colors.grey;
-        title = data['message'] ?? 'New notification';
+        actionText = '';
     }
 
-    return ListTile(
-      onTap: () => _handleNotificationTap(id, data),
-      tileColor: isRead ? null : AppColors.primaryPurple.withOpacity(0.05),
-      leading: Stack(
-        children: [
-          CircleAvatar(
-            backgroundColor: iconColor.withOpacity(0.2),
-            backgroundImage: data['fromUserAvatarUrl'] != null
-                ? CachedNetworkImageProvider(data['fromUserAvatarUrl'])
-                : null,
-            child: data['fromUserAvatarUrl'] == null
-                ? Icon(icon, color: iconColor, size: 24)
-                : null,
-          ),
-          if (!isRead)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPurple,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 1.5),
+    final bgColor = isRead ? Colors.white : AppColors.primaryPurple.withOpacity(0.04);
+
+    return Material(
+      color: bgColor,
+      child: InkWell(
+        onTap: () => _handleNotificationTap(id, data),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: iconColor.withOpacity(0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: ClipOval(
+                      child: (data['fromUserAvatarUrl'] != null && (data['fromUserAvatarUrl'] as String).isNotEmpty)
+                          ? CachedNetworkImage(
+                              imageUrl: data['fromUserAvatarUrl'],
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) {
+                                return Icon(icon, color: iconColor, size: 22);
+                              },
+                            )
+                          : Icon(icon, color: iconColor, size: 22),
+                    ),
+                  ),
+                  if (!isRead)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryPurple,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            if (fromUserId != null && fromUserId.isNotEmpty) {
+                              _navigateToUser(fromUserId);
+                            }
+                          },
+                          child: Text(
+                            fromUsername,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w800,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          actionText.isNotEmpty
+                              ? actionText
+                              : (data['message'] as String? ?? ' sent you a notification'),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w400,
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (subtitle != null && subtitle!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        onTap: () {
+                          if (collectionId != null && collectionId.isNotEmpty) {
+                            _navigateToCollection(collectionId);
+                          }
+                        },
+                        child: Text(
+                          subtitle!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Text(
+                      timeAgo,
+                      style: TextStyle(fontSize: 12.5, color: Colors.grey[500]),
+                    ),
+                    if (showFollowBack) ...[
+                      const SizedBox(height: 10),
+                      _buildFollowBackRow(fromUserId),
+                    ],
+                  ],
                 ),
               ),
-            ),
-        ],
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: isRead ? FontWeight.normal : FontWeight.w600,
-          fontSize: 14,
+              PopupMenuButton(
+                icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'read',
+                    child: Text(isRead ? 'Mark as unread' : 'Mark as read'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+                onSelected: (value) {
+                  if (value == 'read') {
+                    _toggleRead(id, isRead);
+                  } else if (value == 'delete') {
+                    _deleteNotification(id);
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (subtitle != null)
-            Text(
-              subtitle,
-              style: const TextStyle(fontSize: 13),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          Text(
-            timeAgo,
-            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-          ),
-        ],
+    );
+  }
+
+  void _navigateToUser(String userId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileScreen(
+          userId: userId,
+          currentUserId: widget.userId,
+        ),
       ),
-      trailing: PopupMenuButton(
-        icon: const Icon(Icons.more_vert, size: 20),
-        itemBuilder: (context) => [
-          PopupMenuItem(
-            value: 'read',
-            child: Text(isRead ? 'Mark as unread' : 'Mark as read'),
-          ),
-          const PopupMenuItem(
-            value: 'delete',
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-        onSelected: (value) {
-          if (value == 'read') {
-            _toggleRead(id, isRead);
-          } else if (value == 'delete') {
-            _deleteNotification(id);
-          }
-        },
+    );
+  }
+
+  void _navigateToCollection(String collectionId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CollectionDetailScreen(
+          collectionId: collectionId,
+          currentUserId: widget.userId,
+        ),
       ),
     );
   }
@@ -258,6 +437,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     // Navigate based on type
     switch (type) {
       case 'follow':
+      case 'NEW_FOLLOWER':
+      case 'FOLLOW_REQUEST':
         if (data['fromUserId'] != null) {
           Navigator.push(
             context,
@@ -271,9 +452,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         }
         break;
       case 'like':
+      case 'LIKE_COLLECTION':
+      case 'LIKE_ITEM':
       case 'save':
       case 'new_item':
       case 'collaborate':
+      case 'COLLABORATION_INVITE':
         if (data['collectionId'] != null) {
           Navigator.push(
             context,

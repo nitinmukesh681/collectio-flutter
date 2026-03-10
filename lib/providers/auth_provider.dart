@@ -34,6 +34,10 @@ class AuthProvider extends ChangeNotifier {
     _init();
   }
 
+  Future<void> retryInit() async {
+    await _init();
+  }
+
   Future<void> _init() async {
     // Check if Firebase is initialized
     try {
@@ -44,7 +48,9 @@ class AuthProvider extends ChangeNotifier {
       _notificationService = NotificationService();
       
       // Initialize notifications (request permission)
-      _notificationService?.initialize();
+      _notificationService?.initialize().catchError((e) {
+        debugPrint('Notification init failed: $e');
+      });
       
       _authService!.authStateChanges.listen((user) async {
         _firebaseUser = user;
@@ -181,7 +187,7 @@ class AuthProvider extends ChangeNotifier {
       final user = UserEntity(
         id: _firebaseUser!.uid,
         email: _firebaseUser!.email ?? '',
-        userName: username,
+        username: username,
       );
       await _firestoreService!.saveUser(user);
       _userEntity = user;

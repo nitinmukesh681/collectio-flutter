@@ -28,14 +28,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Account Section
           _buildSectionHeader('Account'),
           ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: const Text('Edit Profile'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.pushNamed(context, '/edit-profile');
-            },
-          ),
-          ListTile(
             leading: const Icon(Icons.lock_outline),
             title: const Text('Change Password'),
             trailing: const Icon(Icons.chevron_right),

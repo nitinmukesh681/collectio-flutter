@@ -6,8 +6,8 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/collection_card.dart';
+import '../widgets/collection_grid_card.dart';
 import 'collection_detail_screen.dart';
-import 'create_collection_screen.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
 import 'followers_following_screen.dart';
@@ -25,7 +25,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   
   List<CollectionEntity> _myCollections = [];
   List<CollectionEntity> _savedCollections = [];
+  List<CollectionEntity> _collaborationCollections = [];
   bool _isLoading = true;
+
+  String _collectionsFilter = 'my';
 
   @override
   void initState() {
@@ -48,9 +51,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     try {
       final myCollections = await _firestoreService.getUserCollections(auth.userId);
       final savedCollections = await _firestoreService.getSavedCollections(auth.userId);
+      final collaborationCollections = await _firestoreService.getUserCollaborations(auth.userId);
       setState(() {
         _myCollections = myCollections;
         _savedCollections = savedCollections;
+        _collaborationCollections = collaborationCollections;
       });
     } catch (e) {
       debugPrint('Error loading profile data: $e');
@@ -100,141 +105,170 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         }
 
         return Scaffold(
+          backgroundColor: const Color(0xFFF6F7FB),
           body: NestedScrollView(
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
-                  expandedHeight: 280,
+                  expandedHeight: 352,
                   pinned: true,
+                  backgroundColor: const Color(0xFFF6F7FB),
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  title: AnimatedOpacity(
+                    opacity: innerBoxIsScrolled ? 1 : 0,
+                    duration: const Duration(milliseconds: 150),
+                    child: const Text(
+                      'Profile',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
                   actions: [
                     IconButton(
-                      icon: const Icon(Icons.settings_outlined),
+                      icon: const Icon(Icons.settings_outlined, color: Colors.black),
                       onPressed: _navigateToSettings,
-                    ),
-                    PopupMenuButton(
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(value: 'edit', child: Text('Edit Profile')),
-                        const PopupMenuItem(value: 'signout', child: Text('Sign Out')),
-                      ],
-                      onSelected: (value) {
-                        if (value == 'edit') {
-                          _navigateToEditProfile();
-                        } else if (value == 'signout') {
-                          auth.signOut();
-                        }
-                      },
                     ),
                   ],
                   flexibleSpace: FlexibleSpaceBar(
-                    background: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppColors.primaryPurple,
-                            AppColors.primaryPurple.withOpacity(0.8),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                      ),
-                      child: SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Avatar
-                              GestureDetector(
-                                onTap: _navigateToEditProfile,
-                                child: Stack(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 48,
-                                      backgroundColor: Colors.white,
-                                      backgroundImage: user.avatarUrl != null
-                                          ? CachedNetworkImageProvider(user.avatarUrl!)
-                                          : null,
-                                      child: user.avatarUrl == null
-                                          ? Text(
-                                              user.userName[0].toUpperCase(),
-                                              style: const TextStyle(
-                                                fontSize: 36,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppColors.primaryPurple,
+                    background: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 44),
+                            GestureDetector(
+                              onTap: _navigateToEditProfile,
+                              child: SizedBox(
+                                width: 78,
+                                height: 78,
+                                child: ClipOval(
+                                  child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                                      ? CachedNetworkImage(
+                                          imageUrl: user.avatarUrl!,
+                                          fit: BoxFit.cover,
+                                          errorWidget: (context, url, error) {
+                                            return Container(
+                                              color: Colors.white,
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                user.userName.isNotEmpty
+                                                    ? user.userName[0].toUpperCase()
+                                                    : '?',
+                                                style: const TextStyle(
+                                                  fontSize: 34,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: AppColors.primaryPurple,
+                                                ),
                                               ),
-                                            )
-                                          : null,
-                                    ),
-                                    Positioned(
-                                      bottom: 0,
-                                      right: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
+                                            );
+                                          },
+                                        )
+                                      : Container(
                                           color: Colors.white,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: AppColors.primaryPurple, width: 2),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            user.userName.isNotEmpty
+                                                ? user.userName[0].toUpperCase()
+                                                : '?',
+                                            style: const TextStyle(
+                                              fontSize: 34,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.primaryPurple,
+                                            ),
+                                          ),
                                         ),
-                                        child: const Icon(Icons.edit, size: 16, color: AppColors.primaryPurple),
-                                      ),
-                                    ),
-                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              // Username
-                              Text(
-                                '@${user.userName}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              user.userName,
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                                height: 1.1,
+                                letterSpacing: -0.5,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '@${user.userName}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: _navigateToEditProfile,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryPurple,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  elevation: 0,
+                                ),
+                                child: const Text(
+                                  'Edit Profile',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
                                 ),
                               ),
-                              if (user.bio != null && user.bio!.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  user.bio!,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                              // Stats
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _buildStat(user.collectionsCount, 'Collections', onTap: null),
-                                  Container(
-                                    width: 1,
-                                    height: 30,
-                                    color: Colors.white24,
-                                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                                  ),
-                                  _buildStat(
-                                    user.followersCount,
-                                    'Followers',
-                                    onTap: () => _navigateToFollowers(auth.userId, showFollowers: true),
-                                  ),
-                                  Container(
-                                    width: 1,
-                                    height: 30,
-                                    color: Colors.white24,
-                                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                                  ),
-                                  _buildStat(
-                                    user.followingCount,
-                                    'Following',
-                                    onTap: () => _navigateToFollowers(auth.userId, showFollowers: false),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 6),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStat(
+                                      _myCollections.length,
+                                      'Collections',
+                                      onTap: null,
+                                      dark: true,
+                                    ),
+                                  ),
+                                  Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                                  Expanded(
+                                    child: _buildStat(
+                                      user.followers.length,
+                                      'Followers',
+                                      onTap: () => _navigateToFollowers(auth.userId, showFollowers: true),
+                                      dark: true,
+                                    ),
+                                  ),
+                                  Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                                  Expanded(
+                                    child: _buildStat(
+                                      user.following.length,
+                                      'Following',
+                                      onTap: () => _navigateToFollowers(auth.userId, showFollowers: false),
+                                      dark: true,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -248,8 +282,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       labelColor: AppColors.primaryPurple,
                       unselectedLabelColor: Colors.grey,
                       indicatorColor: AppColors.primaryPurple,
+                      indicatorWeight: 3,
                       tabs: const [
-                        Tab(text: 'My Collections'),
+                        Tab(text: 'Collections'),
                         Tab(text: 'Saved'),
                       ],
                     ),
@@ -260,56 +295,91 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             body: TabBarView(
               controller: _tabController,
               children: [
-                // My Collections
-                _buildCollectionsList(_myCollections, auth.userId, isEmpty: 'You haven\'t created any collections yet'),
+                _buildCollectionsTab(auth.userId),
                 // Saved Collections
                 _buildCollectionsList(_savedCollections, auth.userId, isEmpty: 'No saved collections'),
               ],
             ),
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CreateCollectionScreen(
-                    userId: auth.userId,
-                    userName: user.userName,
-                    userAvatarUrl: user.avatarUrl,
-                  ),
-                ),
-              );
-              if (result == true) {
-                _loadData();
-              }
-            },
-            backgroundColor: AppColors.primaryPurple,
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text('Create', style: TextStyle(color: Colors.white)),
           ),
         );
       },
     );
   }
 
-  Widget _buildStat(int count, String label, {VoidCallback? onTap}) {
+  Widget _buildCollectionsTab(String userId) {
+    final list = _collectionsFilter == 'collab' ? _collaborationCollections : _myCollections;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 176,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _collectionsFilter,
+                    isExpanded: true,
+                    isDense: true,
+                    iconSize: 18,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'my', child: Text('My collections')),
+                      DropdownMenuItem(value: 'collab', child: Text('Collaborations')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _collectionsFilter = value);
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _buildCollectionsList(
+            list,
+            userId,
+            isEmpty: _collectionsFilter == 'collab' ? 'No collaborations' : 'You haven\'t created any collections yet',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStat(int count, String label, {VoidCallback? onTap, bool dark = false}) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         children: [
           Text(
             '$count',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: dark ? AppColors.textPrimary : Colors.white,
               fontSize: 20,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
             ),
           ),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white70,
+            style: TextStyle(
+              color: dark ? AppColors.textSecondary : Colors.white70,
               fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -335,27 +405,33 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: collections.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.86,
+      ),
       itemBuilder: (context, index) {
         final collection = collections[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: CollectionCard(
-            collection: collection,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CollectionDetailScreen(
-                    collectionId: collection.id,
-                    currentUserId: userId,
-                  ),
+        return CollectionGridCard(
+          collection: collection,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CollectionDetailScreen(
+                  collectionId: collection.id,
+                  currentUserId: userId,
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
+          onUserTap: () {
+            // Self profile: username tap stays on same screen
+          },
         );
       },
     );

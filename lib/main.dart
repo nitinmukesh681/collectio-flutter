@@ -1,28 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
+import 'dart:io';
 import 'providers/auth_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/landing_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/login_screen.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'screens/import_link_screen.dart';
 
 import 'firebase_options.dart';
 
-bool _firebaseInitialized = false;
-String? _firebaseError;
+class _DevHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = super.createHttpClient(context);
+    client.badCertificateCallback = (cert, host, port) => true;
+    return client;
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  if (kDebugMode && !kIsWeb) {
+    HttpOverrides.global = _DevHttpOverrides();
+  }
+
   // Try to initialize Firebase - may fail if GoogleService-Info.plist is missing
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    _firebaseInitialized = true;
   } catch (e) {
-    _firebaseError = e.toString();
     debugPrint('Firebase init failed: $e');
   }
   
@@ -44,6 +56,15 @@ class CollectioApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.system,
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(
+              textScaler: const TextScaler.linear(0.9),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
         home: const AuthGate(),
       ),
     );
@@ -51,8 +72,85 @@ class CollectioApp extends StatelessWidget {
 }
 
 /// Authentication gate - directs user to appropriate screen
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  StreamSubscription<List<SharedMediaFile>>? _mediaSub;
+  String? _pendingSharedUrl;
+  bool _didHandlePendingShare = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initShareIntentListeners();
+  }
+
+  @override
+  void dispose() {
+    _mediaSub?.cancel();
+    super.dispose();
+  }
+
+  void _initShareIntentListeners() {
+    _mediaSub = ReceiveSharingIntent.instance.getMediaStream().listen((files) {
+      debugPrint('Share intent media stream received count=${files.length}');
+      for (final f in files) {
+        debugPrint('Share intent media item type=${f.type} mime=${f.mimeType} message=${f.message} path=${f.path}');
+        final url = _extractFirstUrl('${f.message ?? ''} ${f.path}');
+        if (url != null) {
+          debugPrint('Share intent extracted url=$url');
+          setState(() {
+            _pendingSharedUrl = url;
+            _didHandlePendingShare = false;
+          });
+          return;
+        }
+      }
+    }, onError: (err) {
+      debugPrint('Share intent media stream error: $err');
+    });
+
+    ReceiveSharingIntent.instance.getInitialMedia().then((files) {
+      debugPrint('Share intent initial media received count=${files.length}');
+      for (final f in files) {
+        debugPrint('Share intent initial media item type=${f.type} mime=${f.mimeType} message=${f.message} path=${f.path}');
+        final url = _extractFirstUrl('${f.message ?? ''} ${f.path}');
+        if (url != null) {
+          debugPrint('Share intent initial extracted url=$url');
+          setState(() {
+            _pendingSharedUrl = url;
+            _didHandlePendingShare = false;
+          });
+          return;
+        }
+      }
+    }).catchError((err) {
+      debugPrint('Share intent initial media error: $err');
+    });
+  }
+
+  String? _extractFirstUrl(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return null;
+    final match = RegExp(r'(https?://\S+)').firstMatch(trimmed);
+    if (match == null) return null;
+    final raw = match.group(1)?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    return raw.replaceAll(RegExp(r'[)\]\},\.\!\?]+$'), '');
+  }
+
+  void _consumeShare() {
+    ReceiveSharingIntent.instance.reset();
+    setState(() {
+      _pendingSharedUrl = null;
+      _didHandlePendingShare = true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +181,7 @@ class AuthGate extends StatelessWidget {
                     ElevatedButton(
                       onPressed: () {
                         // Retry initialization
-                        auth.notifyListeners();
+                        auth.retryInit();
                       },
                       child: const Text('Retry'),
                     ),
@@ -118,7 +216,36 @@ class AuthGate extends StatelessWidget {
           return const UsernameScreen();
         }
 
-        // Fully authenticated - show home
+        // Fully authenticated - show home and optionally route share-intent
+        if (_pendingSharedUrl != null && !_didHandlePendingShare) {
+          final url = _pendingSharedUrl!;
+          final user = auth.userEntity;
+          final userName = user?.userName ?? '';
+          if (userName.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() => _didHandlePendingShare = true);
+              debugPrint('Share intent navigating to ImportLinkScreen url=$url userId=${auth.userId} userName=$userName');
+              try {
+                Navigator.of(context)
+                    .push(
+                  MaterialPageRoute(
+                    builder: (context) => ImportLinkScreen(
+                      sharedUrl: url,
+                      userId: auth.userId,
+                      userName: userName,
+                    ),
+                  ),
+                )
+                    .then((_) => _consumeShare());
+              } catch (e) {
+                debugPrint('Share intent navigation ERROR: $e');
+                _consumeShare();
+              }
+            });
+          }
+        }
+
         return const HomeScreen();
       },
     );

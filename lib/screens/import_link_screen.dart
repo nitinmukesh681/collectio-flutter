@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/collection_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import 'create_collection_screen.dart';
 
 /// Screen for handling shared URLs/links and adding them to collections
 class ImportLinkScreen extends StatefulWidget {
@@ -64,6 +65,26 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
       debugPrint('Error loading collections: $e');
     }
     setState(() => _isLoading = false);
+  }
+
+  Future<void> _createNewCollection() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateCollectionScreen(
+          userId: widget.userId,
+          userName: widget.userName,
+        ),
+      ),
+    );
+
+    if (created == true && mounted) {
+      await _loadUserCollections();
+      setState(() {
+        _currentStep = _ImportStep.selectCollection;
+        _selectedCollectionIds.clear();
+      });
+    }
   }
 
   void _toggleCollectionSelected(String collectionId) {
@@ -221,6 +242,15 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
           child: const Text('Add to existing collection', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: _createNewCollection,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(50),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          child: const Text('Add to new collection'),
         ),
         const SizedBox(height: 12),
         OutlinedButton(

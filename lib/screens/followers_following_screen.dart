@@ -28,6 +28,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
 
   List<UserEntity> _followers = [];
   List<UserEntity> _following = [];
+  int _followersCount = 0;
+  int _followingCount = 0;
   bool _isLoading = true;
 
   @override
@@ -52,23 +54,10 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
     try {
       final user = await _firestoreService.getUser(widget.userId);
       if (user != null) {
-        // Load followers
-        final followers = <UserEntity>[];
-        for (final followerId in user.followers) {
-          final follower = await _firestoreService.getUser(followerId);
-          if (follower != null) {
-            followers.add(follower);
-          }
-        }
-
-        // Load following
-        final following = <UserEntity>[];
-        for (final followingId in user.following) {
-          final followingUser = await _firestoreService.getUser(followingId);
-          if (followingUser != null) {
-            following.add(followingUser);
-          }
-        }
+        _followersCount = user.followers.length;
+        _followingCount = user.following.length;
+        final followers = await _firestoreService.getUsersByIds(user.followers);
+        final following = await _firestoreService.getUsersByIds(user.following);
 
         setState(() {
           _followers = followers;
@@ -92,8 +81,8 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
           unselectedLabelColor: Colors.grey,
           indicatorColor: AppColors.primaryPurple,
           tabs: [
-            Tab(text: 'Followers (${_followers.length})'),
-            Tab(text: 'Following (${_following.length})'),
+            Tab(text: 'Followers ($_followersCount)'),
+            Tab(text: 'Following ($_followingCount)'),
           ],
         ),
       ),
@@ -151,18 +140,31 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
       },
       leading: CircleAvatar(
         backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
-        backgroundImage: user.avatarUrl != null
-            ? CachedNetworkImageProvider(user.avatarUrl!)
-            : null,
-        child: user.avatarUrl == null
-            ? Text(
-                user.userName[0].toUpperCase(),
+        child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+            ? ClipOval(
+                child: CachedNetworkImage(
+                  imageUrl: user.avatarUrl!,
+                  fit: BoxFit.cover,
+                  errorWidget: (context, url, error) {
+                    return Center(
+                      child: Text(
+                        user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryPurple,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              )
+            : Text(
+                user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppColors.primaryPurple,
                 ),
-              )
-            : null,
+              ),
       ),
       title: Text(
         '@${user.userName}',

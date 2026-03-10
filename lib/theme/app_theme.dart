@@ -22,36 +22,38 @@ class AppColors {
 
   // Category gradient colors
   static const Map<String, List<Color>> categoryGradients = {
-    'food': [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
-    'finance': [Color(0xFF4ECDC4), Color(0xFF44A08D)],
-    'wellness': [Color(0xFFA8E6CF), Color(0xFF88D8B0)],
-    'career': [Color(0xFF667EEA), Color(0xFF764BA2)],
-    'home': [Color(0xFFFFC3A0), Color(0xFFFFAFBD)],
-    'travel': [Color(0xFF00B4DB), Color(0xFF0083B0)],
-    'tech': [Color(0xFF4158D0), Color(0xFFC850C0)],
-    'gaming': [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-    'entertainment': [Color(0xFFFC466B), Color(0xFF3F5EFB)],
-    'shopping': [Color(0xFFFF9A9E), Color(0xFFFECFEF)],
-    'style': [Color(0xFFFDCB82), Color(0xFFFFE5B4)],
-    'books': [Color(0xFF667EEA), Color(0xFF764BA2)],
-    'growth': [Color(0xFF11998E), Color(0xFF38EF7D)],
-    'projects': [Color(0xFF536976), Color(0xFF292E49)],
-    'creativity': [Color(0xFFE91E63), Color(0xFFFF5722)],
-    'sports': [Color(0xFF1E90FF), Color(0xFF00BFFF)],
-    'other': [Color(0xFF7C3AED), Color(0xFF5B21B6)],
+    'food': [Color(0xFF7C3AED), Color(0xFF8B5CF6)],
+    'finance': [Color(0xFF22C55E), Color(0xFF4ADE80)],
+    'wellness': [Color(0xFF8B5CF6), Color(0xFFA78BFA)],
+    'career': [Color(0xFF6366F1), Color(0xFF818CF8)],
+    'home': [Color(0xFF60A5FA), Color(0xFF93C5FD)],
+    'travel': [Color(0xFFEC4899), Color(0xFFF472B6)],
+    'tech': [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+    'gaming': [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+    'entertainment': [Color(0xFFA78BFA), Color(0xFFC4B5FD)],
+    'shopping': [Color(0xFF0EA5E9), Color(0xFF38BDF8)],
+    'style': [Color(0xFFF472B6), Color(0xFFF9A8D4)],
+    'books': [Color(0xFF34D399), Color(0xFF6EE7B7)],
+    'growth': [Color(0xFF84CC16), Color(0xFFA3E635)],
+    'projects': [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+    'creativity': [Color(0xFFEF4444), Color(0xFFF87171)],
+    'sports': [Color(0xFF06B6D4), Color(0xFF22D3EE)],
+    'other': [Color(0xFF94A3B8), Color(0xFFCBD5E1)],
   };
-}
+
+ }
 
 /// App theme configuration
 class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
+      visualDensity: VisualDensity.compact,
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primaryPurple,
         brightness: Brightness.light,
       ),
-      scaffoldBackgroundColor: AppColors.backgroundLight,
+      scaffoldBackgroundColor: const Color(0xFFF6F7FB),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -59,15 +61,16 @@ class AppTheme {
         iconTheme: IconThemeData(color: AppColors.textPrimary),
         titleTextStyle: TextStyle(
           color: AppColors.textPrimary,
-          fontSize: 18,
+          fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
       ),
+      iconTheme: const IconThemeData(size: 18),
       cardTheme: CardThemeData(
         color: AppColors.surfaceLight,
-        elevation: 2,
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -75,24 +78,24 @@ class AppTheme {
           backgroundColor: AppColors.primaryPurple,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: AppColors.primaryPurple, width: 2),
         ),
       ),
