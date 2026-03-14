@@ -194,8 +194,13 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Shared Link', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
+                  Text(
+                    'Shared Link',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),                  const SizedBox(height: 6),
                   Text(
                     widget.sharedUrl,
                     maxLines: 2,
@@ -281,7 +286,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.folder_off, size: 64, color: Colors.grey[400]),
+            const Icon(Icons.folder_off, size: 64, color: AppColors.textMuted),
             const SizedBox(height: 16),
             const Text('No collections yet'),
             const SizedBox(height: 8),

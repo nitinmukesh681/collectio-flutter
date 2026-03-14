@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
@@ -24,6 +25,17 @@ class _DevHttpOverrides extends HttpOverrides {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
+      systemNavigationBarDividerColor: Colors.transparent,
+    ),
+  );
   
   if (kDebugMode && !kIsWeb) {
     HttpOverrides.global = _DevHttpOverrides();
@@ -175,7 +187,7 @@ class _AuthGateState extends State<AuthGate> {
                     const Text(
                       'Please add GoogleService-Info.plist to ios/Runner/ in Xcode and rebuild.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 32),
                     ElevatedButton(
@@ -277,7 +289,7 @@ class EmailVerificationScreen extends StatelessWidget {
               Text(
                 'We sent a verification link to ${auth.firebaseUser?.email}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.grey),
+                style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 32),
               ElevatedButton(

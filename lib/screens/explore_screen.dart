@@ -324,7 +324,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -353,8 +352,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   focusNode: _searchFocus,
                   decoration: InputDecoration(
                     hintText: 'Find topics, people, or trends...',
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    hintStyle: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                    prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),
@@ -368,14 +367,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           )
                         : null,
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: Theme.of(context).inputDecorationTheme.fillColor,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -986,7 +985,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: AppColors.textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1019,7 +1018,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
-                      color: Colors.grey[600],
+                      color: AppColors.textSecondary,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -1056,13 +1055,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
           color: isSelected ? AppColors.primaryPurple : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? AppColors.primaryPurple : Colors.grey[300]!,
+            color: isSelected ? AppColors.primaryPurple : const Color(0xFFE5E7EB),
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[700],
+            color: isSelected ? Colors.white : AppColors.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1196,11 +1195,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+            const Icon(Icons.search_off, size: 64, color: AppColors.textMuted),
             const SizedBox(height: 16),
             Text(
               'No results found',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),
@@ -1306,7 +1309,6 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -1437,7 +1439,6 @@ class _BrowseCategoriesScreen extends StatelessWidget {
     final categories = CategoryType.values.where((c) => c != CategoryType.other).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -1598,7 +1599,7 @@ class _CategoryCollectionsScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(category.displayName, style: const TextStyle(fontWeight: FontWeight.w800)),
       ),
-      backgroundColor: const Color(0xFFF6F7FB),
+      backgroundColor: Colors.white,
       body: collections.isEmpty
           ? Center(
               child: Column(
@@ -1608,7 +1609,7 @@ class _CategoryCollectionsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text(
                     'No collections in ${category.displayName} yet',
-                    style: TextStyle(color: Colors.grey[600]),
+                    style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),

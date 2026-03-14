@@ -105,19 +105,18 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         }
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF6F7FB),
           body: NestedScrollView(
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
                   expandedHeight: 352,
                   pinned: true,
-                  backgroundColor: const Color(0xFFF6F7FB),
+                  backgroundColor: Colors.white,
                   surfaceTintColor: Colors.transparent,
                   elevation: 0,
                   title: AnimatedOpacity(
-                    opacity: innerBoxIsScrolled ? 1 : 0,
-                    duration: const Duration(milliseconds: 150),
+                    opacity: innerBoxIsScrolled ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
                     child: const Text(
                       'Profile',
                       style: TextStyle(
@@ -144,42 +143,49 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               child: SizedBox(
                                 width: 78,
                                 height: 78,
-                                child: ClipOval(
-                                  child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-                                      ? CachedNetworkImage(
-                                          imageUrl: user.avatarUrl!,
-                                          fit: BoxFit.cover,
-                                          errorWidget: (context, url, error) {
-                                            return Container(
-                                              color: Colors.white,
-                                              alignment: Alignment.center,
-                                              child: Text(
-                                                user.userName.isNotEmpty
-                                                    ? user.userName[0].toUpperCase()
-                                                    : '?',
-                                                style: const TextStyle(
-                                                  fontSize: 34,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: AppColors.primaryPurple,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                                  ),
+                                  child: ClipOval(
+                                    child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                                        ? CachedNetworkImage(
+                                            imageUrl: user.avatarUrl!,
+                                            fit: BoxFit.cover,
+                                            errorWidget: (context, url, error) {
+                                              return Container(
+                                                color: AppColors.primaryPurple.withOpacity(0.10),
+                                                alignment: Alignment.center,
+                                                child: Text(
+                                                  user.userName.isNotEmpty
+                                                      ? user.userName[0].toUpperCase()
+                                                      : '?',
+                                                  style: const TextStyle(
+                                                    fontSize: 34,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: AppColors.primaryPurpleDark,
+                                                  ),
                                                 ),
+                                              );
+                                            },
+                                          )
+                                        : Container(
+                                            color: AppColors.primaryPurple.withOpacity(0.10),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              user.userName.isNotEmpty
+                                                  ? user.userName[0].toUpperCase()
+                                                  : '?',
+                                              style: const TextStyle(
+                                                fontSize: 34,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.primaryPurpleDark,
                                               ),
-                                            );
-                                          },
-                                        )
-                                      : Container(
-                                          color: Colors.white,
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            user.userName.isNotEmpty
-                                                ? user.userName[0].toUpperCase()
-                                                : '?',
-                                            style: const TextStyle(
-                                              fontSize: 34,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.primaryPurple,
                                             ),
                                           ),
-                                        ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -280,7 +286,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     TabBar(
                       controller: _tabController,
                       labelColor: AppColors.primaryPurple,
-                      unselectedLabelColor: Colors.grey,
+                      unselectedLabelColor: AppColors.textSecondary,
                       indicatorColor: AppColors.primaryPurple,
                       indicatorWeight: 3,
                       tabs: const [
@@ -308,6 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   Widget _buildCollectionsTab(String userId) {
     final list = _collectionsFilter == 'collab' ? _collaborationCollections : _myCollections;
+    final filterLabel = _collectionsFilter == 'collab' ? 'Collaborations' : 'My collections';
 
     return Column(
       children: [
@@ -324,25 +331,50 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFE5E7EB)),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _collectionsFilter,
-                    isExpanded: true,
-                    isDense: true,
-                    iconSize: 18,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                child: PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  onSelected: (value) => setState(() => _collectionsFilter = value),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'my',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.collections_outlined, size: 18, color: Colors.black87),
+                          const SizedBox(width: 10),
+                          const Text('My collections'),
+                        ],
+                      ),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'my', child: Text('My collections')),
-                      DropdownMenuItem(value: 'collab', child: Text('Collaborations')),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _collectionsFilter = value);
-                    },
+                    PopupMenuItem(
+                      value: 'collab',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.groups_outlined, size: 18, color: Colors.black87),
+                          const SizedBox(width: 10),
+                          const Text('Collaborations'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            filterLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down, size: 18, color: Colors.black87),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -397,9 +429,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.collections_outlined, size: 64, color: Colors.grey[400]),
+            const Icon(Icons.collections_outlined, size: 64, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            Text(isEmpty, style: TextStyle(color: Colors.grey[600])),
+            Text(
+              isEmpty,
+              style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       );

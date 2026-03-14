@@ -98,65 +98,49 @@ class _AddItemScreenState extends State<AddItemScreen> {
     }
     final parsed = double.tryParse(raw);
     if (parsed == null) return;
-    final clamped = parsed.clamp(0, 5).toDouble();
-    final rounded = (clamped * 10).round() / 10.0;
-    setState(() => _rating = rounded);
+    // UI is 0-10, internal storage remains 0-5.
+    final clamped10 = parsed.clamp(0, 10).toDouble();
+    final rounded10 = (clamped10 * 10).round() / 10.0;
+    final rounded5 = (rounded10 / 2).clamp(0, 5).toDouble();
+    setState(() => _rating = rounded5);
   }
 
-  void _setRatingFromStars(double rating) {
-    final clamped = rating.clamp(0, 5).toDouble();
-    final rounded = (clamped * 10).round() / 10.0;
-    setState(() {
-      _rating = rounded;
-      _ratingController.text = _rating > 0 ? _rating.toStringAsFixed(1) : '';
-    });
-  }
+  Widget _buildRatingBadge(double rating) {
+    if (rating <= 0) return const SizedBox.shrink();
+    final score = (rating.clamp(0, 5) * 2).toDouble();
+    final label = (score % 1 == 0) ? score.toStringAsFixed(0) : score.toStringAsFixed(1);
 
-  Widget _buildFractionalStars(double rating, {double size = 36}) {
-    final clamped = rating.clamp(0, 5).toDouble();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (i) {
-        final fill = (clamped - i).clamp(0, 1).toDouble();
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Stack(
-              children: [
-                Icon(Icons.star, size: size, color: Colors.grey[350]),
-                ClipRect(
-                  clipper: _StarFillClipper(fill),
-                  child: Icon(Icons.star, size: size, color: Colors.amber),
-                ),
-              ],
+    Color badgeColor;
+    if (score < 4) {
+      badgeColor = Colors.red[700] ?? Colors.red;
+    } else if (score < 7) {
+      badgeColor = Colors.amber[800] ?? Colors.amber;
+    } else {
+      badgeColor = Colors.green[700] ?? Colors.green;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star_rounded, size: 14, color: badgeColor),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: badgeColor,
+              height: 1.0,
             ),
           ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildFractionalStarInput() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (d) {
-            final x = d.localPosition.dx.clamp(0, width);
-            final raw = (x / width) * 5.0;
-            _setRatingFromStars(raw);
-          },
-          onHorizontalDragUpdate: (d) {
-            final x = d.localPosition.dx.clamp(0, width);
-            final raw = (x / width) * 5.0;
-            _setRatingFromStars(raw);
-          },
-          child: _buildFractionalStars(_rating, size: 36),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -289,21 +273,35 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Item' : 'Add Item'),
+        title: Text(
+          _isEditing ? 'Edit Item' : 'Add Item',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _save,
             child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryPurple.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator.adaptive(
+                        strokeWidth: 2.4,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryPurple),
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ),
                   )
                 : Text(
                     _isEditing ? 'Save' : 'Add',
                     style: const TextStyle(
                       color: AppColors.primaryPurple,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
           ),
@@ -333,18 +331,26 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       height: 100,
                       margin: const EdgeInsets.only(right: 12),
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: AppColors.primaryPurple.withOpacity(0.06),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.add_photo_alternate, size: 32, color: Colors.grey[400]),
+                          Icon(
+                            Icons.add_photo_alternate,
+                            size: 32,
+                            color: AppColors.primaryPurple.withOpacity(0.75),
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             'Add',
-                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ],
                       ),
@@ -369,18 +375,26 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       height: 100,
                       margin: const EdgeInsets.only(right: 12),
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search, size: 32, color: Colors.grey[400]),
+                          Icon(
+                            Icons.search,
+                            size: 32,
+                            color: Colors.black.withOpacity(0.45),
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             'Unsplash',
-                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ],
                       ),
@@ -398,7 +412,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                           margin: const EdgeInsets.only(right: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            color: Colors.grey[200],
+                            color: const Color(0xFFF1F5F9),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
@@ -407,7 +421,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                                     imageUrl: item.url ?? '',
                                     fit: BoxFit.cover,
                                     placeholder: (context, url) => Container(
-                                      color: Colors.grey[200],
+                                      color: const Color(0xFFF1F5F9),
                                       child: const Center(
                                         child: SizedBox(
                                           width: 18,
@@ -417,9 +431,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                                       ),
                                     ),
                                     errorWidget: (context, url, error) => Container(
-                                      color: Colors.grey[200],
+                                      color: const Color(0xFFF1F5F9),
                                       alignment: Alignment.center,
-                                      child: Icon(Icons.broken_image_outlined, color: Colors.grey[500]),
+                                      child: const Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
                                     ),
                                   )
                                 : Image.file(
@@ -451,212 +465,224 @@ class _AddItemScreenState extends State<AddItemScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Title
-            TextFormField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                labelText: 'Title',
-                hintText: 'Name of the item',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 14,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a title';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Rating
-            const Text(
-              'Rating',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _buildFractionalStarInput()),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 64,
-                  child: TextField(
-                    controller: _ratingController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      hintText: '0-5',
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Title',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      hintText: 'Name of the item',
                     ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]*$')),
-                    ],
-                    onChanged: _setRatingFromText,
-                    onEditingComplete: () {
-                      _setRatingFromText(_ratingController.text);
-                      _ratingController.text = _rating > 0 ? _rating.toStringAsFixed(1) : '';
-                      FocusScope.of(context).unfocus();
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter a title';
+                      }
+                      return null;
                     },
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Description
-            TextFormField(
-              controller: _descriptionController,
-              decoration: InputDecoration(
-                labelText: 'Description',
-                hintText: 'Brief description of the item',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-
-            // Notes
-            TextFormField(
-              controller: _notesController,
-              decoration: InputDecoration(
-                labelText: 'Notes',
-                hintText: 'Personal notes (tips, experiences, etc.)',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-
-            // Links section
-            const Text(
-              'Links',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-
-            // Location (Google Maps)
-            RawAutocomplete<PlacePrediction>(
-              textEditingController: _mapsUrlController,
-              focusNode: FocusNode(),
-              optionsBuilder: (TextEditingValue textEditingValue) async {
-                if (textEditingValue.text.length < 2) {
-                  return const Iterable<PlacePrediction>.empty();
-                }
-                // If it looks like a URL, don't search
-                if (textEditingValue.text.startsWith('http')) {
-                  return const Iterable<PlacePrediction>.empty();
-                }
-                return await _placesService.getAutocompletePredictions(textEditingValue.text);
-              },
-              displayStringForOption: (PlacePrediction option) => option.description,
-              onSelected: (PlacePrediction selection) async {
-                // Determine URL
-                _mapsUrlController.text = selection.description; // Show name
-                
-                final url = await _placesService.getPlaceUrl(selection.placeId);
-                if (url != null) {
-                  // Store URL in a separate variable or tag? 
-                  // Since the controller now holds the Name, we need a way to store the URL.
-                  // But the save logic reads _mapsUrlController.text.
-                  // If we change the controller to hold the name, the save logic creates a nice "Location Name" 
-                  // but we want the Google Maps URL stored in the DB field `googleMapsUrl`.
-                  
-                  // Wait, CollectionItemEntity has `googleMapsUrl`. It doesn't have `locationName`.
-                  // If I store "Paris, France" in `googleMapsUrl` field, it's not a URL.
-                  // Android logic stores the URL.
-                  
-                  // So I need a separate variable for the URL, and _mapsUrlController is just for the UI.
-                  _selectedGoogleMapsUrl = url;
-                }
-              },
-              fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
-                // Sync the internal controller with our _mapsUrlController if needed, 
-                // but RawAutocomplete takes a controller. I passed _mapsUrlController. 
-                // So textEditingController is _mapsUrlController.
-                return TextFormField(
-                  controller: textEditingController,
-                  focusNode: focusNode,
-                  decoration: InputDecoration(
-                    labelText: 'Location', // Changed from Google Maps URL to Location to match UI
-                    hintText: 'Search for a place or paste URL',
-                    prefixIcon: const Icon(Icons.place_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    suffixIcon: textEditingController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              textEditingController.clear();
-                              _selectedGoogleMapsUrl = null;
-                            },
-                          )
-                        : null,
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Rating',
+                    style: TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  onFieldSubmitted: (String value) {
-                    onFieldSubmitted();
-                  },
-                  validator: (value) {
-                     // No validation needed generally
-                     return null;
-                  },
-                );
-              },
-              optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<PlacePrediction> onSelected, Iterable<PlacePrediction> options) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4.0,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-                    ),
-                    child: Container(
-                      width: MediaQuery.of(context).size.width - 32, // Match padding
-                      constraints: const BoxConstraints(maxHeight: 200),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: options.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final PlacePrediction option = options.elementAt(index);
-                          return ListTile(
-                            leading: const Icon(Icons.place, size: 20, color: Colors.grey),
-                            title: Text(option.mainText, style: const TextStyle(fontWeight: FontWeight.w500)),
-                            subtitle: option.secondaryText.isNotEmpty ? Text(option.secondaryText) : null,
-                            onTap: () {
-                              onSelected(option);
-                            },
-                          );
-                        },
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _ratingController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(
+                            hintText: '0-10',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]*$')),
+                          ],
+                          onChanged: _setRatingFromText,
+                          onEditingComplete: () {
+                            _setRatingFromText(_ratingController.text);
+                            final score = (_rating.clamp(0, 5) * 2).toDouble();
+                            _ratingController.text = score > 0
+                                ? ((score % 1 == 0)
+                                    ? score.toStringAsFixed(0)
+                                    : score.toStringAsFixed(1))
+                                : '';
+                            FocusScope.of(context).unfocus();
+                          },
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      _buildRatingBadge(_rating),
+                    ],
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Description (Optional)',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(
+                      hintText: 'Brief description of the item',
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Notes (Optional)',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _notesController,
+                    decoration: const InputDecoration(
+                      hintText: 'Personal notes (tips, experiences, etc.)',
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Links',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
 
-            // Website
-            TextFormField(
-              controller: _websiteUrlController,
-              decoration: InputDecoration(
-                labelText: 'Website URL',
-                hintText: 'https://...',
-                prefixIcon: const Icon(Icons.link),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                  const Text(
+                    'Location (Optional)',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  RawAutocomplete<PlacePrediction>(
+                    textEditingController: _mapsUrlController,
+                    focusNode: FocusNode(),
+                    optionsBuilder: (TextEditingValue textEditingValue) async {
+                      if (textEditingValue.text.length < 2) {
+                        return const Iterable<PlacePrediction>.empty();
+                      }
+                      if (textEditingValue.text.startsWith('http')) {
+                        return const Iterable<PlacePrediction>.empty();
+                      }
+                      return await _placesService.getAutocompletePredictions(textEditingValue.text);
+                    },
+                    displayStringForOption: (PlacePrediction option) => option.description,
+                    onSelected: (PlacePrediction selection) async {
+                      _mapsUrlController.text = selection.description;
+                      final url = await _placesService.getPlaceUrl(selection.placeId);
+                      if (url != null) {
+                        _selectedGoogleMapsUrl = url;
+                      }
+                    },
+                    fieldViewBuilder: (
+                      BuildContext context,
+                      TextEditingController textEditingController,
+                      FocusNode focusNode,
+                      VoidCallback onFieldSubmitted,
+                    ) {
+                      return TextFormField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Search for a place or paste URL',
+                          prefixIcon: const Icon(Icons.place_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          suffixIcon: textEditingController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    textEditingController.clear();
+                                    _selectedGoogleMapsUrl = null;
+                                  },
+                                )
+                              : null,
+                        ),
+                        onFieldSubmitted: (String value) {
+                          onFieldSubmitted();
+                        },
+                        validator: (value) {
+                          return null;
+                        },
+                      );
+                    },
+                    optionsViewBuilder: (
+                      BuildContext context,
+                      AutocompleteOnSelected<PlacePrediction> onSelected,
+                      Iterable<PlacePrediction> options,
+                    ) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 10,
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 220),
+                            child: ListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final PlacePrediction option = options.elementAt(index);
+                                return ListTile(
+                                  leading: const Icon(Icons.place, size: 20, color: AppColors.textMuted),
+                                  title: Text(
+                                    option.mainText,
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                  subtitle: option.secondaryText.isNotEmpty
+                                      ? Text(option.secondaryText)
+                                      : null,
+                                  onTap: () => onSelected(option),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Website (Optional)',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _websiteUrlController,
+                    decoration: const InputDecoration(
+                      hintText: 'https://...',
+                      prefixIcon: Icon(Icons.link),
+                    ),
+                    keyboardType: TextInputType.url,
+                  ),
+                ],
               ),
-              keyboardType: TextInputType.url,
             ),
             const SizedBox(height: 32),
           ],

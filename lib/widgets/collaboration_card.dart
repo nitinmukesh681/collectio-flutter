@@ -33,46 +33,47 @@ class CollaborationCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: 280,
-        margin: const EdgeInsets.only(right: 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          color: Colors.grey[300],
-        ),
-        child: Stack(
-          children: [
-            FutureBuilder<String?>(
-              future: _resolveCoverUrl(),
-              builder: (context, snap) {
-                final url = snap.data;
-                if (url == null || url.isEmpty) return const SizedBox.shrink();
-                return ClipRRect(
+        child: Container(
+          margin: const EdgeInsets.only(right: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            color: const Color(0xFFF1F5F9),
+          ),
+          child: Stack(
+            children: [
+              FutureBuilder<String?>(
+                future: _resolveCoverUrl(),
+                builder: (context, snap) {
+                  final url = snap.data;
+                  if (url == null || url.isEmpty) return const SizedBox.shrink();
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorWidget: (context, _, __) {
+                        return Container(color: const Color(0xFFF1F5F9));
+                      },
+                    ),
+                  );
+                },
+              ),
+              // Gradient Overlay
+              Container(
+                decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
-                  child: CachedNetworkImage(
-                    imageUrl: url,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    errorWidget: (context, _, __) {
-                      return Container(color: Colors.grey[300]);
-                    },
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.1),
+                      Colors.black.withOpacity(0.8),
+                    ],
                   ),
-                );
-              },
-            ),
-            // Gradient Overlay
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.1),
-                    Colors.black.withOpacity(0.8),
-                  ],
                 ),
               ),
-            ),
             
             // Content
             Padding(
@@ -195,6 +196,6 @@ class CollaborationCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }

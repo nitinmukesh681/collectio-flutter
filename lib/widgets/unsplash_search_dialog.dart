@@ -129,11 +129,11 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.image_search, size: 64, color: Colors.grey[400]),
+                          Icon(Icons.image_search, size: 64, color: AppColors.textMuted),
                           const SizedBox(height: 16),
                           Text(
                             'Search for free photos',
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
@@ -160,11 +160,11 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                                   imageUrl: photo.urls.small,
                                   fit: BoxFit.cover,
                                   placeholder: (context, url) => Container(
-                                    color: Colors.grey[200],
+                                    color: const Color(0xFFF1F5F9),
                                     child: const Center(child: CircularProgressIndicator()),
                                   ),
                                   errorWidget: (context, url, error) => Container(
-                                    color: Colors.grey[200],
+                                    color: const Color(0xFFF1F5F9),
                                     child: const Icon(Icons.error),
                                   ),
                                 ),
@@ -206,7 +206,7 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: const Color(0xFFF8FAFC),
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
               child: Row(
@@ -214,7 +214,7 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                 children: [
                   Text(
                     'Photos by ',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                   ),
                   const Text(
                     'Unsplash',

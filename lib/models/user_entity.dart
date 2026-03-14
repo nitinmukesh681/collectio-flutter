@@ -88,6 +88,21 @@ class UserEntity {
       createdAtValue = DateTime.now().millisecondsSinceEpoch;
     }
 
+    final rawFollowers = map['followers'];
+    final followersList = (rawFollowers is List)
+        ? rawFollowers.whereType<String>().toList(growable: false)
+        : const <String>[];
+
+    final rawFollowing = map['following'];
+    final followingList = (rawFollowing is List)
+        ? rawFollowing.whereType<String>().toList(growable: false)
+        : const <String>[];
+
+    final rawRequests = map['followRequests'] ?? map['pendingFollowRequests'];
+    final followRequestsList = (rawRequests is List)
+        ? rawRequests.whereType<String>().toList(growable: false)
+        : const <String>[];
+
     return UserEntity(
       id: docId,
       displayName: map['displayName'] ?? '',
@@ -97,11 +112,11 @@ class UserEntity {
       bio: map['bio'],
       collectionsCount: map['collectionsCount'] ?? 0,
       isPrivateAccount: map['isPrivateAccount'] ?? false,
-      followerCount: map['followerCount'] ?? map['followersCount'] ?? 0,
-      followingCount: map['followingCount'] ?? 0,
-      followers: List<String>.from(map['followers'] ?? []),
-      following: List<String>.from(map['following'] ?? []),
-      followRequests: List<String>.from(map['followRequests'] ?? map['pendingFollowRequests'] ?? []),
+      followerCount: followersList.length,
+      followingCount: followingList.length,
+      followers: followersList,
+      following: followingList,
+      followRequests: followRequestsList,
       savedCollections: List<String>.from(map['savedCollections'] ?? []),
       createdAt: createdAtValue,
     );

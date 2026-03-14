@@ -189,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Divider
                 Row(
                   children: [
-                    Expanded(child: Divider(color: Colors.grey[300])),
+                    const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
@@ -197,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextStyle(color: AppColors.textMuted),
                       ),
                     ),
-                    Expanded(child: Divider(color: Colors.grey[300])),
+                    const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -219,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      side: BorderSide(color: Colors.grey[300]!),
+                      side: const BorderSide(color: Color(0xFFE5E7EB)),
                     ),
                   ),
                 ),

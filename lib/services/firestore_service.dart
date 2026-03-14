@@ -843,7 +843,7 @@ class FirestoreService {
     required String originalCollectionId,
     required String newOwnerId,
     required String newOwnerName,
-    required String newTitle,
+    String? newTitle,
     String? newDescription,
   }) async {
     // Get original collection
@@ -857,14 +857,20 @@ class FirestoreService {
       ...originalData,
       'userId': newOwnerId,
       'userName': newOwnerName,
-      'title': newTitle,
+      'title': newTitle ?? '${originalData['title']} (Copy)',
       'description': newDescription ?? originalData['description'],
+      'websiteUrl': originalData['websiteUrl'],
+      'googleMapsUrl': originalData['googleMapsUrl'],
       'likes': 0,
       'likedBy': [],
       'saveCount': 0,
-      'itemCount': 0,
+      'savedBy': [],
       'createdAt': FieldValue.serverTimestamp(),
-      'collaborators': [],
+      'updatedAt': FieldValue.serverTimestamp(),
+      'inspiredBy': originalCollectionId,
+      'inspiredByUserId': originalData['userId'],
+      'itemCount': 0,
+      'previewImageUrls': [],
       'contributors': [],
     };
 

@@ -78,7 +78,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primaryPurple,
-          unselectedLabelColor: Colors.grey,
+          unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primaryPurple,
           tabs: [
             Tab(text: 'Followers ($_followersCount)'),
@@ -104,9 +104,12 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+            const Icon(Icons.people_outline, size: 64, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            Text(emptyMessage, style: TextStyle(color: Colors.grey[600])),
+            Text(
+              emptyMessage,
+              style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       );
@@ -182,11 +185,11 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
           : ElevatedButton(
               onPressed: () => _toggleFollow(user, isFollowing),
               style: ElevatedButton.styleFrom(
-                backgroundColor: isFollowing ? Colors.grey[200] : AppColors.primaryPurple,
+                backgroundColor: isFollowing ? const Color(0xFFF1F5F9) : AppColors.primaryPurple,
                 foregroundColor: isFollowing ? Colors.black : Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
               child: Text(isFollowing ? 'Following' : 'Follow'),

@@ -127,7 +127,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
         child: IndexedStack(
           index: _selectedIndex,
@@ -301,9 +300,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.feed_outlined, size: 64, color: Colors.grey[300]),
+                            const Icon(Icons.feed_outlined, size: 64, color: AppColors.textMuted),
                             const SizedBox(height: 16),
-                            Text('Your feed is empty', style: TextStyle(color: Colors.grey[500])),
+                            const Text(
+                              'Your feed is empty',
+                              style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                            ),
                           ],
                         ),
                       ),

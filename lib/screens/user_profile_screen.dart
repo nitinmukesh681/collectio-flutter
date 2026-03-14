@@ -43,9 +43,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       final collections = await _firestoreService.getUserCollections(widget.userId);
       
       if (user != null) {
+        final isOwnProfile = widget.userId == widget.currentUserId;
+        final visibleCollections = isOwnProfile
+            ? collections
+            : collections.where((c) => c.isPublic).toList(growable: false);
         setState(() {
           _user = user;
-          _collections = collections;
+          _collections = visibleCollections;
           _isFollowing = user.followers.contains(widget.currentUserId);
         });
       }
@@ -62,12 +66,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     try {
       if (_isFollowing) {
         await _firestoreService.unfollowUser(widget.currentUserId, widget.userId);
-        setState(() {
-          _isFollowing = false;
-          _user = _user!.copyWith(
-            followerCount: _user!.followersCount - 1,
-          );
-        });
       } else {
         // We need current username for the notification
         // Ideally this should be passed to the screen or stored in a UserProvider
@@ -76,13 +74,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         final currentUsername = currentUser?.userName ?? 'Someone';
         
         await _firestoreService.followUser(widget.currentUserId, widget.userId, currentUsername);
-        setState(() {
-          _isFollowing = true;
-          _user = _user!.copyWith(
-            followerCount: _user!.followersCount + 1,
-          );
-        });
       }
+
+      // Always reload user so UI counts match the canonical arrays.
+      await _loadUser();
     } catch (e) {
       debugPrint('Error toggling follow: $e');
     }
@@ -108,13 +103,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final isOwnProfile = widget.userId == widget.currentUserId;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 352,
             pinned: true,
-            backgroundColor: const Color(0xFFF6F7FB),
+            backgroundColor: Colors.white,
             surfaceTintColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
@@ -147,38 +141,45 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       SizedBox(
                         width: 78,
                         height: 78,
-                        child: ClipOval(
-                          child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-                              ? CachedNetworkImage(
-                                  imageUrl: user.avatarUrl!,
-                                  fit: BoxFit.cover,
-                                  errorWidget: (context, url, error) {
-                                    return Container(
-                                      color: Colors.white,
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                        style: const TextStyle(
-                                          fontSize: 34,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppColors.primaryPurple,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                          ),
+                          child: ClipOval(
+                            child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                                ? CachedNetworkImage(
+                                    imageUrl: user.avatarUrl!,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (context, url, error) {
+                                      return Container(
+                                        color: AppColors.primaryPurple.withOpacity(0.10),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                          style: const TextStyle(
+                                            fontSize: 34,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.primaryPurpleDark,
+                                          ),
                                         ),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    color: AppColors.primaryPurple.withOpacity(0.10),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                      style: const TextStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primaryPurpleDark,
                                       ),
-                                    );
-                                  },
-                                )
-                              : Container(
-                                  color: Colors.white,
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                    style: const TextStyle(
-                                      fontSize: 34,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.primaryPurple,
                                     ),
                                   ),
-                                ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -248,9 +249,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           children: [
                             Expanded(child: _buildStat(_collections.length, 'Collections', dark: true)),
                             Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
-                            Expanded(child: _buildStat(user.followersCount, 'Followers', dark: true)),
+                            Expanded(child: _buildStat(user.followers.length, 'Followers', dark: true)),
                             Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
-                            Expanded(child: _buildStat(user.followingCount, 'Following', dark: true)),
+                            Expanded(child: _buildStat(user.following.length, 'Following', dark: true)),
                           ],
                         ),
                       ),
@@ -268,9 +269,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.collections_outlined, size: 64, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text('No collections yet', style: TextStyle(color: Colors.grey)),
+                    const Icon(Icons.collections_outlined, size: 64, color: AppColors.textMuted),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No collections yet',
+                      style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
               ),

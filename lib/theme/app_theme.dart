@@ -10,7 +10,7 @@ class AppColors {
   static const Color heartSalmon = Color(0xFFFA8072);
 
   // Background colors
-  static const Color backgroundLight = Color(0xFFF9FAFB);
+  static const Color backgroundLight = Color(0xFFFFFFFF);
   static const Color surfaceLight = Colors.white;
   static const Color backgroundDark = Color(0xFF1A1A2E);
   static const Color surfaceDark = Color(0xFF16213E);
@@ -46,14 +46,66 @@ class AppColors {
 /// App theme configuration
 class AppTheme {
   static ThemeData get lightTheme {
+    final baseScheme = ColorScheme.fromSeed(
+      seedColor: AppColors.primaryPurple,
+      brightness: Brightness.light,
+    );
+
     return ThemeData(
       useMaterial3: true,
       visualDensity: VisualDensity.compact,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primaryPurple,
-        brightness: Brightness.light,
+      colorScheme: baseScheme.copyWith(
+        background: Colors.white,
+        surface: Colors.white,
       ),
-      scaffoldBackgroundColor: const Color(0xFFF6F7FB),
+      scaffoldBackgroundColor: Colors.white,
+      canvasColor: Colors.white,
+      cardColor: Colors.white,
+      dialogBackgroundColor: Colors.white,
+      dividerTheme: const DividerThemeData(
+        color: Color(0xFFE5E7EB),
+        thickness: 1,
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 14,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(18)),
+        ),
+        titleTextStyle: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textPrimary,
+        ),
+        contentTextStyle: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary,
+          height: 1.25,
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 18,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+      ),
+      popupMenuTheme: const PopupMenuThemeData(
+        color: Colors.white,
+        elevation: 10,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+        textStyle: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -83,9 +135,55 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primaryPurple,
+          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textPrimary,
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.primaryPurple.withOpacity(0.10),
+        selectedColor: AppColors.primaryPurple,
+        secondarySelectedColor: AppColors.primaryPurple,
+        disabledColor: const Color(0xFFF3F4F6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        labelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+        secondaryLabelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: const TextStyle(
+          fontWeight: FontWeight.w600,
+          color: AppColors.textMuted,
+        ),
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.w700,
+          color: AppColors.textSecondary,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: Color(0xFFE5E7EB)),

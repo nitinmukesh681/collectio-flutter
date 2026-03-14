@@ -134,14 +134,16 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
       builder: (context) => AlertDialog(
         title: const Text('Remove Collaborator?'),
         content: Text('Remove @$username from this collection?'),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
-          TextButton(
+          OutlinedButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -199,7 +201,10 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('Open collaboration', style: TextStyle(fontWeight: FontWeight.w600)),
-                      Text('Allow anyone to add items', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      Text(
+                        'Allow anyone to add items',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
                     ],
                   ),
                 ),
@@ -233,7 +238,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: DropdownButtonHideUnderline(
@@ -256,7 +261,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                 margin: const EdgeInsets.only(top: 8),
                 constraints: const BoxConstraints(maxHeight: 120),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: ListView.builder(
@@ -309,7 +314,12 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
             
             Flexible(
               child: _collaborators.isEmpty
-                  ? Center(child: Text('No collaborators yet', style: TextStyle(color: Colors.grey[500])))
+                  ? Center(
+                      child: Text(
+                        'No collaborators yet',
+                        style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                    )
                   : ListView.builder(
                       shrinkWrap: true,
                       itemCount: _collaborators.length,
@@ -336,7 +346,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                           title: Text('@${collab['username']}'),
                           subtitle: Text(
                             (collab['role'] as String).toUpperCase(),
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                           ),
                           trailing: IconButton(
                             icon: const Icon(Icons.remove_circle_outline, color: Colors.red),

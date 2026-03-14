@@ -137,7 +137,7 @@ class LandingScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.grey[600],
+                      color: AppColors.textSecondary,
                       height: 1.4,
                     ),
                   ),
@@ -218,11 +218,11 @@ class LandingScreen extends StatelessWidget {
   Widget _buildImageCard(String imageUrl, {Color? color}) {
     return Container(
       decoration: BoxDecoration(
-        color: color ?? Colors.grey[200],
+        color: color ?? const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -235,7 +235,7 @@ class LandingScreen extends StatelessWidget {
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          placeholder: (context, url) => Container(color: Colors.grey[100]),
+          placeholder: (context, url) => Container(color: const Color(0xFFF1F5F9)),
           errorWidget: (context, url, error) => const Icon(Icons.error),
         ),
       ),
@@ -249,7 +249,7 @@ class LandingScreen extends StatelessWidget {
       height: 8,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isActive ? const Color(0xFF836FFF) : Colors.grey[300],
+        color: isActive ? const Color(0xFF836FFF) : const Color(0xFFE5E7EB),
       ),
     );
   }

@@ -19,12 +19,16 @@ int _timestampToInt(dynamic value) {
 
 /// Domain entity representing a collection
 class CollectionEntity {
+  static const Object _unset = Object();
+
   final String id;
   final String userId;
   final String userName;
   final String? userAvatarUrl;
   final String title;
   final String? description;
+  final String? websiteUrl;
+  final String? googleMapsUrl;
   final CategoryType category;
   final List<String> tags;
   final String? coverImageUrl;
@@ -58,6 +62,8 @@ class CollectionEntity {
     this.userAvatarUrl,
     required this.title,
     this.description,
+    this.websiteUrl,
+    this.googleMapsUrl,
     this.category = CategoryType.other,
     this.tags = const [],
     this.coverImageUrl,
@@ -104,6 +110,8 @@ class CollectionEntity {
       userAvatarUrl: map['userAvatarUrl'],
       title: map['title'] ?? '',
       description: map['description'],
+      websiteUrl: map['websiteUrl'],
+      googleMapsUrl: map['googleMapsUrl'],
       category: CategoryType.fromString(map['category']),
       tags: List<String>.from(map['tags'] ?? []),
       coverImageUrl: (coverImageUrl != null && coverImageUrl.isNotEmpty) ? coverImageUrl : null,
@@ -148,6 +156,8 @@ class CollectionEntity {
       'userAvatarUrl': userAvatarUrl,
       'title': title,
       'description': description,
+      'websiteUrl': websiteUrl,
+      'googleMapsUrl': googleMapsUrl,
       'category': category.name.toUpperCase(),
       'tags': tags,
       'coverImageUrl': coverImageUrl,
@@ -180,6 +190,8 @@ class CollectionEntity {
     String? userAvatarUrl,
     String? title,
     String? description,
+    Object? websiteUrl = _unset,
+    Object? googleMapsUrl = _unset,
     CategoryType? category,
     List<String>? tags,
     String? coverImageUrl,
@@ -213,6 +225,8 @@ class CollectionEntity {
       userAvatarUrl: userAvatarUrl ?? this.userAvatarUrl,
       title: title ?? this.title,
       description: description ?? this.description,
+      websiteUrl: identical(websiteUrl, _unset) ? this.websiteUrl : websiteUrl as String?,
+      googleMapsUrl: identical(googleMapsUrl, _unset) ? this.googleMapsUrl : googleMapsUrl as String?,
       category: category ?? this.category,
       tags: tags ?? this.tags,
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,

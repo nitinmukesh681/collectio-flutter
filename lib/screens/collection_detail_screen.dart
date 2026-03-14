@@ -50,30 +50,81 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     _loadCurrentUserName();
   }
 
-  Widget _buildFractionalStars(double rating, {double size = 16}) {
-    final clamped = rating.clamp(0, 5).toDouble();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (i) {
-        final fill = (clamped - i).clamp(0, 1).toDouble();
-        return Padding(
-          padding: const EdgeInsets.only(right: 2),
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Stack(
-              children: [
-                Icon(Icons.star, size: size, color: Colors.grey[350]),
-                ClipRect(
-                  clipper: _StarFillClipper(fill),
-                  child: Icon(Icons.star, size: size, color: Colors.amber),
-                ),
-              ],
+  Widget _buildRatingBadge(double rating, {double fontSize = 12}) {
+    final score = (rating.clamp(0, 5) * 2).toDouble();
+    final label = (score % 1 == 0) ? score.toStringAsFixed(0) : score.toStringAsFixed(1);
+
+    Color badgeColor;
+    if (score < 4) {
+      badgeColor = Colors.red[700] ?? Colors.red;
+    } else if (score < 7) {
+      badgeColor = Colors.amber[800] ?? Colors.amber;
+    } else {
+      badgeColor = Colors.green[700] ?? Colors.green;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star_rounded, size: fontSize, color: badgeColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w800,
+              color: badgeColor,
+              height: 1.0,
             ),
           ),
-        );
-      }),
+        ],
+      ),
     );
+  }
+
+  Widget _buildIconChip({required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111827).withOpacity(0.06),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 16, color: Colors.black87),
+      ),
+    );
+  }
+
+  Widget _buildTrailingChips(CollectionItemEntity item) {
+    if (item.rating <= 0) return const SizedBox.shrink();
+    return _buildRatingBadge(item.rating, fontSize: 12);
+  }
+
+  double _trailingUnitReservedWidth(CollectionItemEntity item) {
+    // Reserve enough right-side width so title/description never render under the
+    // trailing unit (chips + menu). Keep this tight so there's no excessive whitespace.
+    const menuWidth = 20.0;
+    const gapBetweenChipsAndMenu = 8.0;
+    const leftPaddingBeforeTrailing = 8.0;
+
+    // Approximate chip widths (they are fairly consistent due to fixed padding).
+    const ratingChipWidth = 54.0;
+    final hasRating = item.rating > 0;
+
+    double chipsWidth = 0;
+    if (hasRating) chipsWidth += ratingChipWidth;
+
+    final total = leftPaddingBeforeTrailing + chipsWidth + gapBetweenChipsAndMenu + menuWidth;
+    // Never reserve less than the menu + gaps.
+    return total < 44 ? 44 : total;
   }
 
   Future<void> _loadCurrentUserName() async {
@@ -147,6 +198,140 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       isScrollControlled: true,
       builder: (context) {
         final users = _contributorUsers;
+        final ownerName = collection.userName;
+        final rawOwnerAvatar = collection.userAvatarUrl;
+
+        Widget buildAvatar({required String name, required String? avatarUrl}) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
+                ? CachedNetworkImage(
+                    imageUrl: avatarUrl,
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      width: 36,
+                      height: 36,
+                      color: AppColors.primaryPurple.withOpacity(0.2),
+                      alignment: Alignment.center,
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryPurple,
+                        ),
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      width: 36,
+                      height: 36,
+                      color: AppColors.primaryPurple.withOpacity(0.2),
+                      alignment: Alignment.center,
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryPurple,
+                        ),
+                      ),
+                    ),
+                  )
+                : Container(
+                    width: 36,
+                    height: 36,
+                    color: AppColors.primaryPurple.withOpacity(0.2),
+                    alignment: Alignment.center,
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryPurple,
+                      ),
+                    ),
+                  ),
+          );
+        }
+
+        Widget buildOwnerTile() {
+          if (rawOwnerAvatar == null || rawOwnerAvatar.trim().isEmpty) {
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: buildAvatar(name: ownerName, avatarUrl: null),
+              title: Text(
+                '@$ownerName',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text('Owner'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UserProfileScreen(
+                      userId: collection.userId,
+                      currentUserId: widget.currentUserId,
+                    ),
+                  ),
+                );
+              },
+            );
+          }
+
+          final trimmed = rawOwnerAvatar!.trim();
+          if (!trimmed.startsWith('gs://')) {
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: buildAvatar(name: ownerName, avatarUrl: trimmed),
+              title: Text(
+                '@$ownerName',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text('Owner'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UserProfileScreen(
+                      userId: collection.userId,
+                      currentUserId: widget.currentUserId,
+                    ),
+                  ),
+                );
+              },
+            );
+          }
+
+          return FutureBuilder<String>(
+            future: FirebaseStorage.instance.refFromURL(trimmed).getDownloadURL(),
+            builder: (context, snapshot) {
+              final resolved = snapshot.data;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: buildAvatar(name: ownerName, avatarUrl: resolved),
+                title: Text(
+                  '@$ownerName',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text('Owner'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => UserProfileScreen(
+                        userId: collection.userId,
+                        currentUserId: widget.currentUserId,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        }
+
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -159,92 +344,40 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
-                if (users.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text('No other contributors yet.'),
-                  )
-                else
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.55,
-                    child: ListView.separated(
-                      itemCount: users.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final u = users[index];
-                        final name = u.userName;
-                        final avatarUrl = u.avatarUrl;
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(999),
-                            child: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
-                                ? CachedNetworkImage(
-                                    imageUrl: avatarUrl,
-                                    width: 36,
-                                    height: 36,
-                                    fit: BoxFit.cover,
-                                    placeholder: (_, __) => Container(
-                                      width: 36,
-                                      height: 36,
-                                      color: AppColors.primaryPurple.withOpacity(0.2),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.primaryPurple,
-                                        ),
-                                      ),
-                                    ),
-                                    errorWidget: (_, __, ___) => Container(
-                                      width: 36,
-                                      height: 36,
-                                      color: AppColors.primaryPurple.withOpacity(0.2),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.primaryPurple,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : Container(
-                                    width: 36,
-                                    height: 36,
-                                    color: AppColors.primaryPurple.withOpacity(0.2),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.primaryPurple,
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                          title: Text(
-                            '@$name',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => UserProfileScreen(
-                                  userId: u.id,
-                                  currentUserId: widget.currentUserId,
-                                ),
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.55,
+                  child: ListView.separated(
+                    itemCount: users.length + 1,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      if (index == 0) return buildOwnerTile();
+
+                      final u = users[index - 1];
+                      final name = u.userName;
+                      final avatarUrl = u.avatarUrl;
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: buildAvatar(name: name, avatarUrl: avatarUrl),
+                        title: Text(
+                          '@$name',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => UserProfileScreen(
+                                userId: u.id,
+                                currentUserId: widget.currentUserId,
                               ),
-                            );
-                          },
-                        );
-                      },
-                    ),
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
+                ),
               ],
             ),
           ),
@@ -453,12 +586,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 },
               ),
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             actions: [
-              TextButton(
+              OutlinedButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel'),
               ),
-              TextButton(
+              ElevatedButton(
                 onPressed: selected.isEmpty ? null : () => Navigator.pop(context, true),
                 child: const Text('Add'),
               ),
@@ -531,8 +665,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Copy Collection?'),
         content: Text('This will create a copy of "${_collection!.title}" in your profile.'),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
-          TextButton(
+          OutlinedButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
@@ -580,14 +715,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Item?'),
         content: Text('Are you sure you want to delete "${item.title}"?'),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
-          TextButton(
+          OutlinedButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -829,7 +966,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       Align(
                         alignment: Alignment.bottomCenter,
                         child: Container(
-                          height: 48,
+                          height: 32,
                           decoration: const BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -851,7 +988,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     ? BorderRadius.zero
                     : BorderRadius.zero,
               ),
-              padding: EdgeInsets.fromLTRB(18, hasCoverImage ? 10 : 10, 18, 8),
+              padding: EdgeInsets.fromLTRB(18, hasCoverImage ? 2 : 10, 18, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1076,8 +1213,62 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       _buildStatChip(Icons.inventory_2_outlined, '${collection.itemCount} items', Colors.black87),
                       const SizedBox(width: 18),
                       _buildStatChip(Icons.public, collection.isPublic ? 'Public' : 'Private', Colors.black87),
+                      const Spacer(),
+                      if ((collection.websiteUrl ?? '').trim().isNotEmpty) ...[
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () async {
+                            var raw = (collection.websiteUrl ?? '').trim();
+                            if (raw.isEmpty) return;
+                            if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+                              raw = 'https://$raw';
+                            }
+                            final uri = Uri.tryParse(raw);
+                            if (uri == null) return;
+                            try {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not open link')),
+                                );
+                              }
+                            }
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Icon(Icons.link, size: 18, color: Colors.black87),
+                          ),
+                        ),
+                      ],
+                      if ((collection.googleMapsUrl ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () async {
+                            final raw = (collection.googleMapsUrl ?? '').trim();
+                            if (raw.isEmpty) return;
+                            final uri = Uri.tryParse(raw);
+                            if (uri == null) return;
+                            try {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not open location')),
+                                );
+                              }
+                            }
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Icon(Icons.location_on_outlined, size: 18, color: Colors.black87),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
+                  const SizedBox(height: 18),
                 ],
               ),
             ),
@@ -1106,7 +1297,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: Colors.grey[100],
+                    fillColor: Theme.of(context).inputDecorationTheme.fillColor,
                   ),
                   onChanged: (value) {
                     setState(() => _searchQuery = value);
@@ -1132,9 +1323,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
+                        Icon(Icons.inbox_outlined, size: 64, color: AppColors.textMuted),
                         SizedBox(height: 16),
-                        Text('No items yet', style: TextStyle(color: Colors.grey)),
+                        Text(
+                          'No items yet',
+                          style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                        ),
                       ],
                     ),
                   ),
@@ -1160,15 +1354,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
 
       // Bottom action bar
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
@@ -1188,7 +1375,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(22),
                   ),
-                  side: BorderSide(color: Colors.grey[300]!),
+                  side: const BorderSide(color: Color(0xFFE5E7EB)),
                   foregroundColor: Colors.black87,
                   backgroundColor: Colors.white,
                 ),
@@ -1210,7 +1397,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(22),
                   ),
-                  side: BorderSide(color: Colors.grey[300]!),
+                  side: const BorderSide(color: Color(0xFFE5E7EB)),
                   foregroundColor: Colors.black87,
                   backgroundColor: Colors.white,
                 ),
@@ -1295,11 +1482,17 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   }
 
   Widget _buildItemCard(CollectionItemEntity item, int rank) {
-    final hasImage = item.imageUrls.isNotEmpty;
-    final isLiked = item.likedBy.contains(widget.currentUserId);
     final canEdit = _isOwner || item.userId == widget.currentUserId;
+    // Keep item rows compact and prevent text from flowing under trailing actions.
+    const titleMaxLines = 3;
+    const descriptionMaxLines = 2;
     final isExpanded = _expandedItemIds.contains(item.id);
-    
+    const leadingWidth = 28.0;
+    const leadingGap = 12.0;
+    final trailingTextInset = _trailingUnitReservedWidth(item);
+    const expandedHeaderTopPad = 2.0;
+    const imageMaxHeight = 240.0;
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -1311,204 +1504,240 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         });
       },
       child: Container(
-        margin: const EdgeInsets.fromLTRB(18, 6, 18, 6),
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFF1F5F9)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 28,
-              child: Text(
-                '$rank',
-                textAlign: TextAlign.center,
-                softWrap: false,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primaryPurple,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          const SizedBox(width: 12),
-          if (hasImage) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: CachedNetworkImage(
-                imageUrl: item.imageUrls.first,
-                width: 56,
-                height: 56,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  width: 56,
-                  height: 56,
-                  color: const Color(0xFFF3F4F6),
-                  alignment: Alignment.center,
-                  child: const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  width: 56,
-                  height: 56,
-                  color: const Color(0xFFF3F4F6),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.broken_image_outlined, color: Colors.grey[500], size: 18),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: Column(
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
-                          height: 1.2,
-                        ),
-                        maxLines: isExpanded ? null : 2,
-                        overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                SizedBox(
+                  width: leadingWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: expandedHeaderTopPad),
+                    child: Text(
+                      '$rank',
+                      textAlign: TextAlign.center,
+                      softWrap: false,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primaryPurple,
+                        fontSize: 16,
+                        height: 1.2,
                       ),
                     ),
-                    if (item.googleMapsUrl != null && item.googleMapsUrl!.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () async {
-                            final raw = item.googleMapsUrl!.trim();
-                            final uri = Uri.tryParse(raw);
-                            if (uri == null) return;
-                            try {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Could not open location')),
-                                );
-                              }
-                            }
-                          },
-                          child: const SizedBox(
-                            width: 26,
-                            height: 18,
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: Icon(
-                                Icons.location_on_outlined,
-                                size: 18,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (item.websiteUrl != null && item.websiteUrl!.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () async {
-                            var raw = item.websiteUrl!.trim();
-                            if (raw.isEmpty) return;
-                            if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-                              raw = 'https://$raw';
-                            }
-                            final uri = Uri.tryParse(raw);
-                            if (uri == null) return;
-                            try {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Could not open link')),
-                                );
-                              }
-                            }
-                          },
-                          child: const SizedBox(
-                            width: 26,
-                            height: 18,
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: Icon(
-                                Icons.link,
-                                size: 18,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                if (item.rating > 0) ...[
-                  const SizedBox(height: 2),
-                  _buildFractionalStars(item.rating, size: 16),
-                ],
-                if (item.description != null && item.description!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    item.description!,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.black87,
-                      height: 1.3,
-                    ),
-                    maxLines: isExpanded ? null : 2,
-                    overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
                   ),
-                ],
+                ),
+                const SizedBox(width: leadingGap),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: expandedHeaderTopPad, right: 10),
+                    child: Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                        height: 1.2,
+                      ),
+                      maxLines: isExpanded ? null : titleMaxLines,
+                      softWrap: true,
+                      overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: expandedHeaderTopPad),
+                  child: _buildTrailingChips(item),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: expandedHeaderTopPad),
+                  child: PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _navigateToAddItem(item);
+                      } else if (value == 'delete') {
+                        _deleteItem(item);
+                      } else if (value == 'add_to_collections') {
+                        _showAddToCollectionsDialog(item);
+                      } else if (value == 'open_link') {
+                        var raw = (item.websiteUrl ?? '').trim();
+                        if (raw.isEmpty) return;
+                        if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+                          raw = 'https://$raw';
+                        }
+                        final uri = Uri.tryParse(raw);
+                        if (uri == null) return;
+                        launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Could not open link')),
+                          );
+                        });
+                      } else if (value == 'open_location') {
+                        final raw = (item.googleMapsUrl ?? '').trim();
+                        if (raw.isEmpty) return;
+                        final uri = Uri.tryParse(raw);
+                        if (uri == null) return;
+                        launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Could not open location')),
+                          );
+                        });
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if ((item.websiteUrl ?? '').trim().isNotEmpty)
+                        PopupMenuItem(
+                          value: 'open_link',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.link, size: 18, color: Colors.black87),
+                              const SizedBox(width: 10),
+                              const Text('Link'),
+                            ],
+                          ),
+                        ),
+                      if ((item.googleMapsUrl ?? '').trim().isNotEmpty)
+                        PopupMenuItem(
+                          value: 'open_location',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.location_on_outlined,
+                                  size: 18, color: Colors.black87),
+                              const SizedBox(width: 10),
+                              const Text('Location'),
+                            ],
+                          ),
+                        ),
+                      if (canEdit)
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.edit_outlined, size: 18, color: Colors.black87),
+                              const SizedBox(width: 10),
+                              const Text('Edit'),
+                            ],
+                          ),
+                        ),
+                      if (_isOwner)
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, size: 18, color: Colors.red[700]),
+                              const SizedBox(width: 10),
+                              const Text('Delete'),
+                            ],
+                          ),
+                        ),
+                      PopupMenuItem(
+                        value: 'add_to_collections',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.add, size: 18, color: Colors.black87),
+                            const SizedBox(width: 10),
+                            const Text('Add to another collection'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: const Icon(Icons.more_vert, size: 20, color: Colors.black87),
+                  ),
+                ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            children: [
-              PopupMenuButton<String>(
-                padding: EdgeInsets.zero,
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    _navigateToAddItem(item);
-                  } else if (value == 'delete') {
-                    _deleteItem(item);
-                  } else if (value == 'add_to_collections') {
-                    _showAddToCollectionsDialog(item);
-                  }
-                },
-                itemBuilder: (context) => [
-                  if (canEdit)
-                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                  if (_isOwner)
-                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  const PopupMenuItem(value: 'add_to_collections', child: Text('Add to another collection')),
-                ],
-                child: const Icon(Icons.more_vert, size: 20, color: Colors.black87),
+            if (item.description != null && item.description!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Padding(
+                padding: EdgeInsets.only(
+                  left: leadingWidth + leadingGap,
+                  right: trailingTextInset,
+                ),
+                child: Text(
+                  item.description!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight:
+                        FontWeight.lerp(FontWeight.w400, FontWeight.w500, 0.5) ??
+                        FontWeight.w500,
+                    color: Colors.black87,
+                    height: 1.25,
+                  ),
+                  maxLines: isExpanded ? null : descriptionMaxLines,
+                  overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                ),
               ),
             ],
-          ),
+            if (isExpanded && item.imageUrls.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Padding(
+                padding: EdgeInsets.only(
+                  left: leadingWidth + leadingGap,
+                  right: trailingTextInset,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: imageMaxHeight),
+                    child: PageView.builder(
+                      itemCount: item.imageUrls.length,
+                      itemBuilder: (context, index) {
+                        final url = item.imageUrls[index];
+                        return Container(
+                          color: Colors.white,
+                          alignment: Alignment.center,
+                          child: CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.contain,
+                            placeholder: (context, _) => Container(
+                              color: const Color(0xFFF3F4F6),
+                              alignment: Alignment.center,
+                              child: const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                            errorWidget: (context, _, __) => Container(
+                              color: const Color(0xFFF3F4F6),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                color: AppColors.textMuted,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
-
   }
 
   void _showItemDetailsDialog(CollectionItemEntity item, {required int rank}) {
@@ -1558,21 +1787,69 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        item.title,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.black,
-                          height: 1.2,
-                        ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.black,
+                                height: 1.2,
+                              ),
+                            ),
+                          ),
+                          if (item.rating > 0) ...[
+                            const SizedBox(width: 10),
+                            _buildRatingBadge(item.rating, fontSize: 13),
+                          ],
+                        ],
                       ),
                     ),
                   ],
                 ),
-                if (item.rating > 0) ...[
-                  const SizedBox(height: 10),
-                  _buildFractionalStars(item.rating, size: 18),
+                if (item.imageUrls.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: PageView.builder(
+                        itemCount: item.imageUrls.length,
+                        itemBuilder: (context, index) {
+                          final url = item.imageUrls[index];
+                          return Container(
+                            color: Colors.white,
+                            alignment: Alignment.center,
+                            child: CachedNetworkImage(
+                              imageUrl: url,
+                              fit: BoxFit.contain,
+                              placeholder: (context, _) => Container(
+                                color: const Color(0xFFF3F4F6),
+                                alignment: Alignment.center,
+                                child: const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              ),
+                              errorWidget: (context, _, __) => Container(
+                                color: const Color(0xFFF3F4F6),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.broken_image_outlined,
+                                  color: AppColors.textMuted,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 ],
                 if (item.description != null && item.description!.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -1640,12 +1917,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Collection?'),
         content: const Text('This will permanently delete the collection and all its items.'),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
-          TextButton(
+          OutlinedButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () async {
               Navigator.pop(context);
               await _firestoreService.deleteCollection(
@@ -1654,7 +1933,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               );
               if (mounted) Navigator.pop(context);
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -1701,19 +1980,4 @@ class _CoverBottomCurveClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
-}
-
-class _StarFillClipper extends CustomClipper<Rect> {
-  final double fill;
-
-  _StarFillClipper(this.fill);
-
-  @override
-  Rect getClip(Size size) {
-    final width = size.width * fill.clamp(0, 1);
-    return Rect.fromLTWH(0, 0, width, size.height);
-  }
-
-  @override
-  bool shouldReclip(covariant _StarFillClipper oldClipper) => oldClipper.fill != fill;
 }

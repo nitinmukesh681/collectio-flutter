@@ -150,7 +150,7 @@ class FeedCollectionCard extends StatelessWidget {
                     ),
                   ),
                 Padding(
-                  padding: EdgeInsets.only(top: hasCoverImage ? 200 : 0),
+                  padding: EdgeInsets.only(top: hasCoverImage ? 192 : 0),
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -234,7 +234,7 @@ class FeedCollectionCard extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.grey[600],
+                                      color: AppColors.textSecondary,
                                     ),
                                   ),
                                 ],
@@ -251,6 +251,8 @@ class FeedCollectionCard extends StatelessWidget {
                         ],
                       ),
                     ),
+
+                    const SizedBox(height: 4),
 
                     // Title & Description
                     Padding(
@@ -272,7 +274,7 @@ class FeedCollectionCard extends StatelessWidget {
                               collection.description!,
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[600],
+                                color: Colors.black87,
                                 height: 1.4,
                               ),
                               maxLines: 2,
@@ -402,10 +404,10 @@ class FeedCollectionCard extends StatelessWidget {
                                   const SizedBox(width: 6),
                                   Text(
                                     '$itemCount items',
-                                    style: const TextStyle(
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.w700,
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
                                       fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ],
@@ -509,7 +511,7 @@ class FeedCollectionCard extends StatelessWidget {
           return Container(
             color: const Color(0xFFF3F4F6),
             child: Center(
-              child: Icon(Icons.image_outlined, color: Colors.grey[400], size: 28),
+              child: const Icon(Icons.image_outlined, color: AppColors.textMuted, size: 28),
             ),
           );
         },
@@ -539,22 +541,32 @@ class FeedCollectionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: AppColors.textPrimary,
-                    height: 1.2,
-                  ),
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: AppColors.textPrimary,
+                            height: 1.2,
+                          ),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    if (item.rating > 0) ...[
+                      const SizedBox(width: 8),
+                      _buildRatingBadge(item.rating),
+                    ],
+                  ],
                 ),
-                if (item.rating > 0) ...[
-                  const SizedBox(height: 4),
-                  _buildStarRow(item.rating),
-                ],
               ],
             ),
           ),
@@ -563,29 +575,41 @@ class FeedCollectionCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStarRow(double rating) {
-    final clamped = rating.clamp(0, 5).toDouble();
-    const size = 14.0;
-    return Row(
-      children: List.generate(5, (i) {
-        final fill = (clamped - i).clamp(0, 1).toDouble();
-        return Padding(
-          padding: const EdgeInsets.only(right: 2),
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Stack(
-              children: [
-                Icon(Icons.star, size: size, color: Colors.grey[350]),
-                ClipRect(
-                  clipper: _StarFillClipper(fill),
-                  child: const Icon(Icons.star, size: size, color: Color(0xFFFBBF24)),
-                ),
-              ],
+  Widget _buildRatingBadge(double rating) {
+    final score = (rating.clamp(0, 5) * 2).toDouble();
+    final label = (score % 1 == 0) ? score.toStringAsFixed(0) : score.toStringAsFixed(1);
+
+    Color badgeColor;
+    if (score < 4) {
+      badgeColor = Colors.red[700] ?? Colors.red;
+    } else if (score < 7) {
+      badgeColor = Colors.amber[800] ?? Colors.amber;
+    } else {
+      badgeColor = Colors.green[700] ?? Colors.green;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star_rounded, size: 11, color: badgeColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: badgeColor,
+              height: 1.0,
             ),
           ),
-        );
-      }),
+        ],
+      ),
     );
   }
 
@@ -606,19 +630,4 @@ class FeedCollectionCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _StarFillClipper extends CustomClipper<Rect> {
-  final double fill;
-
-  _StarFillClipper(this.fill);
-
-  @override
-  Rect getClip(Size size) {
-    final width = size.width * fill.clamp(0, 1);
-    return Rect.fromLTWH(0, 0, width, size.height);
-  }
-
-  @override
-  bool shouldReclip(covariant _StarFillClipper oldClipper) => oldClipper.fill != fill;
 }

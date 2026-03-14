@@ -95,7 +95,6 @@ class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
-      backgroundColor: const Color(0xFFF6F7FB),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _collections.isEmpty
@@ -103,11 +102,11 @@ class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.group_off_outlined, size: 64, color: Colors.grey[300]),
+                      const Icon(Icons.group_off_outlined, size: 64, color: AppColors.textMuted),
                       const SizedBox(height: 16),
                       Text(
                         'No open collaborations found',
-                        style: TextStyle(color: Colors.grey[500]),
+                        style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),

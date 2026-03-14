@@ -182,13 +182,16 @@ class _AddMultipleItemsDialogState extends State<AddMultipleItemsDialog> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: const Color(0xFFF8FAFC),
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('${_items.length} item(s)', style: TextStyle(color: Colors.grey[600])),
+                  Text(
+                    '${_items.length} item(s)',
+                    style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                  ),
                   ElevatedButton(
                     onPressed: _isLoading ? null : _saveAll,
                     style: ElevatedButton.styleFrom(
@@ -261,9 +264,9 @@ class _AddMultipleItemsDialogState extends State<AddMultipleItemsDialog> {
               child: Container(
                 height: 80,
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
                   image: item.image != null
                       ? DecorationImage(image: FileImage(item.image!), fit: BoxFit.cover)
                       : null,
@@ -273,8 +276,11 @@ class _AddMultipleItemsDialogState extends State<AddMultipleItemsDialog> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_photo_alternate, color: Colors.grey[400]),
-                            Text('Add Image', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                            const Icon(Icons.add_photo_alternate, color: AppColors.textMuted),
+                            const Text(
+                              'Add Image',
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
                           ],
                         ),
                       )

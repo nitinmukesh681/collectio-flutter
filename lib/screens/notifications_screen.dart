@@ -136,16 +136,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.notifications_off_outlined, size: 80, color: Colors.grey[400]),
+                  const Icon(Icons.notifications_off_outlined, size: 80, color: AppColors.textMuted),
                   const SizedBox(height: 16),
                   Text(
                     'No notifications yet',
-                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'We\'ll notify you when something happens',
-                    style: TextStyle(color: Colors.grey[500]),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -153,9 +160,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
 
           return ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             itemCount: notifications.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final doc = notifications[index];
               final data = doc.data() as Map<String, dynamic>;
@@ -239,18 +246,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         break;
       default:
         icon = Icons.notifications;
-        iconColor = Colors.grey;
+        iconColor = AppColors.textMuted;
         actionText = '';
     }
 
-    final bgColor = isRead ? Colors.white : AppColors.primaryPurple.withOpacity(0.04);
+    final highlight = isRead ? Colors.white : AppColors.primaryPurple.withOpacity(0.04);
 
     return Material(
-      color: bgColor,
+      color: Colors.transparent,
       child: InkWell(
+        borderRadius: BorderRadius.circular(18),
         onTap: () => _handleNotificationTap(id, data),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: highlight,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFF1F5F9)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -351,7 +371,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     const SizedBox(height: 6),
                     Text(
                       timeAgo,
-                      style: TextStyle(fontSize: 12.5, color: Colors.grey[500]),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     if (showFollowBack) ...[
                       const SizedBox(height: 10),
