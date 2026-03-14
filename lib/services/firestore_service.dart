@@ -736,7 +736,6 @@ class FirestoreService {
         'description': item.description,
         'rating': item.rating,
         'imageUrls': item.imageUrls,
-        'notes': item.notes,
         'googleMapsUrl': item.googleMapsUrl,
         'websiteUrl': item.websiteUrl,
         'order': computedOrder,

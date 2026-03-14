@@ -51,13 +51,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   }
 
   Widget _buildRatingBadge(double rating, {double fontSize = 12}) {
-    final score = (rating.clamp(0, 5) * 2).toDouble();
-    final label = (score % 1 == 0) ? score.toStringAsFixed(0) : score.toStringAsFixed(1);
+    // Check if rating is old scale (0-5) or new scale (0-10)
+    final displayScore = rating <= 5 ? rating * 2 : rating;
+    final label = (displayScore % 1 == 0) ? displayScore.toStringAsFixed(0) : displayScore.toStringAsFixed(1);
 
     Color badgeColor;
-    if (score < 4) {
+    if (displayScore < 4) {
       badgeColor = Colors.red[700] ?? Colors.red;
-    } else if (score < 7) {
+    } else if (displayScore < 7) {
       badgeColor = Colors.amber[800] ?? Colors.amber;
     } else {
       badgeColor = Colors.green[700] ?? Colors.green;
@@ -616,7 +617,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           description: item.description,
           rating: item.rating,
           imageUrls: item.imageUrls,
-          notes: item.notes,
           googleMapsUrl: item.googleMapsUrl,
           websiteUrl: item.websiteUrl,
           likes: 0,

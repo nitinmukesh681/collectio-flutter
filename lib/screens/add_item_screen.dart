@@ -37,7 +37,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
   final TextEditingController _mapsUrlController = TextEditingController(); // Acts as Location Name input
   final TextEditingController _websiteUrlController = TextEditingController();
 
@@ -57,7 +56,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
       final item = widget.existingItem!;
       _titleController.text = item.title;
       _descriptionController.text = item.description ?? '';
-      _notesController.text = item.notes ?? '';
       
       // Handle Google Maps URL prefill
       if (item.googleMapsUrl != null) {
@@ -98,22 +96,22 @@ class _AddItemScreenState extends State<AddItemScreen> {
     }
     final parsed = double.tryParse(raw);
     if (parsed == null) return;
-    // UI is 0-10, internal storage remains 0-5.
+    // Input is 0-10, store as 0-10 (no conversion needed)
     final clamped10 = parsed.clamp(0, 10).toDouble();
     final rounded10 = (clamped10 * 10).round() / 10.0;
-    final rounded5 = (rounded10 / 2).clamp(0, 5).toDouble();
-    setState(() => _rating = rounded5);
+    setState(() => _rating = rounded10);
   }
 
   Widget _buildRatingBadge(double rating) {
     if (rating <= 0) return const SizedBox.shrink();
-    final score = (rating.clamp(0, 5) * 2).toDouble();
-    final label = (score % 1 == 0) ? score.toStringAsFixed(0) : score.toStringAsFixed(1);
+    // Check if rating is old scale (0-5) or new scale (0-10)
+    final displayScore = rating <= 5 ? rating * 2 : rating;
+    final label = (displayScore % 1 == 0) ? displayScore.toStringAsFixed(0) : displayScore.toStringAsFixed(1);
 
     Color badgeColor;
-    if (score < 4) {
+    if (displayScore < 4) {
       badgeColor = Colors.red[700] ?? Colors.red;
-    } else if (score < 7) {
+    } else if (displayScore < 7) {
       badgeColor = Colors.amber[800] ?? Colors.amber;
     } else {
       badgeColor = Colors.green[700] ?? Colors.green;
@@ -148,7 +146,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
-    _notesController.dispose();
     _mapsUrlController.dispose();
     _websiteUrlController.dispose();
     _ratingController.dispose();
@@ -210,7 +207,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
         final updated = widget.existingItem!.copyWith(
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
-          notes: _notesController.text.trim(),
           googleMapsUrl: finalMapsUrl,
           websiteUrl: _websiteUrlController.text.trim().isNotEmpty ? _websiteUrlController.text.trim() : null,
           rating: _rating,
@@ -237,7 +233,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
           userName: widget.userName,
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null,
-          notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
           googleMapsUrl: finalMapsUrl,
           websiteUrl: _websiteUrlController.text.trim().isNotEmpty ? _websiteUrlController.text.trim() : null,
           rating: _rating,
@@ -525,11 +520,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
                           onChanged: _setRatingFromText,
                           onEditingComplete: () {
                             _setRatingFromText(_ratingController.text);
-                            final score = (_rating.clamp(0, 5) * 2).toDouble();
-                            _ratingController.text = score > 0
-                                ? ((score % 1 == 0)
-                                    ? score.toStringAsFixed(0)
-                                    : score.toStringAsFixed(1))
+                            _ratingController.text = _rating > 0
+                                ? ((_rating % 1 == 0)
+                                    ? _rating.toStringAsFixed(0)
+                                    : _rating.toStringAsFixed(1))
                                 : '';
                             FocusScope.of(context).unfocus();
                           },
@@ -549,19 +543,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     controller: _descriptionController,
                     decoration: const InputDecoration(
                       hintText: 'Brief description of the item',
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Notes (Optional)',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _notesController,
-                    decoration: const InputDecoration(
-                      hintText: 'Personal notes (tips, experiences, etc.)',
                     ),
                     maxLines: 3,
                   ),

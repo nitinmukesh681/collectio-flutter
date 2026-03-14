@@ -20,7 +20,6 @@ class CollectionItemEntity {
   final String? description;
   final double rating;
   final List<String> imageUrls;
-  final String? notes;
   final String? googleMapsUrl;
   final String? websiteUrl;
   final int order;
@@ -39,7 +38,6 @@ class CollectionItemEntity {
     this.description,
     this.rating = 0.0,
     this.imageUrls = const [],
-    this.notes,
     this.googleMapsUrl,
     this.websiteUrl,
     this.order = 0,
@@ -62,7 +60,6 @@ class CollectionItemEntity {
       description: map['description'],
       rating: (map['rating'] ?? 0).toDouble(),
       imageUrls: List<String>.from(map['imageUrls'] ?? []),
-      notes: map['notes'],
       googleMapsUrl: map['googleMapsUrl'],
       websiteUrl: map['websiteUrl'],
       order: map['order'] ?? 0,
@@ -83,7 +80,6 @@ class CollectionItemEntity {
       'description': description,
       'rating': rating,
       'imageUrls': imageUrls,
-      'notes': notes,
       'googleMapsUrl': googleMapsUrl,
       'websiteUrl': websiteUrl,
       'order': order,
@@ -103,7 +99,6 @@ class CollectionItemEntity {
     String? description,
     double? rating,
     List<String>? imageUrls,
-    String? notes,
     String? googleMapsUrl,
     String? websiteUrl,
     int? order,
@@ -122,7 +117,6 @@ class CollectionItemEntity {
       description: description ?? this.description,
       rating: rating ?? this.rating,
       imageUrls: imageUrls ?? this.imageUrls,
-      notes: notes ?? this.notes,
       googleMapsUrl: googleMapsUrl ?? this.googleMapsUrl,
       websiteUrl: websiteUrl ?? this.websiteUrl,
       order: order ?? this.order,
