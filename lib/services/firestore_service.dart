@@ -837,6 +837,18 @@ class FirestoreService {
     }
   }
 
+  /// Reorder items in a collection
+  Future<void> reorderItems(String collectionId, List<CollectionItemEntity> items) async {
+    final batch = _firestore.batch();
+    for (int i = 0; i < items.length; i++) {
+      batch.update(_collectionItemsRef.doc(items[i].id), {
+        'order': i,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
   /// Duplicate a collection with all its items
   Future<String> duplicateCollection({
     required String originalCollectionId,
@@ -1274,4 +1286,3 @@ class FirestoreService {
     }
   }
 }
-

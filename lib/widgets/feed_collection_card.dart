@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
 import '../services/firestore_service.dart';
@@ -547,9 +548,10 @@ class FeedCollectionCard extends StatelessWidget {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(right: 10),
-                        child: Text(
+                        child: Builder(
+                        builder: (context) => Text(
                           item.title,
-                          style: const TextStyle(
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w800,
                             fontSize: 13,
                             color: AppColors.textPrimary,
@@ -559,6 +561,7 @@ class FeedCollectionCard extends StatelessWidget {
                           softWrap: false,
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ),
                       ),
                     ),
                     if (item.rating > 0) ...[

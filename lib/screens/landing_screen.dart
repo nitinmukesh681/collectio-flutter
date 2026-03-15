@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
@@ -9,79 +10,72 @@ class LandingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FF), // Very light purple/white
+      backgroundColor: const Color(0xFFF9F9FF),
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 16),
-            // Header Logo
+            const SizedBox(height: 20),
+            // Modern Logo
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.bubble_chart, color: AppColors.primaryPurple, size: 28),
-                const SizedBox(width: 8),
-                const Text(
+                _buildLogoIcon(),
+                const SizedBox(width: 10),
+                Text(
                   'finds',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A2E), // Dark Navy
-                    letterSpacing: -0.5,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF1A1A2E),
+                    letterSpacing: -1,
                   ),
                 ),
               ],
             ),
             
-            const SizedBox(height: 32),
+            const Spacer(flex: 1),
             
-            // Image Masonry Grid (Expanded to fill available space)
-            Expanded(
-              flex: 4,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+            // Refined Masonry-style Grid
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.42,
                 child: Row(
                   children: [
-                    // Column 1
                     Expanded(
                       child: Column(
                         children: [
-                          // Ocean Image (Tall)
                           Expanded(
-                            flex: 3,
+                            flex: 5,
                             child: _buildImageCard(
-                              'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&q=80',
+                              'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?w=500&q=80',
                             ),
                           ),
                           const SizedBox(height: 16),
-                          // Avocado Toast (Short)
                           Expanded(
-                            flex: 2,
+                            flex: 4,
                             child: _buildImageCard(
-                              'https://images.unsplash.com/photo-1588137372308-15f75323a675?w=500&q=80',
+                              'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Column 2
                     Expanded(
                       child: Column(
                         children: [
-                          // Books (Square/Short)
                           Expanded(
-                            flex: 2,
+                            flex: 4,
                             child: _buildImageCard(
-                              'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=500&q=80',
-                              color: const Color(0xFFEBCBB1), // Beige background placeholder if needed
+                              'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=500&q=80',
                             ),
                           ),
                           const SizedBox(height: 16),
-                          // Vintage Camera (Tall)
                           Expanded(
-                            flex: 3,
+                            flex: 5,
                             child: _buildImageCard(
-                              'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=500&q=80',
+                              'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=500&q=80',
                             ),
                           ),
                         ],
@@ -92,77 +86,77 @@ class LandingScreen extends StatelessWidget {
               ),
             ),
             
-            const SizedBox(height: 48),
+            const Spacer(flex: 1),
             
-            // Text Content
+            // High-Impact Typography
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Column(
                 children: [
                   RichText(
                     textAlign: TextAlign.center,
                     text: TextSpan(
-                      style: const TextStyle(
-                        fontSize: 36,
-                        height: 1.1,
-                        color: Color(0xFF1A1A2E),
-                        fontFamily: '.SF Pro Display', // System font attempt
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 42,
+                        height: 1.2, // Increased line height to prevent cropping
+                        color: const Color(0xFF1A1A2E),
                         fontWeight: FontWeight.w800,
                       ),
                       children: [
                         const TextSpan(text: 'curate\n'),
-                        WidgetSpan(
-                          child: ShaderMask(
-                            shaderCallback: (bounds) => const LinearGradient(
-                              colors: [Color(0xFF836FFF), Color(0xFFFF69B4)], // Purple to Pink
-                            ).createShader(bounds),
-                            child: const Text(
-                              'everything',
-                              style: TextStyle(
-                                fontSize: 36,
-                                height: 1.1,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white, // Required for ShaderMask
-                              ),
-                            ),
+                        TextSpan(
+                          text: 'everything',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 42,
+                            fontWeight: FontWeight.w800,
+                            foreground: Paint()
+                              ..shader = const LinearGradient(
+                                colors: [AppColors.primaryPurple, Color(0xFFA78BFA)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ).createShader(const Rect.fromLTWH(0.0, 0.0, 250.0, 70.0)),
                           ),
                         ),
                         const TextSpan(text: '\nyou love.'),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   Text(
                     'Your personal collection of places,\nmedia, and hidden gems.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
-                      color: AppColors.textSecondary,
-                      height: 1.4,
+                      color: const Color(0xFF6B7280),
+                      fontWeight: FontWeight.w500,
+                      height: 1.5,
                     ),
                   ),
                 ],
               ),
             ),
             
-            const SizedBox(height: 40),
+            const Spacer(flex: 1),
             
-            // CTA Button
+            // Modern CTA Button
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Container(
-                height: 56,
+                width: double.infinity,
+                height: 64,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(32),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF836FFF).withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                      color: AppColors.primaryPurple.withOpacity(0.35),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     ),
                   ],
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF836FFF), Color(0xFF9D84FF)],
+                    colors: [AppColors.primaryPurple, Color(0xFF9D84FF)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
                   ),
                 ),
                 child: Material(
@@ -174,21 +168,21 @@ class LandingScreen extends StatelessWidget {
                         MaterialPageRoute(builder: (_) => const LoginScreen()),
                       );
                     },
-                    borderRadius: BorderRadius.circular(30),
-                    child: const Center(
+                    borderRadius: BorderRadius.circular(32),
+                    child: Center(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             'Start Collecting',
-                            style: TextStyle(
+                            style: GoogleFonts.plusJakartaSans(
                               color: Colors.white,
                               fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          SizedBox(width: 8),
-                          Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                          const SizedBox(width: 12),
+                          const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 22),
                         ],
                       ),
                     ),
@@ -197,59 +191,62 @@ class LandingScreen extends StatelessWidget {
               ),
             ),
             
-            const Spacer(),
-            
-            // Page Indicator (Dots)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildDot(false),
-                _buildDot(true),
-                _buildDot(false),
-              ],
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildImageCard(String imageUrl, {Color? color}) {
+  Widget _buildLogoIcon() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppColors.primaryPurple.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const Icon(Icons.auto_awesome_motion_rounded, color: AppColors.primaryPurple, size: 24),
+      ],
+    );
+  }
+
+  Widget _buildImageCard(String imageUrl) {
     return Container(
       decoration: BoxDecoration(
-        color: color ?? const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         child: CachedNetworkImage(
           imageUrl: imageUrl,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          placeholder: (context, url) => Container(color: const Color(0xFFF1F5F9)),
-          errorWidget: (context, url, error) => const Icon(Icons.error),
+          placeholder: (context, url) => Container(
+            color: const Color(0xFFF1F5F9),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryPurple),
+              ),
+            ),
+          ),
+          errorWidget: (context, url, error) => const Icon(Icons.image_outlined, color: Colors.grey),
         ),
-      ),
-    );
-  }
-
-  Widget _buildDot(bool isActive) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isActive ? const Color(0xFF836FFF) : const Color(0xFFE5E7EB),
       ),
     );
   }
