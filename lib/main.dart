@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import 'dart:io';
 import 'providers/auth_provider.dart';
@@ -70,11 +71,16 @@ class CollectioApp extends StatelessWidget {
         themeMode: ThemeMode.system,
         builder: (context, child) {
           final mq = MediaQuery.of(context);
-          return MediaQuery(
-            data: mq.copyWith(
-              textScaler: const TextScaler.linear(0.9),
+          return DefaultTextStyle(
+            style: GoogleFonts.poppins().copyWith(
+              color: Theme.of(context).colorScheme.onBackground,
             ),
-            child: child ?? const SizedBox.shrink(),
+            child: MediaQuery(
+              data: mq.copyWith(
+                textScaler: const TextScaler.linear(0.9),
+              ),
+              child: child ?? const SizedBox.shrink(),
+            ),
           );
         },
         home: const AuthGate(),

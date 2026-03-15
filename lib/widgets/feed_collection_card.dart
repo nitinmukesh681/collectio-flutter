@@ -550,7 +550,7 @@ class FeedCollectionCard extends StatelessWidget {
                         child: Text(
                           item.title,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
                             fontSize: 13,
                             color: AppColors.textPrimary,
                             height: 1.2,
