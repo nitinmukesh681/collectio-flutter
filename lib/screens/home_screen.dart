@@ -165,9 +165,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             const SizedBox(width: 10),
-                            const Text(
+                            Text(
                               'finds',
-                              style: TextStyle(
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.textPrimary,
@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 14),
                         Text(
                           'Welcome Back, $userName',
-                          style: const TextStyle(
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                             color: Colors.black,
@@ -187,9 +187,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             letterSpacing: -0.5,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'Ready to curate?',
-                          style: TextStyle(
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                             color: AppColors.primaryPurple,
@@ -209,9 +209,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
+                            Text(
                               'Open Collaborations',
-                              style: TextStyle(
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -225,11 +225,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 );
                               },
-                              child: const Row(
+                              child: Row(
                                 children: [
                                   Text(
                                     'See All',
-                                    style: TextStyle(color: AppColors.primaryPurple),
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.primaryPurple),
                                   ),
                                   Icon(Icons.arrow_forward, size: 16, color: AppColors.primaryPurple),
                                 ],
@@ -260,19 +260,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
 
                   // 3. Main Feed Section Title
-                  const SliverToBoxAdapter(
+                  SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Row(
                         children: [
                           Text(
                             'Your Feed',
-                            style: TextStyle(
+                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           SizedBox(
                             width: 6,
                             height: 6,
@@ -303,9 +303,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             const Icon(Icons.feed_outlined, size: 64, color: AppColors.textMuted),
                             const SizedBox(height: 16),
-                            const Text(
+                            Text(
                               'Your feed is empty',
-                              style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
@@ -458,26 +458,11 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIcon: Icon(Icons.explore, color: AppColors.primaryPurple),
             label: 'Explore',
           ),
-          // Custom middle button visual
-           NavigationDestination(
-             icon: Container(
-               width: 48,
-               height: 48,
-               decoration: const BoxDecoration(
-                 color: AppColors.primaryPurple,
-                 shape: BoxShape.circle,
-                 boxShadow: [
-                    BoxShadow(
-                      color: Color(0x666B4EFF),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                 ]
-               ),
-               child: const Icon(Icons.add, color: Colors.white),
-             ),
-             label: 'Create',
-           ),
+          const NavigationDestination(
+            icon: Icon(Icons.add_circle_outline),
+            selectedIcon: Icon(Icons.add_circle, color: AppColors.primaryPurple),
+            label: 'Create',
+          ),
           NavigationDestination(
             icon: StreamBuilder<int>(
               stream: _firestoreService.getUnreadNotificationCount(auth.userId),
