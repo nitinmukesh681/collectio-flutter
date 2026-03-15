@@ -25,6 +25,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  final _profileKey = ProfileScreenKey();
   int _selectedIndex = 0;
 
   final Set<String> _savedCollectionIds = {};
@@ -386,6 +387,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                 try {
                                   await _firestoreService.toggleCollectionSave(collection.id, auth.userId);
+                                  // Keep AuthProvider in sync so next load of home screen shows correct state
+                                  if (mounted) await auth.refreshUser();
                                 } catch (e) {
                                   // Revert UI
                                   if (mounted) {
@@ -422,7 +425,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ExploreScreen(currentUserId: auth.userId),
             _buildCreateTab(auth),
             NotificationsScreen(userId: auth.userId),
-            const ProfileScreen(),
+            ProfileScreen(key: _profileKey),
           ],
         ),
       ),
@@ -438,6 +441,10 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _selectedIndex = index;
             });
+            // Refresh profile data when switching to profile tab
+            if (index == 4) {
+              _profileKey.reload();
+            }
           }
         },
         destinations: [

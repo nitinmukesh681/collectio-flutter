@@ -4,7 +4,7 @@ import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_grid_card.dart';
+import 'explore_screen.dart';
 import 'collection_detail_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {

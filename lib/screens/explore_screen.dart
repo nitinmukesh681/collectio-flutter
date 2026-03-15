@@ -9,7 +9,6 @@ import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/collection_card.dart';
-import '../widgets/collection_grid_card.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
@@ -1656,12 +1655,12 @@ class _CategoryCollectionsScreen extends StatelessWidget {
   }
 }
 
-class _CategoryCollectionCard extends StatelessWidget {
+class CollectionGridCard extends StatelessWidget {
   final CollectionEntity collection;
   final VoidCallback onTap;
   final VoidCallback? onUserTap;
 
-  const _CategoryCollectionCard({required this.collection, required this.onTap, this.onUserTap});
+  const CollectionGridCard({required this.collection, required this.onTap, this.onUserTap});
 
   Future<String?> _resolveCoverUrl() async {
     final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)

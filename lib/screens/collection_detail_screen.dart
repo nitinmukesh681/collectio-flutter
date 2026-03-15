@@ -152,6 +152,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           setState(() {
             _collection = collection.copyWith(
               isLiked: collection.likedBy.contains(widget.currentUserId),
+              isSaved: collection.savedBy.contains(widget.currentUserId),
             );
             _isOwner = isOwner;
             _isFollowing = isFollowing;

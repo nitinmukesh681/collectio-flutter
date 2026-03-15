@@ -6,7 +6,7 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/collection_card.dart';
-import '../widgets/collection_grid_card.dart';
+import 'explore_screen.dart';
 import 'collection_detail_screen.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
@@ -17,6 +17,12 @@ class ProfileScreen extends StatefulWidget {
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+// Allow parent widget (HomeScreen) to trigger a data reload
+class ProfileScreenKey extends GlobalKey<_ProfileScreenState> {
+  const ProfileScreenKey() : super.constructor();
+  void reload() => currentState?._loadData();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
@@ -35,6 +41,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadData();
+    // Reload saved collections whenever the user switches to the Saved tab
+    _tabController.addListener(() {
+      if (_tabController.index == 1 && !_tabController.indexIsChanging) {
+        _loadSavedCollections();
+      }
+    });
   }
 
   @override
@@ -61,6 +73,23 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       debugPrint('Error loading profile data: $e');
     }
     setState(() => _isLoading = false);
+  }
+
+  /// Public method so HomeScreen can trigger a full refresh when profile tab is selected
+  void reload() => _loadData();
+
+  /// Lightweight reload of just the saved collections (called on tab switch)
+  Future<void> _loadSavedCollections() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.userEntity == null) return;
+    try {
+      final savedCollections = await _firestoreService.getSavedCollections(auth.userId);
+      if (mounted) {
+        setState(() => _savedCollections = savedCollections);
+      }
+    } catch (e) {
+      debugPrint('Error reloading saved collections: $e');
+    }
   }
 
   void _navigateToSettings() {

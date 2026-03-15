@@ -239,6 +239,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Refresh the user entity from Firestore (e.g. after save/unsave)
+  Future<void> refreshUser() async {
+    await _loadUserEntity();
+  }
+
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
