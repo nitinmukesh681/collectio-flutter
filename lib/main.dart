@@ -71,16 +71,11 @@ class CollectioApp extends StatelessWidget {
         themeMode: ThemeMode.system,
         builder: (context, child) {
           final mq = MediaQuery.of(context);
-          return DefaultTextStyle(
-            style: GoogleFonts.poppins().copyWith(
-              color: Theme.of(context).colorScheme.onBackground,
+          return MediaQuery(
+            data: mq.copyWith(
+              textScaler: const TextScaler.linear(0.9),
             ),
-            child: MediaQuery(
-              data: mq.copyWith(
-                textScaler: const TextScaler.linear(0.9),
-              ),
-              child: child ?? const SizedBox.shrink(),
-            ),
+            child: child ?? const SizedBox.shrink(),
           );
         },
         home: const AuthGate(),
@@ -270,7 +265,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 }
 
-/// Email verification screen placeholder
+/// Redesigned Email verification screen
 class EmailVerificationScreen extends StatelessWidget {
   const EmailVerificationScreen({super.key});
 
@@ -279,43 +274,131 @@ class EmailVerificationScreen extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     
     return Scaffold(
+      backgroundColor: const Color(0xFFF9F9FF),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A2E), size: 20),
+          onPressed: () => auth.signOut(),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.email_outlined, size: 80, color: Colors.purple),
-              const SizedBox(height: 24),
-              const Text(
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryPurple.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.mark_email_read_rounded, 
+                  color: AppColors.primaryPurple, 
+                  size: 64
+                ),
+              ),
+              const SizedBox(height: 40),
+              Text(
                 'Verify Your Email',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1A1A2E),
+                ),
               ),
               const SizedBox(height: 16),
-              Text(
-                'We sent a verification link to ${auth.firebaseUser?.email}',
+              RichText(
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                text: TextSpan(
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16,
+                    color: const Color(0xFF6B7280),
+                    height: 1.5,
+                  ),
+                  children: [
+                    const TextSpan(text: 'We sent a verification link to\n'),
+                    TextSpan(
+                      text: auth.firebaseUser?.email ?? '',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () async {
-                  final verified = await auth.checkEmailVerified();
-                  if (!verified && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Email not yet verified')),
-                    );
-                  }
-                },
-                child: const Text('I\'ve Verified'),
+              const SizedBox(height: 48),
+              
+              // Action Buttons
+              Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primaryPurple, Color(0xFF9D84FF)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryPurple.withOpacity(0.3),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final verified = await auth.checkEmailVerified();
+                    if (!verified && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Email not yet verified. Please check your inbox.'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  child: Text(
+                    "I've Verified",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
               ),
+              const SizedBox(height: 20),
               TextButton(
                 onPressed: () => auth.resendEmailVerification(),
-                child: const Text('Resend Email'),
+                child: Text(
+                  'Resend Email',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.primaryPurple,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
               ),
-              TextButton(
+              const SizedBox(height: 40),
+              TextButton.icon(
                 onPressed: () => auth.signOut(),
-                child: const Text('Sign Out'),
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: Text(
+                  'Sign Out',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF6B7280),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -325,7 +408,7 @@ class EmailVerificationScreen extends StatelessWidget {
   }
 }
 
-/// Username setup screen placeholder
+/// Redesigned Username setup screen
 class UsernameScreen extends StatefulWidget {
   const UsernameScreen({super.key});
 
@@ -341,29 +424,95 @@ class _UsernameScreenState extends State<UsernameScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF9F9FF),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.person_outline, size: 80, color: Colors.purple),
-              const SizedBox(height: 24),
-              const Text(
-                'Choose a Username',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 32),
-              TextField(
-                controller: _controller,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  hintText: 'Enter your username',
+              const SizedBox(height: 40),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryPurple.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.face_retouching_natural_rounded, 
+                    color: AppColors.primaryPurple, 
+                    size: 64
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
+              const SizedBox(height: 40),
+              Text(
+                'Almost Ready!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Choose a unique username to start sharing your collections.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  color: const Color(0xFF6B7280),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 48),
+              
+              Text(
+                'Username',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _controller,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'e.g. creative_curator',
+                  prefixIcon: const Icon(Icons.alternate_email_rounded, size: 20),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+              Container(
+                height: 60,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primaryPurple, Color(0xFF9D84FF)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryPurple.withOpacity(0.3),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
                 child: ElevatedButton(
                   onPressed: auth.isLoading
                       ? null
@@ -372,9 +521,25 @@ class _UsernameScreenState extends State<UsernameScreen> {
                             await auth.setUsername(_controller.text.trim());
                           }
                         },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
                   child: auth.isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Continue'),
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                        )
+                      : Text(
+                          'Continue',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
             ],

@@ -58,6 +58,7 @@ class AuthProvider extends ChangeNotifier {
           await _loadUserEntity();
         } else {
           _userEntity = null;
+          _needsUsername = false;
         }
         notifyListeners();
       });
@@ -134,16 +135,28 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Sign up with email and password
-  Future<bool> signUpWithEmail(String email, String password) async {
-    if (_authService == null) return false;
+  /// Sign up with email and password, optional username
+  Future<bool> signUpWithEmail(String email, String password, {String? username}) async {
+    if (_authService == null || _firestoreService == null) return false;
     _setLoading(true);
     _error = null;
     try {
-      await _authService!.createUserWithEmailAndPassword(
+      final userCredential = await _authService!.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+      
+      if (userCredential.user != null && username != null && username.trim().isNotEmpty) {
+        final newUser = UserEntity(
+          id: userCredential.user!.uid,
+          email: email,
+          username: username.trim(),
+        );
+        await _firestoreService!.saveUser(newUser);
+        _userEntity = newUser;
+        _needsUsername = false;
+      }
+
       await _authService!.sendEmailVerification();
       _setLoading(false);
       return true;

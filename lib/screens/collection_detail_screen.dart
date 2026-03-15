@@ -73,7 +73,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star_rounded, size: fontSize, color: badgeColor),
+          Icon(Icons.star, size: fontSize, color: badgeColor),
           const SizedBox(width: 4),
           Text(
             label,
@@ -203,6 +203,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         final rawOwnerAvatar = collection.userAvatarUrl;
 
         Widget buildAvatar({required String name, required String? avatarUrl}) {
+          final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
           return ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
@@ -217,10 +218,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       color: AppColors.primaryPurple.withOpacity(0.2),
                       alignment: Alignment.center,
                       child: Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        initials,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
                           color: AppColors.primaryPurple,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -230,10 +232,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       color: AppColors.primaryPurple.withOpacity(0.2),
                       alignment: Alignment.center,
                       child: Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        initials,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
                           color: AppColors.primaryPurple,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -244,10 +247,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     color: AppColors.primaryPurple.withOpacity(0.2),
                     alignment: Alignment.center,
                     child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      initials,
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
                         color: AppColors.primaryPurple,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
                       ),
                     ),
                   ),
@@ -261,9 +265,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               leading: buildAvatar(name: ownerName, avatarUrl: null),
               title: Text(
                 '@$ownerName',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text('Owner'),
+              subtitle: Text('Owner', style: Theme.of(context).textTheme.bodySmall),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -286,9 +290,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               leading: buildAvatar(name: ownerName, avatarUrl: trimmed),
               title: Text(
                 '@$ownerName',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text('Owner'),
+              subtitle: Text('Owner', style: Theme.of(context).textTheme.bodySmall),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -313,9 +317,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 leading: buildAvatar(name: ownerName, avatarUrl: resolved),
                 title: Text(
                   '@$ownerName',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                subtitle: const Text('Owner'),
+                subtitle: Text('Owner', style: Theme.of(context).textTheme.bodySmall),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
@@ -340,9 +344,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Contributors',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -361,7 +365,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         leading: buildAvatar(name: name, avatarUrl: avatarUrl),
                         title: Text(
                           '@$name',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         onTap: () {
                           Navigator.pop(context);
@@ -736,7 +740,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   }
 
   Future<void> _toggleItemLike(CollectionItemEntity item) async {
-    final isLiked = item.likedBy.contains(widget.currentUserId);
     try {
       await _firestoreService.toggleItemLike(item.id, widget.currentUserId);
     } catch (e) {
@@ -767,6 +770,35 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     }).toList();
   }
 
+  void _showDeleteDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Collection?'),
+        content: const Text('This will permanently delete the collection and all its items.'),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+            onPressed: () async {
+              Navigator.pop(context);
+              await _firestoreService.deleteCollection(
+                widget.collectionId,
+                widget.currentUserId,
+              );
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -779,7 +811,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: const Icon(Icons.keyboard_arrow_left),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -845,13 +877,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             expandedHeight: hasCoverImage ? 260 : kToolbarHeight,
             pinned: true,
             backgroundColor: hasCoverImage ? Colors.transparent : Colors.white,
-            leading: _buildCircleButton(
-              icon: Icons.arrow_back,
-              onTap: () => Navigator.pop(context),
+            leadingWidth: 56,
+            leading: Center(
+              child: _buildCircleButton(
+                icon: Icons.keyboard_arrow_left,
+                onTap: () => Navigator.pop(context),
+              ),
             ),
             actions: [
               _buildCircleButton(
-                icon: Icons.search,
+                icon: Icons.search_rounded,
                 onTap: () {
                   setState(() {
                     _showSearch = !_showSearch;
@@ -860,37 +895,49 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 },
               ),
               _buildCircleButton(
-                icon: Icons.share_outlined,
+                icon: Icons.share,
                 onTap: _shareCollection,
               ),
-              PopupMenuButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
-                    shape: BoxShape.circle,
+              Theme(
+                data: Theme.of(context).copyWith(
+                  iconButtonTheme: IconButtonThemeData(
+                    style: IconButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 40),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                  child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
                 ),
-                itemBuilder: (context) => [
-                  if (_isOwner)
-                    const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
-                  if (_isOwner)
-                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  if (!_isOwner)
-                    const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
-                ],
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    _navigateToEditCollection();
-                  } else if (value == 'delete') {
-                    _showDeleteDialog();
-                  } else if (value == 'add_to_new') {
-                    _duplicateCollection();
-                  }
-                },
+                child: PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  icon: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                  ),
+                  itemBuilder: (context) => [
+                    if (_isOwner)
+                      const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
+                    if (_isOwner)
+                      const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    if (!_isOwner)
+                      const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
+                  ],
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _navigateToEditCollection();
+                    } else if (value == 'delete') {
+                      _showDeleteDialog();
+                    } else if (value == 'add_to_new') {
+                      _duplicateCollection();
+                    }
+                  },
+                ),
               ),
-
               const SizedBox(width: 8),
             ],
             flexibleSpace: hasCoverImage
@@ -982,11 +1029,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           // Collection info
           SliverToBoxAdapter(
             child: Container(
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: hasCoverImage
-                    ? BorderRadius.zero
-                    : BorderRadius.zero,
+                borderRadius: BorderRadius.zero,
               ),
               padding: EdgeInsets.fromLTRB(18, hasCoverImage ? 2 : 10, 18, 8),
               child: Column(
@@ -1017,17 +1062,17 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                                   future: resolveOwnerAvatarUrl(),
                                   builder: (context, snap) {
                                     final url = snap.data;
+                                    final initials = collection.userName.isNotEmpty ? collection.userName[0].toUpperCase() : '?';
                                     if (url == null || url.isEmpty) {
                                       return Container(
                                         color: AppColors.primaryPurple.withOpacity(0.2),
                                         alignment: Alignment.center,
                                         child: Text(
-                                          collection.userName.isNotEmpty
-                                              ? collection.userName[0].toUpperCase()
-                                              : '?',
+                                          initials,
                                           style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
                                             color: AppColors.primaryPurple,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
                                           ),
                                         ),
                                       );
@@ -1041,12 +1086,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                                           color: AppColors.primaryPurple.withOpacity(0.2),
                                           alignment: Alignment.center,
                                           child: Text(
-                                            collection.userName.isNotEmpty
-                                                ? collection.userName[0].toUpperCase()
-                                                : '?',
+                                            initials,
                                             style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
                                               color: AppColors.primaryPurple,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
                                             ),
                                           ),
                                         );
@@ -1077,7 +1121,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                                       },
                                       child: Text(
                                         '@${collection.userName}',
-                                        style: const TextStyle(
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                           fontWeight: FontWeight.w800,
                                           fontSize: 14,
                                           color: AppColors.textPrimary,
@@ -1093,7 +1137,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           child: Text(
                                             '+ ${_contributorUsers.length} others',
-                                            style: const TextStyle(
+                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                               fontWeight: FontWeight.w700,
                                               fontSize: 13,
                                               color: AppColors.primaryPurple,
@@ -1106,7 +1150,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                                 ),
                                 Text(
                                   _getTimeAgo(collection.createdAt),
-                                  style: const TextStyle(
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     fontSize: 12,
                                     color: Colors.black87,
                                   ),
@@ -1132,7 +1176,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                           ),
                           child: Text(
                             _isFollowing ? 'Following' : 'Follow',
-                            style: const TextStyle(
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: AppColors.primaryPurple,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1145,7 +1189,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                   // Title
                   Text(
                     collection.title,
-                    style: const TextStyle(
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1156,7 +1200,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     const SizedBox(height: 10),
                     Text(
                       collection.description!,
-                      style: const TextStyle(
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontSize: 15,
                         color: Colors.black87,
                       ),
@@ -1178,7 +1222,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                               ),
                               child: Text(
                                 '#${tag.toLowerCase()}',
-                                style: const TextStyle(
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: AppColors.primaryPurple,
                                   fontSize: 12,
                                 ),
@@ -1191,9 +1235,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                               color: AppColors.primaryPurpleDark,
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text(
+                            child: Text(
                               'OPEN',
-                              style: TextStyle(
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -1208,11 +1252,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      _buildStatChip(Icons.favorite, '${collection.likes} likes', AppColors.heartSalmon),
+                      _buildStatChip(Icons.favorite_rounded, '${collection.likes} likes', AppColors.heartSalmon),
                       const SizedBox(width: 18),
-                      _buildStatChip(Icons.inventory_2_outlined, '${collection.itemCount} items', Colors.black87),
+                      _buildStatChip(Icons.grid_view_rounded, '${collection.itemCount} items', Colors.black87),
                       const SizedBox(width: 18),
-                      _buildStatChip(Icons.public, collection.isPublic ? 'Public' : 'Private', Colors.black87),
+                      _buildStatChip(Icons.public_rounded, collection.isPublic ? 'Public' : 'Private', Colors.black87),
                       const Spacer(),
                       if ((collection.websiteUrl ?? '').trim().isNotEmpty) ...[
                         InkWell(
@@ -1237,7 +1281,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                           },
                           child: const Padding(
                             padding: EdgeInsets.all(6),
-                            child: Icon(Icons.link, size: 18, color: Colors.black87),
+                            child: Icon(Icons.link_rounded, size: 18, color: Colors.black87),
                           ),
                         ),
                       ],
@@ -1262,7 +1306,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                           },
                           child: const Padding(
                             padding: EdgeInsets.all(6),
-                            child: Icon(Icons.location_on_outlined, size: 18, color: Colors.black87),
+                            child: Icon(Icons.location_on_rounded, size: 18, color: Colors.black87),
                           ),
                         ),
                       ],
@@ -1283,9 +1327,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                   autofocus: true,
                   decoration: InputDecoration(
                     hintText: 'Search items...',
-                    prefixIcon: const Icon(Icons.search),
+                    prefixIcon: const Icon(Icons.search_rounded),
                     suffixIcon: IconButton(
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(Icons.close_rounded),
                       onPressed: () {
                         setState(() {
                           _showSearch = false;
@@ -1306,7 +1350,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               ),
             ),
 
-          // Items header
           // Items list
           StreamBuilder<List<CollectionItemEntity>>(
             stream: _firestoreService.getCollectionItems(widget.collectionId),
@@ -1318,16 +1361,17 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               final items = _filteredItems;
 
               if (items.isEmpty) {
-                return const SliverFillRemaining(
+                return SliverFillRemaining(
+                  hasScrollBody: false,
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.inbox_outlined, size: 64, color: AppColors.textMuted),
-                        SizedBox(height: 16),
+                        const Icon(Icons.inventory_2_rounded, size: 64, color: AppColors.textMuted),
+                        const SizedBox(height: 16),
                         Text(
                           'No items yet',
-                          style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -1364,20 +1408,20 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               child: OutlinedButton.icon(
                 onPressed: _toggleLike,
                 icon: Icon(
-                  collection.isLiked ? Icons.favorite : Icons.favorite_border,
+                  collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                   color: collection.isLiked ? AppColors.heartSalmon : Colors.black,
                   size: 18,
                 ),
                 label: const Text('Like'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(22),
                   ),
                   side: const BorderSide(color: Color(0xFFE5E7EB)),
                   foregroundColor: Colors.black87,
                   backgroundColor: Colors.white,
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ),
             ),
@@ -1386,60 +1430,56 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               child: OutlinedButton.icon(
                 onPressed: _toggleSave,
                 icon: Icon(
-                  collection.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                  collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
                   color: collection.isSaved ? AppColors.primaryPurple : Colors.black,
                   size: 18,
                 ),
                 label: const Text('Save'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(22),
                   ),
                   side: const BorderSide(color: Color(0xFFE5E7EB)),
                   foregroundColor: Colors.black87,
                   backgroundColor: Colors.white,
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: ElevatedButton(
+              child: ElevatedButton.icon(
                 onPressed: _duplicateCollection,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.copy, size: 18),
-                    const SizedBox(width: 8),
-                    const Text('Copy'),
-                  ],
-                ),
+                icon: const Icon(Icons.copy_all_rounded, size: 18),
+                label: const Text('Copy'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPurple,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(22),
                   ),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ),
             ),
             if (_isOwner || collection.isOpenForContribution) ...[
               const SizedBox(width: 12),
-              SizedBox(
-                width: 52,
-                child: ElevatedButton(
+              Expanded(
+                child: OutlinedButton.icon(
                   onPressed: () => _navigateToAddItem(),
-                  child: const Icon(Icons.add, size: 22),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    foregroundColor: Colors.white,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add'),
+                  style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(22),
                     ),
+                    side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    foregroundColor: Colors.black87,
+                    backgroundColor: Colors.white,
+                    textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   ),
                 ),
               ),
@@ -1451,18 +1491,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   }
 
   Widget _buildCircleButton({required IconData icon, required VoidCallback onTap}) {
-    return Padding(
-      padding: const EdgeInsets.all(4),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.3),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.white, size: 20),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.3),
+          shape: BoxShape.circle,
         ),
+        child: Icon(icon, color: Colors.white, size: 22),
       ),
     );
   }
@@ -1547,9 +1585,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     padding: const EdgeInsets.only(top: expandedHeaderTopPad, right: 10),
                     child: Text(
                       item.title,
-                      style: const TextStyle(
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: Colors.black,
                         height: 1.2,
                       ),
@@ -1605,36 +1643,36 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     },
                     itemBuilder: (context) => [
                       if ((item.websiteUrl ?? '').trim().isNotEmpty)
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'open_link',
                           child: Row(
                             children: [
-                              const Icon(Icons.link, size: 18, color: Colors.black87),
-                              const SizedBox(width: 10),
-                              const Text('Link'),
+                              Icon(Icons.link_rounded, size: 18, color: Colors.black87),
+                              SizedBox(width: 10),
+                              Text('Link'),
                             ],
                           ),
                         ),
                       if ((item.googleMapsUrl ?? '').trim().isNotEmpty)
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'open_location',
                           child: Row(
                             children: [
-                              const Icon(Icons.location_on_outlined,
+                              Icon(Icons.location_on_rounded,
                                   size: 18, color: Colors.black87),
-                              const SizedBox(width: 10),
-                              const Text('Location'),
+                              SizedBox(width: 10),
+                              Text('Location'),
                             ],
                           ),
                         ),
                       if (canEdit)
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'edit',
                           child: Row(
                             children: [
-                              const Icon(Icons.edit_outlined, size: 18, color: Colors.black87),
-                              const SizedBox(width: 10),
-                              const Text('Edit'),
+                              Icon(Icons.edit_rounded, size: 18, color: Colors.black87),
+                              SizedBox(width: 10),
+                              Text('Edit'),
                             ],
                           ),
                         ),
@@ -1643,24 +1681,24 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                           value: 'delete',
                           child: Row(
                             children: [
-                              Icon(Icons.delete_outline, size: 18, color: Colors.red[700]),
+                              Icon(Icons.delete_rounded, size: 18, color: Colors.red[700]),
                               const SizedBox(width: 10),
                               const Text('Delete'),
                             ],
                           ),
                         ),
-                      PopupMenuItem(
+                      const PopupMenuItem(
                         value: 'add_to_collections',
                         child: Row(
                           children: [
-                            const Icon(Icons.add, size: 18, color: Colors.black87),
-                            const SizedBox(width: 10),
-                            const Text('Add to another collection'),
+                            Icon(Icons.add_rounded, size: 18, color: Colors.black87),
+                            SizedBox(width: 10),
+                            Text('Add to another collection'),
                           ],
                         ),
                       ),
                     ],
-                    child: const Icon(Icons.more_vert, size: 20, color: Colors.black87),
+                    child: const Icon(Icons.more_horiz, size: 20, color: Colors.black87),
                   ),
                 ),
               ],
@@ -1720,7 +1758,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                             errorWidget: (context, _, __) => Container(
                               color: const Color(0xFFF3F4F6),
                               alignment: Alignment.center,
-                              child: Icon(
+                              child: const Icon(
                                 Icons.broken_image_outlined,
                                 color: AppColors.textMuted,
                                 size: 20,
@@ -1736,206 +1774,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  void _showItemDetailsDialog(CollectionItemEntity item, {required int rank}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return SafeArea(
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE5E7EB),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 28,
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$rank',
-                        textAlign: TextAlign.center,
-                        softWrap: false,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primaryPurple,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.black,
-                                height: 1.2,
-                              ),
-                            ),
-                          ),
-                          if (item.rating > 0) ...[
-                            const SizedBox(width: 10),
-                            _buildRatingBadge(item.rating, fontSize: 13),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (item.imageUrls.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 320),
-                      child: PageView.builder(
-                        itemCount: item.imageUrls.length,
-                        itemBuilder: (context, index) {
-                          final url = item.imageUrls[index];
-                          return Container(
-                            color: Colors.white,
-                            alignment: Alignment.center,
-                            child: CachedNetworkImage(
-                              imageUrl: url,
-                              fit: BoxFit.contain,
-                              placeholder: (context, _) => Container(
-                                color: const Color(0xFFF3F4F6),
-                                alignment: Alignment.center,
-                                child: const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              ),
-                              errorWidget: (context, _, __) => Container(
-                                color: const Color(0xFFF3F4F6),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.broken_image_outlined,
-                                  color: AppColors.textMuted,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-                if (item.description != null && item.description!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      child: SelectableText(
-                        item.description!,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black87,
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLinkChip(IconData icon, String label, String url) {
-    return GestureDetector(
-      onTap: () async {
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      },
-      child: Container(
-        padding: label.isEmpty
-            ? const EdgeInsets.all(10)
-            : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: AppColors.primaryPurple),
-            if (label.isNotEmpty) ...[
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.primaryPurple,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showDeleteDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Collection?'),
-        content: const Text('This will permanently delete the collection and all its items.'),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
-            onPressed: () async {
-              Navigator.pop(context);
-              await _firestoreService.deleteCollection(
-                widget.collectionId,
-                widget.currentUserId,
-              );
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
       ),
     );
   }
