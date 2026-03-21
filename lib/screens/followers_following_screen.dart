@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -145,21 +146,56 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
         backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
         child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
             ? ClipOval(
-                child: CachedNetworkImage(
-                  imageUrl: user.avatarUrl!,
-                  fit: BoxFit.cover,
-                  errorWidget: (context, url, error) {
-                    return Center(
-                      child: Text(
-                        user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryPurple,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                child: (user.avatarUrl!.trim().startsWith('gs://')
+                    ? FutureBuilder<String>(
+                        future: FirebaseStorage.instance
+                            .refFromURL(user.avatarUrl!.trim())
+                            .getDownloadURL(),
+                        builder: (context, snap) {
+                          final url = snap.data;
+                          if (url == null || url.isEmpty) {
+                            return Center(
+                              child: Text(
+                                user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryPurple,
+                                ),
+                              ),
+                            );
+                          }
+                          return CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, _, __) {
+                              return Center(
+                                child: Text(
+                                  user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryPurple,
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      )
+                    : CachedNetworkImage(
+                        imageUrl: user.avatarUrl!.trim(),
+                        fit: BoxFit.cover,
+                        errorWidget: (context, _, __) {
+                          return Center(
+                            child: Text(
+                              user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryPurple,
+                              ),
+                            ),
+                          );
+                        },
+                      )),
               )
             : Text(
                 user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',

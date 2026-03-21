@@ -93,6 +93,76 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+    final controller = TextEditingController(text: _emailController.text.trim());
+    final auth = context.read<AuthProvider>();
+    bool isSubmitting = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Reset password'),
+              content: TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  hintText: 'Enter email or username',
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) async {
+                  if (isSubmitting) return;
+                  setState(() => isSubmitting = true);
+                  final ok = await auth.sendPasswordResetForEmailOrUsername(controller.text.trim());
+                  if (mounted) {
+                    setState(() => isSubmitting = false);
+                    if (ok) {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(this.context).showSnackBar(
+                        const SnackBar(content: Text('If an account exists, a reset email has been sent.')),
+                      );
+                    } else if (auth.error != null) {
+                      _showError(auth.error!);
+                    }
+                  }
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setState(() => isSubmitting = true);
+                          final ok = await auth.sendPasswordResetForEmailOrUsername(controller.text.trim());
+                          if (mounted) {
+                            setState(() => isSubmitting = false);
+                            if (ok) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                const SnackBar(content: Text('If an account exists, a reset email has been sent.')),
+                              );
+                            } else if (auth.error != null) {
+                              _showError(auth.error!);
+                            }
+                          }
+                        },
+                  child: isSubmitting
+                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Send'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -212,7 +282,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {}, // TODO: Forgot Password
+                      onPressed: _showForgotPasswordDialog,
                       child: Text(
                         'Forgot Password?',
                         style: GoogleFonts.plusJakartaSans(

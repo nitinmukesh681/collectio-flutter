@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:async';
 import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
@@ -24,6 +26,9 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   
+  StreamSubscription<UserEntity?>? _userSubscription;
+  StreamSubscription<List<CollectionEntity>>? _collectionsSubscription;
+  
   UserEntity? _user;
   List<CollectionEntity> _collections = [];
   bool _isLoading = true;
@@ -33,55 +38,120 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    _setupRealtimeStreams();
   }
 
-  Future<void> _loadUser() async {
+  void _setupRealtimeStreams() {
     setState(() => _isLoading = true);
-    try {
-      final user = await _firestoreService.getUser(widget.userId);
-      final collections = await _firestoreService.getUserCollections(widget.userId);
-      
-      if (user != null) {
-        final isOwnProfile = widget.userId == widget.currentUserId;
-        final visibleCollections = isOwnProfile
-            ? collections
-            : collections.where((c) => c.isPublic).toList(growable: false);
-        setState(() {
-          _user = user;
-          _collections = visibleCollections;
-          _isFollowing = user.followers.contains(widget.currentUserId);
-        });
+    
+    // Setup user stream for real-time updates
+    _userSubscription = _firestoreService.getUserStream(widget.userId).listen(
+      (user) {
+        if (user != null && mounted) {
+          setState(() {
+            _user = user;
+            _isFollowing = user.followers.contains(widget.currentUserId);
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in user stream: $error');
+        if (mounted) setState(() => _isLoading = false);
       }
-    } catch (e) {
-      debugPrint('Error loading user: $e');
-    }
-    setState(() => _isLoading = false);
+    );
+
+    // Setup collections stream for real-time updates
+    _collectionsSubscription = _firestoreService.getUserCollectionsStream(widget.userId).listen(
+      (collections) {
+        if (mounted) {
+          final isOwnProfile = widget.userId == widget.currentUserId;
+          final visibleCollections = isOwnProfile
+              ? collections
+              : collections.where((c) => c.isPublic).toList(growable: false);
+          setState(() {
+            _collections = visibleCollections;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in collections stream: $error');
+      }
+    );
+  }
+
+  @override
+  void dispose() {
+    _userSubscription?.cancel();
+    _collectionsSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _toggleFollow() async {
     if (_user == null) return;
     
-    setState(() => _isFollowLoading = true);
+    final wasFollowing = _isFollowing;
+    
+    // Optimistic update - update UI immediately
+    setState(() {
+      _isFollowLoading = true;
+      _isFollowing = !wasFollowing;
+      
+      // Update user entity optimistically
+      if (_user != null) {
+        if (wasFollowing) {
+          // Unfollow - remove from followers list
+          _user = _user!.copyWith(
+            followers: _user!.followers.where((id) => id != widget.currentUserId).toList(),
+            followerCount: _user!.followerCount - 1,
+          );
+        } else {
+          // Follow - add to followers list
+          _user = _user!.copyWith(
+            followers: [..._user!.followers, widget.currentUserId],
+            followerCount: _user!.followerCount + 1,
+          );
+        }
+      }
+    });
+
     try {
-      if (_isFollowing) {
+      if (wasFollowing) {
         await _firestoreService.unfollowUser(widget.currentUserId, widget.userId);
       } else {
         // We need current username for the notification
-        // Ideally this should be passed to the screen or stored in a UserProvider
-        // For now, fetching it or using a placeholder if we want to be fast, but fetching is safer
         final currentUser = await _firestoreService.getUser(widget.currentUserId);
         final currentUsername = currentUser?.userName ?? 'Someone';
         
         await _firestoreService.followUser(widget.currentUserId, widget.userId, currentUsername);
       }
-
-      // Always reload user so UI counts match the canonical arrays.
-      await _loadUser();
+      // Success - real-time stream will keep data in sync
     } catch (e) {
+      // Revert on error
+      if (mounted && _user != null) {
+        setState(() {
+          _isFollowing = wasFollowing;
+          if (wasFollowing) {
+            // Revert unfollow - add back to followers
+            _user = _user!.copyWith(
+              followers: [..._user!.followers, widget.currentUserId],
+              followerCount: _user!.followerCount + 1,
+            );
+          } else {
+            // Revert follow - remove from followers
+            _user = _user!.copyWith(
+              followers: _user!.followers.where((id) => id != widget.currentUserId).toList(),
+              followerCount: _user!.followerCount - 1,
+            );
+          }
+        });
+      }
       debugPrint('Error toggling follow: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isFollowLoading = false);
+      }
     }
-    setState(() => _isFollowLoading = false);
   }
 
   @override
@@ -149,24 +219,65 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           ),
                           child: ClipOval(
                             child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-                                ? CachedNetworkImage(
-                                    imageUrl: user.avatarUrl!,
-                                    fit: BoxFit.cover,
-                                    errorWidget: (context, url, error) {
-                                      return Container(
-                                        color: AppColors.primaryPurple.withOpacity(0.10),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                          style: const TextStyle(
-                                            fontSize: 34,
-                                            fontWeight: FontWeight.w800,
-                                            color: AppColors.primaryPurpleDark,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  )
+                                ? (user.avatarUrl!.trim().startsWith('gs://')
+                                    ? FutureBuilder<String>(
+                                        future: FirebaseStorage.instance
+                                            .refFromURL(user.avatarUrl!.trim())
+                                            .getDownloadURL(),
+                                        builder: (context, snap) {
+                                          final url = snap.data;
+                                          if (url == null || url.isEmpty) {
+                                            return Container(
+                                              color: AppColors.primaryPurple.withOpacity(0.10),
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                                style: const TextStyle(
+                                                  fontSize: 34,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: AppColors.primaryPurpleDark,
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                          return CachedNetworkImage(
+                                            imageUrl: url,
+                                            fit: BoxFit.cover,
+                                            errorWidget: (context, _, __) {
+                                              return Container(
+                                                color: AppColors.primaryPurple.withOpacity(0.10),
+                                                alignment: Alignment.center,
+                                                child: Text(
+                                                  user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                                  style: const TextStyle(
+                                                    fontSize: 34,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: AppColors.primaryPurpleDark,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          );
+                                        },
+                                      )
+                                    : CachedNetworkImage(
+                                        imageUrl: user.avatarUrl!.trim(),
+                                        fit: BoxFit.cover,
+                                        errorWidget: (context, url, error) {
+                                          return Container(
+                                            color: AppColors.primaryPurple.withOpacity(0.10),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+                                              style: const TextStyle(
+                                                fontSize: 34,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.primaryPurpleDark,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ))
                                 : Container(
                                     color: AppColors.primaryPurple.withOpacity(0.10),
                                     alignment: Alignment.center,

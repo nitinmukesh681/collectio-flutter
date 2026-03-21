@@ -1,10 +1,12 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
   Future<String?> _getFcmTokenSafely() async {
     if (kIsWeb) {
@@ -30,7 +32,25 @@ class NotificationService {
   }
 
   Future<void> initialize() async {
-    // Request permission
+    // Initialize local notifications
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    
+    const DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsIOS,
+    );
+
+    await _localNotifications.initialize(initializationSettings);
+
+    // Request permission for Firebase messaging
     NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -50,21 +70,72 @@ class NotificationService {
       // Listen to token refresh
       _messaging.onTokenRefresh.listen((newToken) {
         debugPrint('FCM Token Refreshed: $newToken');
-        // Handle token refresh
+        // Handle token refresh - update in Firestore for current user
       });
 
-      // Foreground messages
+      // Foreground messages - show local notification
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('Got a message whilst in the foreground!');
         debugPrint('Message data: ${message.data}');
 
         if (message.notification != null) {
           debugPrint('Message also contained a notification: ${message.notification}');
+          _showLocalNotification(message);
         }
       });
+
+      // Handle background messages
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        debugPrint('Message clicked!');
+        _handleNotificationTap(message);
+      });
+
+      // Handle notification when app is terminated
+      final initialMessage = await _messaging.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationTap(initialMessage);
+      }
     } else {
       debugPrint('User declined or has not accepted permission');
     }
+  }
+
+  Future<void> _showLocalNotification(RemoteMessage message) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'collectio_channel',
+      'Collectio Notifications',
+      channelDescription: 'Notifications from Collectio app',
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: true,
+    );
+
+    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
+        DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+      iOS: iOSPlatformChannelSpecifics,
+    );
+
+    await _localNotifications.show(
+      message.hashCode,
+      message.notification?.title ?? 'New Notification',
+      message.notification?.body ?? 'You have a new notification',
+      platformChannelSpecifics,
+      payload: message.data.toString(),
+    );
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    debugPrint('Notification tapped: ${message.data}');
+    // TODO: Navigate to appropriate screen based on message data
+    // For example, if message contains collectionId, navigate to collection detail
   }
 
   Future<void> saveTokenToUser(String userId) async {

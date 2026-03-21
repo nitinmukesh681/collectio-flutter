@@ -26,17 +26,17 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+              'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.windows:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+              'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+              'you can reconfigure this by running the FlutterFire CLI again.',
         );
       default:
         throw UnsupportedError(
@@ -71,6 +71,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'collectio-b6b15.firebasestorage.app',
     iosBundleId: 'com.example.collectio',
     iosClientId:
-        '887681374750-bnhg7frlbr1j0mqhiuj5ehd6p60qbk2b.apps.googleusercontent.com',
+    '887681374750-bnhg7frlbr1j0mqhiuj5ehd6p60qbk2b.apps.googleusercontent.com',
   );
 }

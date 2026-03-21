@@ -244,6 +244,50 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> sendPasswordResetForEmailOrUsername(String input) async {
+    if (_authService == null || _firestoreService == null) return false;
+    _setLoading(true);
+    _error = null;
+    try {
+      String email = input.trim();
+      if (!email.contains('@')) {
+        final resolvedEmail = await _firestoreService!.getUserEmailByUsername(email);
+        if (resolvedEmail == null) {
+          throw FirebaseAuthException(code: 'user-not-found', message: 'No user found with this username.');
+        }
+        email = resolvedEmail;
+      }
+      await _authService!.sendPasswordResetEmail(email);
+      _setLoading(false);
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _error = _getErrorMessage(e.code);
+      _setLoading(false);
+      return false;
+    } catch (e) {
+      _error = e.toString();
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Update user profile and refresh entity
+  Future<bool> updateProfile(UserEntity updatedUser) async {
+    if (_firestoreService == null) return false;
+    _setLoading(true);
+    try {
+      await _firestoreService!.saveUser(updatedUser);
+      _userEntity = updatedUser;
+      _setLoading(false);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _setLoading(false);
+      return false;
+    }
+  }
+
   /// Sign out
   Future<void> signOut() async {
     await _authService?.signOut();

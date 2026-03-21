@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/collection_entity.dart';
@@ -29,9 +30,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final Set<String> _savedCollectionIds = {};
   
+  // Stream subscriptions
+  StreamSubscription<List<CollectionEntity>>? _followingSubscription;
+  StreamSubscription<List<CollectionEntity>>? _publicSubscription;
+  StreamSubscription<List<CollectionEntity>>? _collabSubscription;
+  
   // Data lists
   List<CollectionEntity> _collabCollections = [];
   List<CollectionEntity> _feedCollections = [];
+  List<CollectionEntity> _followingCollections = [];
+  List<CollectionEntity> _publicCollections = [];
   
   bool _isLoadingCollabs = true;
   bool _isLoadingFeed = true;
@@ -39,7 +47,89 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _setupRealtimeStreams();
+  }
+
+  void _setupRealtimeStreams() {
+    final auth = context.read<AuthProvider>();
+    
+    // Setup following collections stream
+    _followingSubscription = _firestoreService.getFollowingCollectionsStream(auth.userId).listen(
+      (collections) {
+        if (mounted) {
+          setState(() {
+            _followingCollections = collections;
+            _mergeFeedCollections();
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in following collections stream: $error');
+      }
+    );
+
+    // Setup public collections stream
+    _publicSubscription = _firestoreService.getPublicCollectionsStream(limit: 20).listen(
+      (collections) {
+        if (mounted) {
+          setState(() {
+            _publicCollections = collections;
+            _mergeFeedCollections();
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in public collections stream: $error');
+      }
+    );
+
+    // Setup collaborations stream
+    _collabSubscription = _firestoreService.getOpenCollaborationCollectionsStream().listen(
+      (collections) {
+        if (mounted) {
+          setState(() {
+            _collabCollections = collections;
+            _isLoadingCollabs = false;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in collaborations stream: $error');
+        if (mounted) setState(() => _isLoadingCollabs = false);
+      }
+    );
+  }
+
+  void _mergeFeedCollections() {
+    // Merge & Deduplicate following and public collections
+    final Map<String, CollectionEntity> mergedMap = {};
+    
+    for (var c in _followingCollections) {
+      mergedMap[c.id] = c;
+    }
+    for (var c in _publicCollections) {
+      if (!mergedMap.containsKey(c.id)) {
+        mergedMap[c.id] = c;
+      }
+    }
+    
+    final combinedList = mergedMap.values.toList();
+    
+    // Sort by CreatedAt Descending
+    combinedList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    setState(() {
+      _feedCollections = combinedList;
+      _isLoadingFeed = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _followingSubscription?.cancel();
+    _publicSubscription?.cancel();
+    _collabSubscription?.cancel();
+    super.dispose();
   }
 
   void _navigateToUserProfile(String userId, String currentUserId) {
@@ -54,67 +144,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _loadData() {
-    _loadCollabs();
-    _loadFeed();
-  }
-
-  Future<void> _loadCollabs() async {
-    setState(() => _isLoadingCollabs = true);
-    try {
-      final collabs = await _firestoreService.getOpenCollaborationCollections();
-      if (mounted) {
-        setState(() {
-          _collabCollections = collabs;
-          _isLoadingCollabs = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading collabs: $e');
-      if (mounted) setState(() => _isLoadingCollabs = false);
-    }
-  }
-
-  Future<void> _loadFeed() async {
-    setState(() => _isLoadingFeed = true);
-    try {
-      final auth = context.read<AuthProvider>();
-      
-      // 1. Fetch Following Feed
-      final followingStored = await _firestoreService.getFollowingCollections(auth.userId);
-      
-      // 2. Fetch Public Feed (Explore/Recommended)
-      final publicStored = await _firestoreService.getPublicCollectionsList(limit: 20);
-      
-      // 3. Merge & Deduplicate
-      final Map<String, CollectionEntity> mergedMap = {};
-      
-      for (var c in followingStored) {
-        mergedMap[c.id] = c;
-      }
-      for (var c in publicStored) {
-        if (!mergedMap.containsKey(c.id)) {
-          mergedMap[c.id] = c;
-        }
-      }
-      
-      final combinedList = mergedMap.values.toList();
-      
-      // 4. Sort by CreatedAt Descending
-      combinedList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-      if (mounted) {
-        setState(() {
-          _feedCollections = combinedList;
-          _isLoadingFeed = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading feed: $e');
-      if (mounted) setState(() => _isLoadingFeed = false);
-    }
-  }
-
+  
+  
+  
   @override
   Widget build(BuildContext context) {
     // Get current user details from provider
@@ -127,14 +159,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
+      extendBody: true,
       body: SafeArea(
+        bottom: false,
         child: IndexedStack(
           index: _selectedIndex,
           children: [
             // Tab 0: Home Feed
             RefreshIndicator(
               onRefresh: () async {
-                _loadData();
+                // Refresh all streams by canceling and recreating them
+                await _followingSubscription?.cancel();
+                await _publicSubscription?.cancel();
+                await _collabSubscription?.cancel();
+                _setupRealtimeStreams();
               },
               child: CustomScrollView(
                 slivers: [
@@ -228,7 +266,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Text(
                                     'See All',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.primaryPurple),
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: AppColors.primaryPurple,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                   Icon(Icons.arrow_forward, size: 16, color: AppColors.primaryPurple),
                                 ],
@@ -412,8 +453,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   
-                  // Bottom padding
-                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  // Bottom padding for floating nav bar
+                  const SliverToBoxAdapter(child: SizedBox(height: 120)),
                 ],
               ),
             ),
@@ -426,57 +467,108 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        indicatorColor: AppColors.primaryPurple.withOpacity(0.1),
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          if (index == 2) {
-            _navigateToCreate(auth);
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(color: const Color(0xFFF1F5F9)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(0, Icons.home_outlined, Icons.home, 'Home'),
+              _buildNavItem(1, Icons.explore_outlined, Icons.explore, 'Explore'),
+              _buildNavItem(2, Icons.add_circle_outline, Icons.add_circle, 'Create', isSpecial: true, onSpecialTap: () => _navigateToCreate(auth)),
+              _buildActivityNavItem(3, auth),
+              _buildNavItem(4, Icons.person_outline, Icons.person, 'Profile'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData icon, IconData selectedIcon, String label, {bool isSpecial = false, VoidCallback? onSpecialTap}) {
+    final isSelected = _selectedIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          if (isSpecial && onSpecialTap != null) {
+            onSpecialTap();
           } else {
-            setState(() {
-              _selectedIndex = index;
-            });
+            setState(() => _selectedIndex = index);
           }
         },
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home, color: AppColors.primaryPurple),
-            label: 'Home',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore, color: AppColors.primaryPurple),
-            label: 'Explore',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.add_circle_outline),
-            selectedIcon: Icon(Icons.add_circle, color: AppColors.primaryPurple),
-            label: 'Create',
-          ),
-          NavigationDestination(
-            icon: StreamBuilder<int>(
+        borderRadius: BorderRadius.circular(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? selectedIcon : icon,
+              color: isSelected ? AppColors.primaryPurple : Colors.black,
+              size: 26,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? AppColors.primaryPurple : Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivityNavItem(int index, AuthProvider auth) {
+    final isSelected = _selectedIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _selectedIndex = index),
+        borderRadius: BorderRadius.circular(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            StreamBuilder<int>(
               stream: _firestoreService.getUnreadNotificationCount(auth.userId),
               builder: (context, snapshot) {
                 final count = snapshot.data ?? 0;
                 return Badge(
                   isLabelVisible: count > 0,
                   label: Text(count > 9 ? '9+' : '$count'),
-                  child: const Icon(Icons.favorite_outline),
+                  backgroundColor: Color(0xFFEF4444),
+                  child: Icon(
+                    isSelected ? Icons.favorite : Icons.favorite_outline,
+                    color: isSelected ? AppColors.primaryPurple : Colors.black,
+                    size: 26,
+                  ),
                 );
               },
             ),
-            selectedIcon: const Icon(Icons.favorite, color: AppColors.primaryPurple),
-            label: 'Activity',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person, color: AppColors.primaryPurple),
-            label: 'Profile',
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              'Activity',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? AppColors.primaryPurple : Colors.black,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

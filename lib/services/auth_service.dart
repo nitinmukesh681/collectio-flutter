@@ -1,10 +1,20 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, kIsWeb;
+import '../firebase_options.dart';
 
 /// Authentication service using Firebase Auth
 class AuthService {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  late final GoogleSignIn _googleSignIn;
+
+  AuthService() {
+    String? clientId;
+    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS)) {
+      clientId = DefaultFirebaseOptions.ios.iosClientId;
+    }
+    _googleSignIn = GoogleSignIn(clientId: clientId);
+  }
 
   /// Current user stream
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
@@ -39,6 +49,8 @@ class AuthService {
 
   /// Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
+    // Clear any previous session to avoid stale tokens interfering with sign-in
+    try { await _googleSignIn.signOut(); } catch (_) {}
     final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
     if (googleUser == null) return null;
 

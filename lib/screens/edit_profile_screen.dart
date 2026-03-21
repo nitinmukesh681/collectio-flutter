@@ -75,13 +75,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         avatarUrl: avatarUrl,
       );
 
-      await _firestoreService.saveUser(updatedUser);
-
-      if (mounted) {
+      final success = await auth.updateProfile(updatedUser);
+      
+      if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully')),
         );
         Navigator.pop(context, true);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${auth.error ?? "Unknown error"}')),
+        );
       }
     } catch (e) {
       if (mounted) {

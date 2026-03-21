@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
@@ -14,6 +15,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'screens/import_link_screen.dart';
 
 import 'firebase_options.dart';
+import 'services/firebase_messaging_background_handler.dart';
 
 class _DevHttpOverrides extends HttpOverrides {
   @override
@@ -47,6 +49,9 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    
+    // Set background message handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
@@ -333,50 +338,6 @@ class EmailVerificationScreen extends StatelessWidget {
               const SizedBox(height: 48),
               
               // Action Buttons
-              Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  gradient: const LinearGradient(
-                    colors: [AppColors.primaryPurple, Color(0xFF9D84FF)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryPurple.withOpacity(0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final verified = await auth.checkEmailVerified();
-                    if (!verified && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Email not yet verified. Please check your inbox.'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                  ),
-                  child: Text(
-                    "I've Verified",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
               TextButton(
                 onPressed: () => auth.resendEmailVerification(),
                 child: Text(
@@ -385,18 +346,6 @@ class EmailVerificationScreen extends StatelessWidget {
                     color: AppColors.primaryPurple,
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              TextButton.icon(
-                onPressed: () => auth.signOut(),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: Text(
-                  'Sign Out',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF6B7280),
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),

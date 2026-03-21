@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:async';
 import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
 import '../models/user_entity.dart';
@@ -43,11 +43,54 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   bool _isAddToCollectionsLoading = false;
   bool _isUnauthorized = false;
   
+  StreamSubscription<CollectionEntity?>? _collectionSubscription;
+  
   @override
   void initState() {
     super.initState();
-    _loadCollection();
+    _setupCollectionStream();
     _loadCurrentUserName();
+  }
+
+  void _setupCollectionStream() {
+    _collectionSubscription = _firestoreService.getCollectionStream(widget.collectionId).listen(
+      (collection) async {
+        if (mounted) {
+          if (collection == null) {
+            // Collection was deleted, navigate back
+            debugPrint('Collection deleted, navigating back');
+            await _collectionSubscription?.cancel();
+            Navigator.of(context).pop();
+            return;
+          }
+          
+          final isFollowing = await _firestoreService.isFollowing(
+            widget.currentUserId, 
+            collection.userId
+          );
+
+          final isOwner = collection.userId == widget.currentUserId;
+          final canView = _canViewCollection(collection, isOwner: isOwner, isFollowing: isFollowing);
+          
+          setState(() {
+            _collection = collection.copyWith(
+              isLiked: collection.likedBy.contains(widget.currentUserId),
+              isSaved: collection.savedBy.contains(widget.currentUserId),
+            );
+            _isOwner = isOwner;
+            _isFollowing = isFollowing;
+            _isUnauthorized = !canView;
+            _isLoading = false;
+          });
+
+          await _loadContributors(collection);
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in collection stream: $error');
+        if (mounted) setState(() => _isLoading = false);
+      }
+    );
   }
 
   Widget _buildRatingBadge(double rating, {double fontSize = 12}) {
@@ -135,36 +178,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     }
   }
 
-  Future<void> _loadCollection() async {
-    setState(() => _isLoading = true);
-    try {
-      final collection = await _firestoreService.getCollection(widget.collectionId);
-      if (collection != null) {
-        final isFollowing = await _firestoreService.isFollowing(
-          widget.currentUserId, 
-          collection.userId
-        );
-
-        final isOwner = collection.userId == widget.currentUserId;
-        final canView = _canViewCollection(collection, isOwner: isOwner, isFollowing: isFollowing);
-        
-        if (mounted) {
-          setState(() {
-            _collection = collection.copyWith(
-              isLiked: collection.likedBy.contains(widget.currentUserId),
-            );
-            _isOwner = isOwner;
-            _isFollowing = isFollowing;
-            _isUnauthorized = !canView;
-          });
-        }
-
-        await _loadContributors(collection);
-      }
-    } catch (e) {
-      debugPrint('Error loading collection: $e');
-    }
-    if (mounted) setState(() => _isLoading = false);
+  @override
+  void dispose() {
+    _collectionSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadContributors(CollectionEntity collection) async {
@@ -510,8 +527,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       ),
     ).then((result) {
       if (result == true) {
-        // Item was added/edited, reload collection to update count
-        _loadCollection();
+        // Collection updates are now handled by the real-time stream
       }
     });
   }
@@ -656,7 +672,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       ),
     ).then((result) {
       if (result == true) {
-        _loadCollection();
+        // Collection updates are now handled by the real-time stream
       }
     });
   }
@@ -785,12 +801,70 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () async {
-              Navigator.pop(context);
-              await _firestoreService.deleteCollection(
-                widget.collectionId,
-                widget.currentUserId,
-              );
-              if (mounted) Navigator.pop(context);
+              Navigator.pop(context); // Close dialog
+              
+              try {
+                // Show loading indicator
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Deleting collection...'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+                
+                await _firestoreService.deleteCollection(
+                  widget.collectionId,
+                  widget.currentUserId,
+                );
+                
+                // Show success message and navigate back
+                if (mounted) {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Collection deleted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  
+                  // Cancel stream subscription to prevent conflicts
+                  await _collectionSubscription?.cancel();
+                  
+                  // Navigate back to previous screen with fallback
+                  try {
+                    Navigator.of(context).pop();
+                  } catch (e) {
+                    debugPrint('Navigation error: $e');
+                    // Fallback: try to navigate after a short delay
+                    Future.delayed(const Duration(milliseconds: 500), () {
+                      if (mounted) {
+                        try {
+                          Navigator.of(context).pop();
+                        } catch (e2) {
+                          debugPrint('Fallback navigation failed: $e2');
+                          // Last resort: push to home screen
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            '/',
+                            (route) => false,
+                          );
+                        }
+                      }
+                    });
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error deleting collection: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Delete'),
           ),
@@ -869,6 +943,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     }
 
     return Scaffold(
+      extendBody: true,
       backgroundColor: Colors.white,
       body: CustomScrollView(
         slivers: [
@@ -971,49 +1046,30 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                               ),
                             );
                           }
-                          return ClipPath(
-                            clipper: const _CoverBottomCurveClipper(),
-                            child: CachedNetworkImage(
-                              imageUrl: url,
-                              fit: BoxFit.cover,
-                              errorWidget: (context, u, error) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: gradientColors,
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
+                          return CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, u, error) {
+                              return Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: gradientColors,
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            },
                           );
                         },
                       ),
-                      // Overlay gradient
-                      ClipPath(
-                        clipper: const _CoverBottomCurveClipper(),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withOpacity(0.25),
-                                Colors.black.withOpacity(0.7),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
 
-                      // Rounded white sheet header (inside the app bar)
+
+                      // White overlap to make the content sheet fit like a puzzle
                       Align(
                         alignment: Alignment.bottomCenter,
                         child: Container(
-                          height: 32,
+                          height: 28,
                           decoration: const BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -1031,9 +1087,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             child: Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.zero,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
-              padding: EdgeInsets.fromLTRB(18, hasCoverImage ? 2 : 10, 18, 8),
+              padding: EdgeInsets.fromLTRB(18, hasCoverImage ? 0 : 10, 18, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1392,98 +1448,106 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           ),
 
           // Bottom padding for action bar
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          const SliverToBoxAdapter(child: SizedBox(height: 110)),
         ],
       ),
 
-      // Bottom action bar
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _toggleLike,
-                icon: Icon(
-                  collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: collection.isLiked ? AppColors.heartSalmon : Colors.black,
-                  size: 18,
-                ),
-                label: const Text('Like'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  side: const BorderSide(color: Color(0xFFE5E7EB)),
-                  foregroundColor: Colors.black87,
-                  backgroundColor: Colors.white,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _toggleSave,
-                icon: Icon(
-                  collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                  color: collection.isSaved ? AppColors.primaryPurple : Colors.black,
-                  size: 18,
-                ),
-                label: const Text('Save'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  side: const BorderSide(color: Color(0xFFE5E7EB)),
-                  foregroundColor: Colors.black87,
-                  backgroundColor: Colors.white,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _duplicateCollection,
-                icon: const Icon(Icons.copy_all_rounded, size: 18),
-                label: const Text('Copy'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                ),
-              ),
-            ),
-            if (_isOwner || collection.isOpenForContribution) ...[
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _navigateToAddItem(),
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    side: const BorderSide(color: Color(0xFFE5E7EB)),
-                    foregroundColor: Colors.black87,
-                    backgroundColor: Colors.white,
-                    textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                ),
+      // Bottom action bar - Updated to float slightly above and slightly smaller
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
+            border: Border.all(color: const Color(0xFFF1F5F9)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  onPressed: _toggleLike,
+                  icon: collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  label: 'Like',
+                  color: collection.isLiked ? AppColors.heartSalmon : Colors.black87,
+                  isPrimary: false,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildActionButton(
+                  onPressed: _toggleSave,
+                  icon: collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                  label: 'Save',
+                  color: collection.isSaved ? AppColors.primaryPurple : Colors.black87,
+                  isPrimary: false,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildActionButton(
+                  onPressed: _duplicateCollection,
+                  icon: Icons.copy_all_rounded,
+                  label: 'Copy',
+                  color: Colors.white,
+                  isPrimary: true,
+                ),
+              ),
+              if (_isOwner || collection.isOpenForContribution) ...[
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildActionButton(
+                    onPressed: () => _navigateToAddItem(),
+                    icon: Icons.add_rounded,
+                    label: 'Add',
+                    color: Colors.black87,
+                    isPrimary: false,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isPrimary,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isPrimary ? AppColors.primaryPurple : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(height: 1),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
@@ -1623,10 +1687,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         final uri = Uri.tryParse(raw);
                         if (uri == null) return;
                         launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
-                          if (!mounted) return;
+                          if (!mounted) return false;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Could not open link')),
                           );
+                          return false;
                         });
                       } else if (value == 'open_location') {
                         final raw = (item.googleMapsUrl ?? '').trim();
@@ -1634,10 +1699,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         final uri = Uri.tryParse(raw);
                         if (uri == null) return;
                         launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
-                          if (!mounted) return;
+                          if (!mounted) return false;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Could not open location')),
                           );
+                          return false;
                         });
                       }
                     },

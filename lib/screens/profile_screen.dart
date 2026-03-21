@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../models/collection_entity.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_card.dart';
 import '../widgets/collection_grid_card.dart';
 import 'collection_detail_screen.dart';
 import 'edit_profile_screen.dart';
@@ -22,6 +23,11 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final FirestoreService _firestoreService = FirestoreService();
+  final ScrollController _scrollController = ScrollController();
+  
+  StreamSubscription<List<CollectionEntity>>? _myCollectionsSubscription;
+  StreamSubscription<List<CollectionEntity>>? _savedCollectionsSubscription;
+  StreamSubscription<List<CollectionEntity>>? _collaborationsSubscription;
   
   List<CollectionEntity> _myCollections = [];
   List<CollectionEntity> _savedCollections = [];
@@ -34,33 +40,76 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadData();
+    _setupRealtimeStreams();
+  }
+
+  void _setupRealtimeStreams() {
+    final auth = context.read<AuthProvider>();
+    if (auth.userEntity == null) return;
+
+    setState(() => _isLoading = true);
+    
+    // Setup real-time streams for immediate updates
+    _myCollectionsSubscription = _firestoreService.getUserCollectionsStream(auth.userId).listen(
+      (collections) {
+        if (mounted) {
+          setState(() {
+            _myCollections = collections;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in my collections stream: $error');
+        if (mounted) setState(() => _isLoading = false);
+      }
+    );
+
+    _savedCollectionsSubscription = _firestoreService.getSavedCollectionsStream(auth.userId).listen(
+      (collections) {
+        if (mounted) {
+          setState(() {
+            _savedCollections = collections;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in saved collections stream: $error');
+      }
+    );
+
+    _collaborationsSubscription = _firestoreService.getUserCollaborationsStream(auth.userId).listen(
+      (collections) {
+        if (mounted) {
+          setState(() {
+            _collaborationCollections = collections;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in collaborations stream: $error');
+      }
+    );
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _scrollController.dispose();
+    _myCollectionsSubscription?.cancel();
+    _savedCollectionsSubscription?.cancel();
+    _collaborationsSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    final auth = context.read<AuthProvider>();
-    if (auth.userEntity == null) return;
-
-    setState(() => _isLoading = true);
-    try {
-      final myCollections = await _firestoreService.getUserCollections(auth.userId);
-      final savedCollections = await _firestoreService.getSavedCollections(auth.userId);
-      final collaborationCollections = await _firestoreService.getUserCollaborations(auth.userId);
-      setState(() {
-        _myCollections = myCollections;
-        _savedCollections = savedCollections;
-        _collaborationCollections = collaborationCollections;
-      });
-    } catch (e) {
-      debugPrint('Error loading profile data: $e');
-    }
-    setState(() => _isLoading = false);
+  Future<void> _refreshStreams() async {
+    // Cancel existing subscriptions
+    await _myCollectionsSubscription?.cancel();
+    await _savedCollectionsSubscription?.cancel();
+    await _collaborationsSubscription?.cancel();
+    
+    // Setup new streams
+    _setupRealtimeStreams();
   }
 
   void _navigateToSettings() {
@@ -76,8 +125,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       MaterialPageRoute(builder: (context) => const EditProfileScreen()),
     );
     if (result == true) {
-      // Refresh data if profile was updated
-      _loadData();
+      // Refresh streams if profile was updated
+      _refreshStreams();
     }
   }
 
@@ -151,26 +200,71 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                   ),
                                   child: ClipOval(
                                     child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-                                        ? CachedNetworkImage(
-                                            imageUrl: user.avatarUrl!,
-                                            fit: BoxFit.cover,
-                                            errorWidget: (context, url, error) {
-                                              return Container(
-                                                color: AppColors.primaryPurple.withOpacity(0.10),
-                                                alignment: Alignment.center,
-                                                child: Text(
-                                                  user.userName.isNotEmpty
-                                                      ? user.userName[0].toUpperCase()
-                                                      : '?',
-                                                  style: const TextStyle(
-                                                    fontSize: 34,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: AppColors.primaryPurpleDark,
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          )
+                                        ? (user.avatarUrl!.trim().startsWith('gs://')
+                                            ? FutureBuilder<String>(
+                                                future: FirebaseStorage.instance
+                                                    .refFromURL(user.avatarUrl!.trim())
+                                                    .getDownloadURL(),
+                                                builder: (context, snap) {
+                                                  final url = snap.data;
+                                                  if (url == null || url.isEmpty) {
+                                                    return Container(
+                                                      color: AppColors.primaryPurple.withOpacity(0.10),
+                                                      alignment: Alignment.center,
+                                                      child: Text(
+                                                        user.userName.isNotEmpty
+                                                            ? user.userName[0].toUpperCase()
+                                                            : '?',
+                                                        style: const TextStyle(
+                                                          fontSize: 34,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: AppColors.primaryPurpleDark,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                  return CachedNetworkImage(
+                                                    imageUrl: url,
+                                                    fit: BoxFit.cover,
+                                                    errorWidget: (context, _, __) {
+                                                      return Container(
+                                                        color: AppColors.primaryPurple.withOpacity(0.10),
+                                                        alignment: Alignment.center,
+                                                        child: Text(
+                                                          user.userName.isNotEmpty
+                                                              ? user.userName[0].toUpperCase()
+                                                              : '?',
+                                                          style: const TextStyle(
+                                                            fontSize: 34,
+                                                            fontWeight: FontWeight.w800,
+                                                            color: AppColors.primaryPurpleDark,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  );
+                                                },
+                                              )
+                                            : CachedNetworkImage(
+                                                imageUrl: user.avatarUrl!.trim(),
+                                                fit: BoxFit.cover,
+                                                errorWidget: (context, url, error) {
+                                                  return Container(
+                                                    color: AppColors.primaryPurple.withOpacity(0.10),
+                                                    alignment: Alignment.center,
+                                                    child: Text(
+                                                      user.userName.isNotEmpty
+                                                          ? user.userName[0].toUpperCase()
+                                                          : '?',
+                                                      style: const TextStyle(
+                                                        fontSize: 34,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: AppColors.primaryPurpleDark,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ))
                                         : Container(
                                             color: AppColors.primaryPurple.withOpacity(0.10),
                                             alignment: Alignment.center,
@@ -440,35 +534,38 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       );
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: collections.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.86,
-      ),
-      itemBuilder: (context, index) {
-        final collection = collections[index];
-        return CollectionGridCard(
-          collection: collection,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => CollectionDetailScreen(
-                  collectionId: collection.id,
-                  currentUserId: userId,
+    return RefreshIndicator(
+      onRefresh: _refreshStreams,
+      child: GridView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        itemCount: collections.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.86,
+        ),
+        itemBuilder: (context, index) {
+          final collection = collections[index];
+          return CollectionGridCard(
+            collection: collection,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CollectionDetailScreen(
+                    collectionId: collection.id,
+                    currentUserId: userId,
+                  ),
                 ),
-              ),
-            );
-          },
-          onUserTap: () {
-            // Self profile: username tap stays on same screen
-          },
-        );
-      },
+              );
+            },
+            onUserTap: () {
+              // Self profile: username tap stays on same screen
+            },
+          );
+        },
+      ),
     );
   }
 }

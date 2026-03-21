@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
@@ -332,6 +333,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           TextSpan(
                             text: fromUsername,
                             style: const TextStyle(fontWeight: FontWeight.w800),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                final uid = fromUserId;
+                                if (uid != null && uid.isNotEmpty) {
+                                  _navigateToUser(uid);
+                                }
+                              },
                           ),
                           TextSpan(
                             text: actionText.isNotEmpty

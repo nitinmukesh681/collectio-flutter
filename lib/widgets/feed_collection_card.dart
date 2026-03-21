@@ -119,8 +119,9 @@ class FeedCollectionCard extends StatelessWidget {
                         future: resolveCoverUrl(),
                         builder: (context, snap) {
                           final resolved = snap.data;
+                          Widget base;
                           if (resolved == null || resolved.isEmpty) {
-                            return Container(
+                            base = Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: gradientColors,
@@ -129,23 +130,26 @@ class FeedCollectionCard extends StatelessWidget {
                                 ),
                               ),
                             );
-                          }
-                          return CachedNetworkImage(
-                            imageUrl: resolved,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, url, error) {
-                              debugPrint('Cover image failed: $url, error: $error');
-                              return Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: gradientColors,
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                          } else {
+                            base = CachedNetworkImage(
+                              imageUrl: resolved,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) {
+                                debugPrint('Cover image failed: $url, error: $error');
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: gradientColors,
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                          );
+                                );
+                              },
+                            );
+                          }
+
+                          return base;
                         },
                       ),
                     ),
@@ -406,7 +410,7 @@ class FeedCollectionCard extends StatelessWidget {
                                   Text(
                                     '$itemCount items',
                                     style: TextStyle(
-                                      color: AppColors.textSecondary,
+                                      color: Colors.black,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),

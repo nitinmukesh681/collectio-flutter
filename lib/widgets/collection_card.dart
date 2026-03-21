@@ -216,7 +216,7 @@ class CollectionCard extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
+                                color: AppColors.heartSalmon,
                               ),
                             ),
                           ],
