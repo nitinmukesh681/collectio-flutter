@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 import '../screens/user_profile_screen.dart';
 
 /// Dialog for managing collection collaborators
@@ -113,16 +114,12 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
       });
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added ${user.userName} as $_selectedRole')),
-        );
+        SnackBarUtils.showSuccessSnackBar(context, 'Added ${user.userName} as $_selectedRole');
       }
     } catch (e) {
       debugPrint('Error adding collaborator: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Error: $e');
       }
     }
     setState(() => _isLoading = false);

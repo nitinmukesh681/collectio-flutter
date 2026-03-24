@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 
 /// Modern Login screen with refined typography and brand-consistent styling
 class LoginScreen extends StatefulWidget {
@@ -51,13 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success && mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
     } else if (auth.error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(auth.error!),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      SnackBarUtils.showErrorSnackBar(context, auth.error!);
     }
   }
 
@@ -84,13 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    SnackBarUtils.showErrorSnackBar(context, message);
   }
 
   Future<void> _showForgotPasswordDialog() async {
@@ -119,9 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     setState(() => isSubmitting = false);
                     if (ok) {
                       Navigator.of(context).pop();
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('If an account exists, a reset email has been sent.')),
-                      );
+                      SnackBarUtils.showSuccessSnackBar(this.context, 'If an account exists, a reset email has been sent.');
                     } else if (auth.error != null) {
                       _showError(auth.error!);
                     }
@@ -143,9 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             setState(() => isSubmitting = false);
                             if (ok) {
                               Navigator.of(context).pop();
-                              ScaffoldMessenger.of(this.context).showSnackBar(
-                                const SnackBar(content: Text('If an account exists, a reset email has been sent.')),
-                              );
+                              SnackBarUtils.showSuccessSnackBar(this.context, 'If an account exists, a reset email has been sent.');
                             } else if (auth.error != null) {
                               _showError(auth.error!);
                             }

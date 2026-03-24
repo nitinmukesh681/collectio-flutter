@@ -12,6 +12,7 @@ import 'theme/app_theme.dart';
 import 'screens/landing_screen.dart';
 import 'screens/home_screen.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:flutter/services.dart';
 import 'screens/import_link_screen.dart';
 
 import 'firebase_options.dart';
@@ -72,8 +73,7 @@ class CollectioApp extends StatelessWidget {
         title: 'Collectio',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
+        themeMode: ThemeMode.light,
         builder: (context, child) {
           final mq = MediaQuery.of(context);
           return MediaQuery(
@@ -97,49 +97,111 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   StreamSubscription<List<SharedMediaFile>>? _mediaSub;
   String? _pendingSharedUrl;
   bool _didHandlePendingShare = false;
+  static const _shareExtensionChannel = MethodChannel('com.collectio.app/share_extension');
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _setupShareExtensionHandler();
     _initShareIntentListeners();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _mediaSub?.cancel();
+    _shareExtensionChannel.setMethodCallHandler(null);
     super.dispose();
   }
 
+  void _setupShareExtensionHandler() {
+    debugPrint('[AuthGate:ch] _setupShareExtensionHandler — registering handler for com.collectio.app/share_extension');
+    _shareExtensionChannel.setMethodCallHandler((call) async {
+      debugPrint('[AuthGate:ch] method call RECEIVED — method=${call.method} args=${call.arguments}');
+      if (call.method == 'shareReceived') {
+        final url = call.arguments as String?;
+        debugPrint('[AuthGate:ch] shareReceived — url=$url mounted=$mounted');
+        if (url != null && url.isNotEmpty && mounted) {
+          debugPrint('[AuthGate:ch] shareReceived — clearing native URL and setting pending');
+          try {
+            await _shareExtensionChannel.invokeMethod('clearSharedUrl');
+            debugPrint('[AuthGate:ch] shareReceived — clearSharedUrl OK');
+          } catch (e) {
+            debugPrint('[AuthGate:ch] shareReceived — clearSharedUrl ERROR: $e');
+          }
+          setState(() {
+            _pendingSharedUrl = url;
+            _didHandlePendingShare = false;
+          });
+          debugPrint('[AuthGate:ch] shareReceived — _pendingSharedUrl set to $url');
+        } else {
+          debugPrint('[AuthGate:ch] shareReceived — ignored (url null/empty or not mounted)');
+        }
+      } else {
+        debugPrint('[AuthGate:ch] unhandled method: ${call.method}');
+      }
+    });
+    debugPrint('[AuthGate:ch] handler registered');
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('[AuthGate:lifecycle] didChangeAppLifecycleState — state=$state platform.isIOS=${Platform.isIOS}');
+    if (state == AppLifecycleState.resumed && Platform.isIOS) {
+      debugPrint('[AuthGate:lifecycle] app RESUMED on iOS — resetting _didHandlePendingShare and triggering _checkIOSShareExtensionData');
+      setState(() {
+        _didHandlePendingShare = false;
+      });
+      _checkIOSShareExtensionData();
+    }
+  }
+
   void _initShareIntentListeners() {
+    debugPrint('[AuthGate:init] _initShareIntentListeners — platform.isIOS=${Platform.isIOS}');
+    if (Platform.isIOS) {
+      debugPrint('[AuthGate:init] iOS — calling _checkIOSShareExtensionData(retryOnStartup: true)');
+      _checkIOSShareExtensionData(retryOnStartup: true);
+    }
+    
+    debugPrint('[AuthGate:init] subscribing to ReceiveSharingIntent.getMediaStream()');
     _mediaSub = ReceiveSharingIntent.instance.getMediaStream().listen((files) {
-      debugPrint('Share intent media stream received count=${files.length}');
+      debugPrint('[AuthGate:stream] getMediaStream event — count=${files.length}');
       for (final f in files) {
-        debugPrint('Share intent media item type=${f.type} mime=${f.mimeType} message=${f.message} path=${f.path}');
-        final url = _extractFirstUrl('${f.message ?? ''} ${f.path}');
+        debugPrint('[AuthGate:stream] file: type=${f.type} mime=${f.mimeType} message=${f.message} path=${f.path}');
+        final combined = '${f.message ?? ''} ${f.path}';
+        final url = _extractFirstUrl(combined);
+        debugPrint('[AuthGate:stream] combined=\'$combined\' extractedUrl=$url');
         if (url != null) {
-          debugPrint('Share intent extracted url=$url');
+          debugPrint('[AuthGate:stream] setting _pendingSharedUrl=$url');
           setState(() {
             _pendingSharedUrl = url;
             _didHandlePendingShare = false;
           });
           return;
         }
+      }
+      if (files.isNotEmpty) {
+        debugPrint('[AuthGate:stream] no URL extracted from any file');
       }
     }, onError: (err) {
-      debugPrint('Share intent media stream error: $err');
+      debugPrint('[AuthGate:stream] getMediaStream ERROR: $err');
     });
 
+    debugPrint('[AuthGate:init] calling ReceiveSharingIntent.getInitialMedia()');
     ReceiveSharingIntent.instance.getInitialMedia().then((files) {
-      debugPrint('Share intent initial media received count=${files.length}');
+      debugPrint('[AuthGate:initial] getInitialMedia resolved — count=${files.length}');
       for (final f in files) {
-        debugPrint('Share intent initial media item type=${f.type} mime=${f.mimeType} message=${f.message} path=${f.path}');
-        final url = _extractFirstUrl('${f.message ?? ''} ${f.path}');
+        debugPrint('[AuthGate:initial] file: type=${f.type} mime=${f.mimeType} message=${f.message} path=${f.path}');
+        final combined = '${f.message ?? ''} ${f.path}';
+        final url = _extractFirstUrl(combined);
+        debugPrint('[AuthGate:initial] combined=\'$combined\' extractedUrl=$url');
         if (url != null) {
-          debugPrint('Share intent initial extracted url=$url');
+          debugPrint('[AuthGate:initial] setting _pendingSharedUrl=$url');
           setState(() {
             _pendingSharedUrl = url;
             _didHandlePendingShare = false;
@@ -147,9 +209,88 @@ class _AuthGateState extends State<AuthGate> {
           return;
         }
       }
+      if (files.isNotEmpty) {
+        debugPrint('[AuthGate:initial] no URL extracted from any file');
+      }
     }).catchError((err) {
-      debugPrint('Share intent initial media error: $err');
+      debugPrint('[AuthGate:initial] getInitialMedia ERROR: $err');
     });
+  }
+  
+  bool _isCheckingShareExtension = false;
+
+  Future<void> _checkIOSShareExtensionData({bool retryOnStartup = false}) async {
+    debugPrint('[AuthGate:poll] _checkIOSShareExtensionData — retryOnStartup=$retryOnStartup isAlreadyChecking=$_isCheckingShareExtension');
+    if (_isCheckingShareExtension) {
+      debugPrint('[AuthGate:poll] already checking — skipping');
+      return;
+    }
+    _isCheckingShareExtension = true;
+
+    final int maxAttempts = retryOnStartup ? 15 : 3;
+    final Duration delay = retryOnStartup ? const Duration(milliseconds: 500) : const Duration(milliseconds: 200);
+    debugPrint('[AuthGate:poll] maxAttempts=$maxAttempts delay=${delay.inMilliseconds}ms');
+    
+    if (retryOnStartup) {
+      debugPrint('[AuthGate:poll] startup delay 100ms before first attempt');
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    
+    try {
+      for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        if (!mounted) {
+          debugPrint('[AuthGate:poll] attempt $attempt — widget unmounted, stopping');
+          break;
+        }
+        
+        debugPrint('[AuthGate:poll] attempt $attempt/$maxAttempts — invoking getSharedUrl');
+        try {
+          final sharedUrl = await _shareExtensionChannel.invokeMethod<String>('getSharedUrl');
+          debugPrint('[AuthGate:poll] attempt $attempt — getSharedUrl returned: $sharedUrl');
+          
+          if (sharedUrl != null && sharedUrl.isNotEmpty) {
+            debugPrint('[AuthGate:poll] attempt $attempt — URL FOUND: $sharedUrl — clearing and setting pending');
+            try {
+              await _shareExtensionChannel.invokeMethod('clearSharedUrl');
+              debugPrint('[AuthGate:poll] attempt $attempt — clearSharedUrl OK');
+            } catch (e) {
+              debugPrint('[AuthGate:poll] attempt $attempt — clearSharedUrl ERROR: $e');
+            }
+            
+            if (mounted) {
+              setState(() {
+                _pendingSharedUrl = sharedUrl;
+                _didHandlePendingShare = false;
+              });
+              debugPrint('[AuthGate:poll] attempt $attempt — _pendingSharedUrl set');
+            } else {
+              debugPrint('[AuthGate:poll] attempt $attempt — unmounted after URL found, cannot setState');
+            }
+            break;
+          } else {
+            debugPrint('[AuthGate:poll] attempt $attempt — no URL yet');
+          }
+        } catch (e) {
+          final isMissing = e is MissingPluginException;
+          if (!isMissing || attempt > 3) {
+            debugPrint('[AuthGate:poll] attempt $attempt — invokeMethod ERROR (MissingPlugin=$isMissing): $e');
+          } else {
+            debugPrint('[AuthGate:poll] attempt $attempt — MissingPluginException (channel not ready yet)');
+          }
+        }
+        
+        if (attempt < maxAttempts - 1) {
+          debugPrint('[AuthGate:poll] waiting ${delay.inMilliseconds}ms before attempt ${attempt + 1}');
+          await Future.delayed(delay);
+        }
+      }
+      debugPrint('[AuthGate:poll] polling loop complete — _pendingSharedUrl=$_pendingSharedUrl');
+    } catch (e) {
+      debugPrint('[AuthGate:poll] UNEXPECTED ERROR: $e');
+    }
+    
+    _isCheckingShareExtension = false;
+    debugPrint('[AuthGate:poll] _checkIOSShareExtensionData DONE');
   }
 
   String? _extractFirstUrl(String text) {
@@ -235,15 +376,20 @@ class _AuthGateState extends State<AuthGate> {
         }
 
         // Fully authenticated - show home and optionally route share-intent
+        debugPrint('[AuthGate:build] auth state — isAuthenticated=${auth.isAuthenticated} isEmailVerified=${auth.isEmailVerified} needsUsername=${auth.needsUsername} userEntity=${auth.userEntity?.userName} pendingUrl=$_pendingSharedUrl didHandle=$_didHandlePendingShare');
         if (_pendingSharedUrl != null && !_didHandlePendingShare) {
           final url = _pendingSharedUrl!;
           final user = auth.userEntity;
           final userName = user?.userName ?? '';
+          debugPrint('[AuthGate:build] pending URL detected — url=$url userName=\'$userName\' (empty=${userName.isEmpty})');
           if (userName.isNotEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
+              if (!mounted) {
+                debugPrint('[AuthGate:nav] postFrameCallback — widget unmounted, cannot navigate');
+                return;
+              }
+              debugPrint('[AuthGate:nav] navigating to ImportLinkScreen — url=$url userId=${auth.userId} userName=$userName');
               setState(() => _didHandlePendingShare = true);
-              debugPrint('Share intent navigating to ImportLinkScreen url=$url userId=${auth.userId} userName=$userName');
               try {
                 Navigator.of(context)
                     .push(
@@ -255,12 +401,18 @@ class _AuthGateState extends State<AuthGate> {
                     ),
                   ),
                 )
-                    .then((_) => _consumeShare());
+                    .then((_) {
+                      debugPrint('[AuthGate:nav] ImportLinkScreen popped — consuming share');
+                      _consumeShare();
+                    });
+                debugPrint('[AuthGate:nav] Navigator.push called');
               } catch (e) {
-                debugPrint('Share intent navigation ERROR: $e');
+                debugPrint('[AuthGate:nav] navigation ERROR: $e');
                 _consumeShare();
               }
             });
+          } else {
+            debugPrint('[AuthGate:build] pending URL but userName is empty — waiting for userEntity to load');
           }
         }
 

@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../models/collection_item_entity.dart';
 import '../services/firestore_service.dart';
+import '../utils/snackbar_utils.dart';
 import '../theme/app_theme.dart';
 
 /// Dialog for adding multiple items to a collection at once
@@ -64,9 +65,7 @@ class _AddMultipleItemsDialogState extends State<AddMultipleItemsDialog> {
     // Validate
     final validItems = _items.where((i) => i.titleController.text.trim().isNotEmpty).toList();
     if (validItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one item with a title')),
-      );
+      SnackBarUtils.showErrorSnackBar(context, 'Please add at least one item with a title');
       return;
     }
 
@@ -109,9 +108,7 @@ class _AddMultipleItemsDialogState extends State<AddMultipleItemsDialog> {
     } catch (e) {
       debugPrint('Error adding items: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added $successCount items. Error: $e')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Added $successCount items. Error: $e');
       }
     }
 

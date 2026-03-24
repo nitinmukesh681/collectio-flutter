@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -65,15 +67,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           if (mounted) {
             setState(() => _isFollowingCache[fromUserId] = true);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Followed back')),
-            );
+            SnackBarUtils.showSuccessSnackBar(context, 'Followed back');
           }
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Could not follow back: $e')),
-            );
+            SnackBarUtils.showErrorSnackBar(context, 'Could not follow back: $e');
           }
         }
       },
@@ -145,7 +143,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   Text(
                     'No notifications yet',
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
@@ -154,6 +152,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   Text(
                     'We\'ll notify you when something happens',
                     style: const TextStyle(
+                      fontSize: 14,
                       color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
                     ),
@@ -324,7 +323,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     RichText(
                       text: TextSpan(
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 14,
                           color: AppColors.textPrimary,
                           fontFamily: 'Inter',
                           height: 1.3,
@@ -357,7 +356,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
                         ),
@@ -367,7 +366,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     Text(
                       timeAgo,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         color: isRead ? AppColors.textMuted : AppColors.primaryPurple,
                         fontWeight: FontWeight.w700,
                       ),
@@ -530,9 +529,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await batch.commit();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All notifications marked as read')),
-      );
+      SnackBarUtils.showSuccessSnackBar(context, 'All notifications marked as read');
     }
   }
 }

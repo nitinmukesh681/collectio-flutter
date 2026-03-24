@@ -322,8 +322,8 @@ class FeedCollectionCard extends StatelessWidget {
                     // Short preview of items
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: FutureBuilder<List<CollectionItemEntity>>(
-                        future: firestoreService.getCollectionItemsPreview(collection.id, limit: 2),
+                      child: StreamBuilder<List<CollectionItemEntity>>(
+                        stream: firestoreService.getCollectionItemsPreviewStream(collection.id, limit: 2),
                         builder: (context, snapshot) {
                           final items = snapshot.data ?? const <CollectionItemEntity>[];
                           if (items.isEmpty) {
@@ -583,8 +583,7 @@ class FeedCollectionCard extends StatelessWidget {
   }
 
   Widget _buildRatingBadge(double rating) {
-    // Check if rating is old scale (0-5) or new scale (0-10)
-    final displayScore = rating <= 5 ? rating * 2 : rating;
+    final displayScore = rating;
     final label = (displayScore % 1 == 0) ? displayScore.toStringAsFixed(0) : displayScore.toStringAsFixed(1);
 
     Color badgeColor;

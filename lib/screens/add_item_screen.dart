@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../widgets/unsplash_search_dialog.dart';
 import 'package:http/http.dart' as http; // Determine if network image implies http
-
+import '../utils/snackbar_utils.dart';
 import '../models/collection_item_entity.dart';
 import '../models/place_prediction.dart';
 import '../services/firestore_service.dart';
@@ -104,8 +104,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   Widget _buildRatingBadge(double rating) {
     if (rating <= 0) return const SizedBox.shrink();
-    // Check if rating is old scale (0-5) or new scale (0-10)
-    final displayScore = rating <= 5 ? rating * 2 : rating;
+    final displayScore = rating;
     final label = (displayScore % 1 == 0) ? displayScore.toStringAsFixed(0) : displayScore.toStringAsFixed(1);
 
     Color badgeColor;
@@ -250,9 +249,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     } catch (e) {
       debugPrint('Error saving item: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Error: ${e.toString()}');
       }
     }
 

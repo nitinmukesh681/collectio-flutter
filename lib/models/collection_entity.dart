@@ -45,6 +45,7 @@ class CollectionEntity {
   final int saveCount;
   final bool isSaved;
   final List<String> savedBy;
+  final Map<String, int> savedAt;
   final String? inspiredBy;
   final String? inspiredByUserId;
   final UserRole userRole;
@@ -80,6 +81,7 @@ class CollectionEntity {
     this.saveCount = 0,
     this.isSaved = false,
     this.savedBy = const [],
+    this.savedAt = const {},
     this.inspiredBy,
     this.inspiredByUserId,
     this.userRole = UserRole.none,
@@ -132,6 +134,9 @@ class CollectionEntity {
       likes: map['likes'] ?? 0,
       likedBy: List<String>.from(map['likedBy'] ?? []),
       saveCount: map['saveCount'] ?? 0,
+      savedAt: (map['savedAt'] is Map) 
+          ? Map<String, int>.from((map['savedAt'] as Map).map((k, v) => MapEntry(k.toString(), (v is int) ? v : 0)))
+          : const {},
       inspiredBy: map['inspiredBy'],
       inspiredByUserId: map['inspiredByUserId'],
       collaboratorCount: map['collaboratorCount'] ?? 0,
@@ -172,6 +177,7 @@ class CollectionEntity {
       'likedBy': likedBy,
       'saveCount': saveCount,
       'savedBy': savedBy,
+      'savedAt': savedAt,
       'inspiredBy': inspiredBy,
       'inspiredByUserId': inspiredByUserId,
       'collaboratorCount': collaboratorCount,
@@ -208,6 +214,7 @@ class CollectionEntity {
     int? saveCount,
     bool? isSaved,
     List<String>? savedBy,
+    Map<String, int>? savedAt,
     String? inspiredBy,
     String? inspiredByUserId,
     UserRole? userRole,
@@ -243,6 +250,7 @@ class CollectionEntity {
       saveCount: saveCount ?? this.saveCount,
       isSaved: isSaved ?? this.isSaved,
       savedBy: savedBy ?? this.savedBy,
+      savedAt: savedAt ?? this.savedAt,
       inspiredBy: inspiredBy ?? this.inspiredBy,
       inspiredByUserId: inspiredByUserId ?? this.inspiredByUserId,
       userRole: userRole ?? this.userRole,

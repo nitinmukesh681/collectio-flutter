@@ -244,18 +244,25 @@ class FirestoreService {
                   doc.data() as Map<String, dynamic>, doc.id))
               .toList();
           
+          // Defensive client-side sort to ensure proper chronological ordering
+          collections.sort((a, b) {
+            final aTime = a.createdAt;
+            final bTime = b.createdAt;
+            return bTime.compareTo(aTime); // descending (newest first)
+          });
+          
           // Debug: Print the order of collections with timestamps and dates
           for (int i = 0; i < collections.length; i++) {
             final collection = collections[i];
-            final timestamp = collection.createdAt ?? 0;
+            final timestamp = collection.createdAt;
             final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
             debugPrint('FirestoreService: Collection $i: "${collection.title}" - Timestamp: $timestamp, Date: $date');
           }
           
           // Also check if the ordering is correct
           for (int i = 0; i < collections.length - 1; i++) {
-            final current = collections[i].createdAt ?? 0;
-            final next = collections[i + 1].createdAt ?? 0;
+            final current = collections[i].createdAt;
+            final next = collections[i + 1].createdAt;
             if (current < next) {
               debugPrint('FirestoreService: ORDERING ERROR! Collection $i has older timestamp than collection ${i + 1}');
             }
@@ -310,15 +317,14 @@ class FirestoreService {
         .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
     
-    // Defensive sort to ensure proper chronological ordering
+    // Sort by when the user saved them (savedAt timestamp), not when they were created
     collections.sort((a, b) {
-      final aTime = a.createdAt;
-      final bTime = b.createdAt;
-      // Handle null/missing timestamps by treating them as oldest
-      if (aTime == null && bTime == null) return 0;
-      if (aTime == null) return 1;  // a is older
-      if (bTime == null) return -1; // b is older
-      return bTime.compareTo(aTime); // descending (newest first)
+      final aSavedAt = a.savedAt[userId] ?? 0;
+      final bSavedAt = b.savedAt[userId] ?? 0;
+      // If no savedAt timestamp, fall back to createdAt
+      final aTime = aSavedAt > 0 ? aSavedAt : a.createdAt;
+      final bTime = bSavedAt > 0 ? bSavedAt : b.createdAt;
+      return bTime.compareTo(aTime); // descending (most recently saved first)
     });
     
     return collections;
@@ -334,15 +340,14 @@ class FirestoreService {
               .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
               .toList();
           
-          // Defensive sort to ensure proper chronological ordering
+          // Sort by when the user saved them (savedAt timestamp), not when they were created
           collections.sort((a, b) {
-            final aTime = a.createdAt;
-            final bTime = b.createdAt;
-            // Handle null/missing timestamps by treating them as oldest
-            if (aTime == null && bTime == null) return 0;
-            if (aTime == null) return 1;  // a is older
-            if (bTime == null) return -1; // b is older
-            return bTime.compareTo(aTime); // descending (newest first)
+            final aSavedAt = a.savedAt[userId] ?? 0;
+            final bSavedAt = b.savedAt[userId] ?? 0;
+            // If no savedAt timestamp, fall back to createdAt
+            final aTime = aSavedAt > 0 ? aSavedAt : a.createdAt;
+            final bTime = bSavedAt > 0 ? bSavedAt : b.createdAt;
+            return bTime.compareTo(aTime); // descending (most recently saved first)
           });
           
           return collections;
@@ -615,20 +620,25 @@ class FirestoreService {
       if (!snap.exists) return;
       final data = snap.data() as Map<String, dynamic>;
       final savedBy = List<String>.from(data['savedBy'] ?? const <String>[]);
+      final savedAt = Map<String, dynamic>.from(data['savedAt'] ?? const <String, dynamic>{});
       final currentSaves = (data['saveCount'] as int?) ?? 0;
 
       if (savedBy.contains(userId)) {
+        savedAt.remove(userId);
         tx.update(collectionRef, {
           'savedBy': FieldValue.arrayRemove([userId]),
           'saveCount': (currentSaves - 1) < 0 ? 0 : (currentSaves - 1),
+          'savedAt': savedAt,
         });
         tx.update(userRef, {
           'savedCollections': FieldValue.arrayRemove([collectionId]),
         });
       } else {
+        savedAt[userId] = DateTime.now().millisecondsSinceEpoch;
         tx.update(collectionRef, {
           'savedBy': FieldValue.arrayUnion([userId]),
           'saveCount': currentSaves + 1,
+          'savedAt': savedAt,
         });
         tx.update(userRef, {
           'savedCollections': FieldValue.arrayUnion([collectionId]),
@@ -800,6 +810,18 @@ class FirestoreService {
     return snapshot.docs
         .map((doc) => CollectionItemEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
+  }
+
+  /// Get collection items preview as a real-time stream
+  Stream<List<CollectionItemEntity>> getCollectionItemsPreviewStream(String collectionId, {int limit = 2}) {
+    return _collectionItemsRef
+        .where('collectionId', isEqualTo: collectionId)
+        .orderBy('order')
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => CollectionItemEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+            .toList());
   }
 
 
@@ -1265,35 +1287,33 @@ class FirestoreService {
 
   /// Get collections from followed users as a real-time stream
   Stream<List<CollectionEntity>> getFollowingCollectionsStream(String userId) {
-    // This is a simplified version - for full real-time updates, 
-    // we'd need to combine user stream with collection streams
-    return getUserStream(userId).asyncMap((user) async {
-      if (user == null || user.following.isEmpty) return [];
+    return getUserStream(userId).asyncExpand((user) {
+      if (user == null || user.following.isEmpty) {
+        return Stream.value([]);
+      }
       
-      // Get collections from followed users (simplified for now)
       final following = user.following;
-      if (following.isEmpty) return [];
+      if (following.isEmpty) return Stream.value([]);
 
       try {
-        // For simplicity, just get public collections from followed users
-        // In a production app, you'd want to handle FOLLOWERS visibility too
-        final snapshot = await _collectionsRef
-            .where('userId', whereIn: following.take(10)) // Limit to 10 for performance
+        // Use snapshots() for real-time updates instead of get()
+        return _collectionsRef
+            .where('userId', whereIn: following.take(10))
             .where('isPublic', isEqualTo: true)
             .orderBy('createdAt', descending: true)
             .limit(50)
-            .get();
-            
-        final collections = snapshot.docs
-            .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-            .toList();
-        
-        // Sort by creation time
-        collections.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return collections;
+            .snapshots()
+            .map((snapshot) {
+              final collections = snapshot.docs
+                  .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+                  .toList();
+              
+              collections.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              return collections;
+            });
       } catch (e) {
         debugPrint('Error fetching following collections: $e');
-        return [];
+        return Stream.value([]);
       }
     });
   }

@@ -32,7 +32,19 @@
 				<string>com.googleusercontent.apps.887681374750-bnhg7frlbr1j0mqhiuj5ehd6p60qbk2b</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.collectio.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>collectio</string>
+			</array>
+		</dict>
 	</array>
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -51,7 +63,7 @@
 					<key>UISceneConfigurationName</key>
 					<string>flutter</string>
 					<key>UISceneDelegateClassName</key>
-					<string>FlutterSceneDelegate</string>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
 				</dict>
@@ -77,5 +89,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Finds needs access to your photo library to save and share items from your collections.</string>
 </dict>
 </plist>

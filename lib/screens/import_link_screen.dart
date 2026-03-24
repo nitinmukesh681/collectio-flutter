@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import '../models/collection_entity.dart';
-import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
+import '../services/firestore_service.dart';
+import '../models/collection_entity.dart';
 import 'create_collection_screen.dart';
+import 'collection_detail_screen.dart';
 
 /// Screen for handling shared URLs/links and adding them to collections
 class ImportLinkScreen extends StatefulWidget {
@@ -36,9 +38,55 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[ImportLink:init] initState — sharedUrl=${widget.sharedUrl} userId=${widget.userId} userName=${widget.userName}');
+    _checkIfCollectionUrl();
     _loadUserCollections();
-    // Pre-fill title from URL domain
     _titleController.text = _extractTitleFromUrl(widget.sharedUrl);
+    debugPrint('[ImportLink:init] pre-filled title: ${_titleController.text}');
+  }
+
+  void _checkIfCollectionUrl() {
+    debugPrint('[ImportLink:check] _checkIfCollectionUrl — url=${widget.sharedUrl}');
+    final collectionId = _extractCollectionId(widget.sharedUrl);
+    debugPrint('[ImportLink:check] extractedCollectionId=$collectionId');
+    if (collectionId != null) {
+      debugPrint('[ImportLink:check] detected internal collection URL — will redirect to CollectionDetailScreen');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          debugPrint('[ImportLink:check] redirecting to CollectionDetailScreen collectionId=$collectionId');
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CollectionDetailScreen(
+                collectionId: collectionId,
+                currentUserId: widget.userId,
+              ),
+            ),
+          );
+        } else {
+          debugPrint('[ImportLink:check] unmounted before redirect could happen');
+        }
+      });
+    } else {
+      debugPrint('[ImportLink:check] external URL — staying on ImportLinkScreen');
+    }
+  }
+
+  String? _extractCollectionId(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.host.contains('collectio-b6b15.web.app') || 
+          uri.host.contains('collectio') ||
+          uri.host == 'localhost') {
+        final pathSegments = uri.pathSegments;
+        if (pathSegments.length >= 2 && pathSegments[0] == 'collection') {
+          return pathSegments[1];
+        }
+      }
+    } catch (e) {
+      debugPrint('Error parsing collection URL: $e');
+    }
+    return null;
   }
 
   @override
@@ -57,14 +105,17 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   }
 
   Future<void> _loadUserCollections() async {
+    debugPrint('[ImportLink:load] _loadUserCollections — userId=${widget.userId}');
     setState(() => _isLoading = true);
     try {
       final collections = await _firestoreService.getUserCollectionsList(widget.userId);
+      debugPrint('[ImportLink:load] loaded ${collections.length} collections: ${collections.map((c) => c.title).toList()}');
       setState(() => _userCollections = collections);
     } catch (e) {
-      debugPrint('Error loading collections: $e');
+      debugPrint('[ImportLink:load] ERROR loading collections: $e');
     }
     setState(() => _isLoading = false);
+    debugPrint('[ImportLink:load] done — _userCollections.length=${_userCollections.length}');
   }
 
   Future<void> _createNewCollection() async {
@@ -98,7 +149,9 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   }
 
   Future<void> _createLinkItems() async {
+    debugPrint('[ImportLink:save] _createLinkItems — selectedIds=$_selectedCollectionIds title=${_titleController.text.trim()} url=${widget.sharedUrl}');
     if (_selectedCollectionIds.isEmpty) {
+      debugPrint('[ImportLink:save] no collections selected');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select at least one collection')),
       );
@@ -106,6 +159,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
     }
 
     if (_titleController.text.trim().isEmpty) {
+      debugPrint('[ImportLink:save] title is empty');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a title')),
       );
@@ -117,6 +171,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
 
     try {
       for (final collectionId in _selectedCollectionIds) {
+        debugPrint('[ImportLink:save] adding to collectionId=$collectionId');
         await _firestoreService.addLinkItem(
           collectionId: collectionId,
           userId: widget.userId,
@@ -125,20 +180,21 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
           websiteUrl: widget.sharedUrl,
         );
         addedCount++;
+        debugPrint('[ImportLink:save] added to collectionId=$collectionId (total=$addedCount)');
       }
+      debugPrint('[ImportLink:save] all done — added to $addedCount collection(s)');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added to $addedCount collection(s)')),
+        SnackBarUtils.showSuccessSnackBar(
+          context,
+          'Added to $addedCount collection${addedCount > 1 ? 's' : ''}',
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
-      debugPrint('Error creating link items: $e');
+      debugPrint('[ImportLink:save] ERROR: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Error: $e');
       }
     }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -176,9 +177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final auth = context.read<AuthProvider>();
               auth.sendPasswordReset(auth.firebaseUser?.email ?? '');
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Password reset email sent')),
-              );
+              SnackBarUtils.showSuccessSnackBar(context, 'Password reset email sent');
             },
             child: const Text('Send Email'),
           ),

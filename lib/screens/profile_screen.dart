@@ -35,19 +35,40 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   bool _isLoading = true;
 
   String _collectionsFilter = 'my';
+  String? _activeUserId;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _setupRealtimeStreams();
   }
 
-  void _setupRealtimeStreams() {
-    final auth = context.read<AuthProvider>();
-    if (auth.userEntity == null) return;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = Provider.of<AuthProvider>(context);
+    final userId = auth.userId;
+    if (userId.isNotEmpty && userId != _activeUserId) {
+      _activeUserId = userId;
+      _setupRealtimeStreams(isInitial: true);
+    }
+  }
 
-    setState(() => _isLoading = true);
+  void _setupRealtimeStreams({bool isInitial = false}) {
+    // Always cancel any existing subscriptions before wiring new ones
+    _cancelSubscriptions();
+
+    final auth = context.read<AuthProvider>();
+    if (auth.userId.isEmpty) {
+      debugPrint('ProfileScreen: Cannot setup streams - user not authenticated');
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    // Only show loading indicator on initial setup, not on refresh
+    if (isInitial && mounted) {
+      setState(() => _isLoading = true);
+    }
     
     // Setup real-time streams for immediate updates
     _myCollectionsSubscription = _firestoreService.getUserCollectionsStream(auth.userId).listen(
@@ -96,19 +117,21 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   void dispose() {
     _tabController.dispose();
     _scrollController.dispose();
-    _myCollectionsSubscription?.cancel();
-    _savedCollectionsSubscription?.cancel();
-    _collaborationsSubscription?.cancel();
+    _cancelSubscriptions();
     super.dispose();
   }
 
+  void _cancelSubscriptions() {
+    _myCollectionsSubscription?.cancel();
+    _savedCollectionsSubscription?.cancel();
+    _collaborationsSubscription?.cancel();
+    _myCollectionsSubscription = null;
+    _savedCollectionsSubscription = null;
+    _collaborationsSubscription = null;
+  }
+
   Future<void> _refreshStreams() async {
-    // Cancel existing subscriptions
-    await _myCollectionsSubscription?.cancel();
-    await _savedCollectionsSubscription?.cancel();
-    await _collaborationsSubscription?.cancel();
-    
-    // Setup new streams
+    // Setup new streams (existing ones will be cancelled in _setupRealtimeStreams)
     _setupRealtimeStreams();
   }
 

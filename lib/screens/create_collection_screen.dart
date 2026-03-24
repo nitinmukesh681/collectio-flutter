@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
-import '../models/collection_entity.dart';
+import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 import '../models/category_type.dart';
 import '../models/place_prediction.dart';
 import '../services/firestore_service.dart';
 import '../services/places_service.dart';
 import '../theme/app_theme.dart';
+import '../models/collection_entity.dart';
 import '../widgets/unsplash_search_dialog.dart';
 
 
@@ -208,9 +210,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
     } catch (e) {
       debugPrint('Error saving collection: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Error: ${e.toString()}');
       }
     }
 

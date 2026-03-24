@@ -9,6 +9,7 @@ import '../models/collection_item_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 import 'add_item_screen.dart';
 import 'create_collection_screen.dart';
 import 'user_profile_screen.dart';
@@ -94,8 +95,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   }
 
   Widget _buildRatingBadge(double rating, {double fontSize = 12}) {
-    // Check if rating is old scale (0-5) or new scale (0-10)
-    final displayScore = rating <= 5 ? rating * 2 : rating;
+    final displayScore = rating;
     final label = (displayScore % 1 == 0) ? displayScore.toStringAsFixed(0) : displayScore.toStringAsFixed(1);
 
     Color badgeColor;
@@ -541,9 +541,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       myCollections = await _firestoreService.getUserCollections(widget.currentUserId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load collections: $e')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Could not load collections: $e');
       }
       setState(() => _isAddToCollectionsLoading = false);
       return;
@@ -646,15 +644,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       }
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Added to collections')),
-        );
+        SnackBarUtils.showSuccessSnackBar(context, 'Added to collections');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not add to collections: $e')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Could not add to collections: $e');
       }
     }
   }
@@ -703,9 +697,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     if (shouldCopy != true || !mounted) return;
 
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Copying collection...')),
-      );
+      SnackBarUtils.showInfoSnackBar(context, 'Copying collection...');
       
       await _firestoreService.duplicateCollection(
         originalCollectionId: widget.collectionId,
@@ -715,16 +707,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Collection copied to your profile!')),
-        );
+        SnackBarUtils.showSuccessSnackBar(context, 'Collection copied to your profile!');
       }
     } catch (e) {
       debugPrint('Error duplicating: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Error: $e');
       }
     }
   }
@@ -806,12 +794,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               try {
                 // Show loading indicator
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Deleting collection...'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
+                  SnackBarUtils.showInfoSnackBar(context, 'Deleting collection...');
                 }
                 
                 await _firestoreService.deleteCollection(
@@ -822,12 +805,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 // Show success message and navigate back
                 if (mounted) {
                   ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Collection deleted successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+                  SnackBarUtils.showSuccessSnackBar(context, 'Collection deleted successfully');
                   
                   // Cancel stream subscription to prevent conflicts
                   await _collectionSubscription?.cancel();
@@ -857,12 +835,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error deleting collection: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
+                  SnackBarUtils.showErrorSnackBar(context, 'Error deleting collection: $e');
                 }
               }
             },
@@ -1329,9 +1302,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                               await launchUrl(uri, mode: LaunchMode.externalApplication);
                             } catch (e) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Could not open link')),
-                                );
+                                SnackBarUtils.showErrorSnackBar(context, 'Could not open link');
                               }
                             }
                           },
@@ -1354,9 +1325,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                               await launchUrl(uri, mode: LaunchMode.externalApplication);
                             } catch (e) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Could not open location')),
-                                );
+                                SnackBarUtils.showErrorSnackBar(context, 'Could not open location');
                               }
                             }
                           },
@@ -1688,9 +1657,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         if (uri == null) return;
                         launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
                           if (!mounted) return false;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Could not open link')),
-                          );
+                          SnackBarUtils.showErrorSnackBar(context, 'Could not open link');
                           return false;
                         });
                       } else if (value == 'open_location') {
@@ -1700,9 +1667,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         if (uri == null) return;
                         launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
                           if (!mounted) return false;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Could not open location')),
-                          );
+                          SnackBarUtils.showErrorSnackBar(context, 'Could not open location');
                           return false;
                         });
                       }

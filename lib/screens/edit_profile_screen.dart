@@ -3,7 +3,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import '../providers/auth_provider.dart';
+import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
+import '../utils/snackbar_utils.dart';
 import '../theme/app_theme.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -78,20 +80,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final success = await auth.updateProfile(updatedUser);
       
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully')),
-        );
+        SnackBarUtils.showSuccessSnackBar(context, 'Profile updated successfully');
         Navigator.pop(context, true);
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${auth.error ?? "Unknown error"}')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Error: ${auth.error ?? "Unknown error"}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        SnackBarUtils.showErrorSnackBar(context, 'Error: ${e.toString()}');
       }
     }
 
@@ -238,9 +234,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               TextButton.icon(
                 onPressed: () {
                   auth.resendEmailVerification();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Verification email sent')),
-                  );
+                  SnackBarUtils.showSuccessSnackBar(context, 'Verification email sent');
                 },
                 icon: const Icon(Icons.send),
                 label: const Text('Resend Verification Email'),

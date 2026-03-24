@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/collection_entity.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 import '../widgets/feed_collection_card.dart';
 import '../widgets/collaboration_card.dart';
 import 'collection_detail_screen.dart';
@@ -369,11 +370,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: () => _navigateToCollection(collection.id, auth.userId),
                               onUserTap: () => _navigateToUserProfile(collection.userId, auth.userId),
                               onLike: () async {
-                                final wasLiked = collection.isLiked;
+                                final current = _feedCollections[index];
+                                final wasLiked = current.likedBy.contains(auth.userId);
 
                                 // Optimistic UI
                                 setState(() {
-                                  final current = _feedCollections[index];
                                   final updatedLikedBy = List<String>.from(current.likedBy);
                                   if (wasLiked) {
                                     updatedLikedBy.remove(auth.userId);
@@ -407,9 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   }
 
                                   if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Could not update like: $e')),
-                                    );
+                                    SnackBarUtils.showErrorSnackBar(context, 'Could not update like: $e');
                                   }
                                 }
                               },
@@ -440,9 +439,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   }
 
                                   if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Could not save collection: $e')),
-                                    );
+                                    SnackBarUtils.showErrorSnackBar(context, 'Could not save collection: $e');
                                   }
                                 }
                               },
