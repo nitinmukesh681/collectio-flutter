@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../providers/auth_provider.dart';
@@ -13,7 +14,6 @@ import 'explore_screen.dart';
 import 'create_collection_screen.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
-import 'settings_screen.dart';
 import 'open_collaborations_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -29,8 +29,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   int _selectedIndex = 0;
 
-  final Set<String> _savedCollectionIds = {};
-  
   // Stream subscriptions
   StreamSubscription<List<CollectionEntity>>? _followingSubscription;
   StreamSubscription<List<CollectionEntity>>? _publicSubscription;
@@ -155,10 +153,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = auth.userEntity;
     final userName = user?.userName.split(' ').first ?? 'Curator';
 
-    if (_savedCollectionIds.isEmpty && (user?.savedCollections.isNotEmpty ?? false)) {
-      _savedCollectionIds.addAll(user!.savedCollections);
-    }
-
     return Scaffold(
       extendBody: true,
       body: SafeArea(
@@ -177,103 +171,55 @@ class _HomeScreenState extends State<HomeScreen> {
               },
               child: CustomScrollView(
                 slivers: [
-                  // 1. Header with Greeting
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: const BoxDecoration(
-                                color: AppColors.primaryPurple,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: const BoxDecoration(
-                                color: AppColors.primaryPurple,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'finds',
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textPrimary,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Welcome Back, $userName',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                            height: 1.2,
-                            letterSpacing: -0.5,
+                  // App bar
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Row(
+                        children: [
+                          Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                          const SizedBox(width: 5),
+                          Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                          const SizedBox(width: 8),
+                          Text('finds', 
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 18, 
+                              fontWeight: FontWeight.w800, 
+                              color: AppColors.primary, 
+                              letterSpacing: -0.5
+                            )
                           ),
-                        ),
-                        Text(
-                          'Ready to curate?',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryPurple,
-                            height: 1.2,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ]),
+                          const Spacer(),
+                        ],
+                      ),
                     ),
                   ),
 
-                  // 2. Open Collaborations Section
+                  // Open Collaborations Section
                   if (!_isLoadingCollabs && _collabCollections.isNotEmpty) ...[
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Open Collaborations',
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            Text('Open Collaborations', 
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 26, 
+                                fontWeight: FontWeight.w800, 
+                                color: AppColors.textPrimary, 
+                                letterSpacing: -0.5
+                              )
                             ),
                             TextButton(
                               onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const OpenCollaborationsScreen(),
-                                  ),
-                                );
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => const OpenCollaborationsScreen()));
                               },
-                              child: Row(
-                                children: [
-                                  Text(
-                                    'See All',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: AppColors.primaryPurple,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  Icon(Icons.arrow_forward, size: 16, color: AppColors.primaryPurple),
-                                ],
+                              child: Text('View All', 
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.primary, 
+                                  fontWeight: FontWeight.w700
+                                )
                               ),
                             ),
                           ],
@@ -282,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 320, // Height for the cards
+                        height: 265, // Reduced from 275 to further tighten the carousel and reduce bottom whitespace
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           scrollDirection: Axis.horizontal,
@@ -297,34 +243,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
                   ],
 
                   // 3. Main Feed Section Title
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Row(
-                        children: [
-                          Text(
-                            'Your Feed',
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 6,
-                            height: 6,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Color(0xFFEF4444),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ],
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Text('Your Feed', 
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 26, 
+                          fontWeight: FontWeight.w800, 
+                          color: AppColors.textPrimary, 
+                          letterSpacing: -0.5
+                        )
                       ),
                     ),
                   ),
@@ -346,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SizedBox(height: 16),
                             Text(
                               'Your feed is empty',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                              style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
@@ -360,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           (context, index) {
                             final raw = _feedCollections[index];
                             final isLiked = raw.likedBy.contains(auth.userId);
-                            final isSaved = _savedCollectionIds.contains(raw.id);
+                            final isSaved = raw.savedBy.contains(auth.userId);
                             final collection = raw.copyWith(
                               isLiked: isLiked,
                               isSaved: isSaved,
@@ -413,15 +345,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                 }
                               },
                               onSave: () async {
-                                final wasSaved = collection.isSaved;
+                                final current = _feedCollections[index];
+                                final wasSaved = current.savedBy.contains(auth.userId);
 
                                 // Optimistic UI
                                 setState(() {
+                                  final updatedSavedBy = List<String>.from(current.savedBy);
                                   if (wasSaved) {
-                                    _savedCollectionIds.remove(collection.id);
+                                    updatedSavedBy.remove(auth.userId);
                                   } else {
-                                    _savedCollectionIds.add(collection.id);
+                                    updatedSavedBy.add(auth.userId);
                                   }
+                                  _feedCollections[index] = current.copyWith(
+                                    saveCount: (current.saveCount + (wasSaved ? -1 : 1)).clamp(0, 1 << 31),
+                                    savedBy: updatedSavedBy,
+                                  );
                                 });
 
                                 try {
@@ -430,11 +368,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                   // Revert UI
                                   if (mounted) {
                                     setState(() {
+                                      final current = _feedCollections[index];
+                                      final updatedSavedBy = List<String>.from(current.savedBy);
                                       if (wasSaved) {
-                                        _savedCollectionIds.add(collection.id);
+                                        updatedSavedBy.add(auth.userId);
                                       } else {
-                                        _savedCollectionIds.remove(collection.id);
+                                        updatedSavedBy.remove(auth.userId);
                                       }
+                                      _feedCollections[index] = current.copyWith(
+                                        saveCount: (current.saveCount + (wasSaved ? 1 : -1)).clamp(0, 1 << 31),
+                                        savedBy: updatedSavedBy,
+                                      );
                                     });
                                   }
 
@@ -466,28 +410,21 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          margin: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(color: const Color(0xFFF1F5F9)),
+            borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+            boxShadow: AppColors.elevatedShadow,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(0, Icons.home_outlined, Icons.home, 'Home'),
-              _buildNavItem(1, Icons.explore_outlined, Icons.explore, 'Explore'),
-              _buildNavItem(2, Icons.add_circle_outline, Icons.add_circle, 'Create', isSpecial: true, onSpecialTap: () => _navigateToCreate(auth)),
+              _buildNavItem(0, Icons.home_outlined, Icons.home_rounded),
+              _buildNavItem(1, Icons.explore_outlined, Icons.explore_rounded),
+              _buildNavItem(2, Icons.add_circle_outline_rounded, Icons.add_circle_rounded, isSpecial: true, onSpecialTap: () => _navigateToCreate(auth)),
               _buildActivityNavItem(3, auth),
-              _buildNavItem(4, Icons.person_outline, Icons.person, 'Profile'),
+              _buildNavItem(4, Icons.person_outline_rounded, Icons.person_rounded),
             ],
           ),
         ),
@@ -495,36 +432,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, IconData selectedIcon, String label, {bool isSpecial = false, VoidCallback? onSpecialTap}) {
+  Widget _buildNavItem(int index, IconData icon, IconData selectedIcon, {bool isSpecial = false, VoidCallback? onSpecialTap}) {
     final isSelected = _selectedIndex == index;
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          if (isSpecial && onSpecialTap != null) {
-            onSpecialTap();
-          } else {
-            setState(() => _selectedIndex = index);
-          }
-        },
-        borderRadius: BorderRadius.circular(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isSelected ? selectedIcon : icon,
-              color: isSelected ? AppColors.primaryPurple : Colors.black,
-              size: 26,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? AppColors.primaryPurple : Colors.black,
-              ),
-            ),
-          ],
+    return GestureDetector(
+      onTap: () {
+        if (isSpecial && onSpecialTap != null) { onSpecialTap(); }
+        else { setState(() => _selectedIndex = index); }
+      },
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 48, height: 48,
+        child: Center(
+          child: isSelected
+              ? Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+                  child: Icon(selectedIcon, color: Colors.white, size: 22),
+                )
+              : Icon(icon, color: AppColors.textMuted, size: 26),
         ),
       ),
     );
@@ -532,39 +457,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildActivityNavItem(int index, AuthProvider auth) {
     final isSelected = _selectedIndex == index;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _selectedIndex = index),
-        borderRadius: BorderRadius.circular(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            StreamBuilder<int>(
-              stream: _firestoreService.getUnreadNotificationCount(auth.userId),
-              builder: (context, snapshot) {
-                final count = snapshot.data ?? 0;
-                return Badge(
-                  isLabelVisible: count > 0,
-                  label: Text(count > 9 ? '9+' : '$count'),
-                  backgroundColor: Color(0xFFEF4444),
-                  child: Icon(
-                    isSelected ? Icons.favorite : Icons.favorite_outline,
-                    color: isSelected ? AppColors.primaryPurple : Colors.black,
-                    size: 26,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Activity',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? AppColors.primaryPurple : Colors.black,
-              ),
-            ),
-          ],
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedIndex = index);
+        _firestoreService.markAllNotificationsAsRead(auth.userId);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 48, height: 48,
+        child: Center(
+          child: StreamBuilder<int>(
+            stream: _firestoreService.getUnreadNotificationCount(auth.userId),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              final icon = isSelected
+                  ? Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+                      child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 22),
+                    )
+                  : const Icon(Icons.notifications_none_rounded, color: AppColors.textMuted, size: 26);
+              return Badge(
+                isLabelVisible: count > 0,
+                label: Text(count > 9 ? '9+' : '$count', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700)),
+                backgroundColor: AppColors.heartSalmon,
+                child: icon,
+              );
+            },
+          ),
         ),
       ),
     );
@@ -592,13 +512,6 @@ class _HomeScreenState extends State<HomeScreen> {
           currentUserId: userId,
         ),
       ),
-    );
-  }
-
-  void _navigateToSettings() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const SettingsScreen()),
     );
   }
 

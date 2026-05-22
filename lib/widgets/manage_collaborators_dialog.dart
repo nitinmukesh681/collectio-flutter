@@ -235,7 +235,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                    border: Border.all(color: AppColors.divider),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: DropdownButtonHideUnderline(
@@ -258,7 +258,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                 margin: const EdgeInsets.only(top: 8),
                 constraints: const BoxConstraints(maxHeight: 120),
                 decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  border: Border.all(color: AppColors.divider),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: ListView.builder(

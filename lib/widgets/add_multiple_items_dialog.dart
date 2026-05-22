@@ -179,7 +179,7 @@ class _AddMultipleItemsDialogState extends State<AddMultipleItemsDialog> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: AppColors.surfaceMuted,
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
               child: Row(
@@ -261,9 +261,9 @@ class _AddMultipleItemsDialogState extends State<AddMultipleItemsDialog> {
               child: Container(
                 height: 80,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: AppColors.surfaceMuted,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  border: Border.all(color: AppColors.divider),
                   image: item.image != null
                       ? DecorationImage(image: FileImage(item.image!), fit: BoxFit.cover)
                       : null,

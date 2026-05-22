@@ -1,193 +1,146 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
+import '../models/category_type.dart';
 import '../theme/app_theme.dart';
 
-class CollaborationCard extends StatelessWidget {
+class CollaborationCard extends StatefulWidget {
   final CollectionEntity collection;
   final VoidCallback onTap;
 
-  const CollaborationCard({
-    super.key,
-    required this.collection,
-    required this.onTap,
-  });
+  const CollaborationCard({super.key, required this.collection, required this.onTap});
+
+  @override
+  State<CollaborationCard> createState() => _CollaborationCardState();
+}
+
+class _CollaborationCardState extends State<CollaborationCard> {
+  late Future<String?> _coverUrlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _coverUrlFuture = _resolveCoverUrl();
+  }
+
+  @override
+  void didUpdateWidget(CollaborationCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.collection.id != widget.collection.id) _coverUrlFuture = _resolveCoverUrl();
+  }
 
   Future<String?> _resolveCoverUrl() async {
-    final raw = collection.coverImageUrl;
-    if (raw == null || raw.isEmpty) return null;
-    if (raw.startsWith('gs://')) {
-      try {
-        return await FirebaseStorage.instance.refFromURL(raw).getDownloadURL();
-      } catch (_) {
-        return null;
-      }
+    final c = widget.collection;
+    final candidate = (c.coverImageUrl != null && c.coverImageUrl!.isNotEmpty)
+        ? c.coverImageUrl!.trim()
+        : (c.previewImageUrls.isNotEmpty ? c.previewImageUrls.first.trim() : '');
+    if (candidate.isEmpty) return null;
+    if (candidate.startsWith('gs://')) {
+      try { return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL(); } catch (_) { return null; }
     }
-    return raw;
+    if (candidate.startsWith('http')) return candidate;
+    return null;
+  }
+
+  IconData _categoryIcon() {
+    switch (widget.collection.category) {
+      case CategoryType.food: return Icons.restaurant;
+      case CategoryType.finance: return Icons.attach_money;
+      case CategoryType.wellness: return Icons.spa;
+      case CategoryType.career: return Icons.work_outline;
+      case CategoryType.home: return Icons.home_outlined;
+      case CategoryType.travel: return Icons.flight_takeoff;
+      case CategoryType.tech: return Icons.computer;
+      case CategoryType.gaming: return Icons.sports_esports;
+      case CategoryType.entertainment: return Icons.movie_outlined;
+      case CategoryType.shopping: return Icons.shopping_bag_outlined;
+      case CategoryType.style: return Icons.checkroom;
+      case CategoryType.books: return Icons.menu_book;
+      case CategoryType.growth: return Icons.trending_up;
+      case CategoryType.projects: return Icons.build;
+      case CategoryType.creativity: return Icons.brush;
+      case CategoryType.sports: return Icons.sports_soccer;
+      case CategoryType.other: return Icons.category_outlined;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final collection = widget.collection;
+    final gradientColors = AppColors.categoryGradients[collection.category.name] ?? AppColors.categoryGradients['other']!;
+
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
-        width: 280,
-        child: Container(
-          margin: const EdgeInsets.only(right: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            color: const Color(0xFFF1F5F9),
-          ),
-          child: Stack(
-            children: [
-              FutureBuilder<String?>(
-                future: _resolveCoverUrl(),
-                builder: (context, snap) {
-                  final url = snap.data;
-                  if (url == null || url.isEmpty) return const SizedBox.shrink();
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: CachedNetworkImage(
-                      imageUrl: url,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
-                      errorWidget: (context, _, __) {
-                        return Container(color: const Color(0xFFF1F5F9));
-                      },
-                    ),
-                  );
-                },
-              ),
-              // Gradient Overlay
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.1),
-                      Colors.black.withOpacity(0.8),
-                    ],
-                  ),
+        width: 260,
+        margin: const EdgeInsets.only(right: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.radiusCard),
+          border: Border.all(color: AppColors.divider, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Image section — top half
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppColors.radiusCard)),
+              child: SizedBox(
+                height: 150,
+                width: double.infinity,
+                child: FutureBuilder<String?>(
+                  future: _coverUrlFuture,
+                  builder: (context, snap) {
+                    final url = snap.data;
+                    if (url != null && url.isNotEmpty) {
+                      return CachedNetworkImage(
+                        imageUrl: url, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _fallbackCover(gradientColors),
+                      );
+                    }
+                    return _fallbackCover(gradientColors);
+                  },
                 ),
               ),
-            
-            // Content
+            ),
+
+            // Content section — white bottom
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 2), // Tighter bottom padding
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Badges
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          collection.category.displayName.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      if (collection.contributorCount > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.35),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.people, color: Colors.white, size: 12),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${collection.contributorCount} contributors',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  
-                  const Spacer(),
-                  
-                  // Title
                   Text(
                     collection.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      height: 1.1,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.2),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  
-                  // Description
-                  if (collection.description != null)
+                  if (collection.description != null && collection.description!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     Text(
                       collection.description!,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, height: 1.3, fontWeight: FontWeight.w500),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
                     ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Contribute Button
-                  Container(
+                  ],
+                  const SizedBox(height: 10), // Reduced from 12
+                  // Contribute button
+                  SizedBox(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPurple,
-                      borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.18),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.add, color: Colors.white, size: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          'Contribute',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
+                    child: ElevatedButton(
+                      onPressed: widget.onTap,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text('Contribute', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14)),
                     ),
                   ),
                 ],
@@ -196,6 +149,13 @@ class CollaborationCard extends StatelessWidget {
           ],
         ),
       ),
-    ));
+    );
+  }
+
+  Widget _fallbackCover(List<Color> gradientColors) {
+    return Container(
+      decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight)),
+      child: Center(child: Icon(_categoryIcon(), size: 48, color: Colors.white.withOpacity(0.5))),
+    );
   }
 }

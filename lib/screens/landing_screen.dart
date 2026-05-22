@@ -10,23 +10,25 @@ class LandingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FF),
+      backgroundColor: const Color(0xFFF9FAFB),
       body: SafeArea(
         child: Column(
           children: [
             const SizedBox(height: 20),
-            // Modern Logo
+            // Updated Logo to match Home Screen
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLogoIcon(),
+                Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
                 const SizedBox(width: 10),
                 Text(
                   'finds',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
-                    color: const Color(0xFF1A1A2E),
+                    color: AppColors.primary,
                     letterSpacing: -1,
                   ),
                 ),
@@ -35,11 +37,11 @@ class LandingScreen extends StatelessWidget {
             
             const Spacer(flex: 1),
             
-            // Refined Masonry-style Grid
+            // Image Grid
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.42,
+                height: MediaQuery.of(context).size.height * 0.35,
                 child: Row(
                   children: [
                     Expanded(
@@ -88,7 +90,7 @@ class LandingScreen extends StatelessWidget {
             
             const Spacer(flex: 1),
             
-            // High-Impact Typography
+            // Typography
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Column(
@@ -97,37 +99,41 @@ class LandingScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     text: TextSpan(
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 42,
-                        height: 1.2, // Increased line height to prevent cropping
-                        color: const Color(0xFF1A1A2E),
+                        fontSize: 48,
+                        height: 1.1,
+                        color: const Color(0xFF1F2937),
                         fontWeight: FontWeight.w800,
+                        letterSpacing: -1.5,
                       ),
                       children: [
-                        const TextSpan(text: 'curate\n'),
+                        const TextSpan(text: 'Curate\neverything '),
                         TextSpan(
-                          text: 'everything',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 42,
+                          text: 'you\n',
+                          style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.primary,
                             fontWeight: FontWeight.w800,
-                            foreground: Paint()
-                              ..shader = const LinearGradient(
-                                colors: [AppColors.primaryPurple, Color(0xFFA78BFA)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ).createShader(const Rect.fromLTWH(0.0, 0.0, 250.0, 70.0)),
                           ),
                         ),
-                        const TextSpan(text: '\nyou love.'),
+                        TextSpan(
+                          text: 'love',
+                          style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const TextSpan(text: '.'),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Text(
-                    'Your personal collection of places,\nmedia, and hidden gems.',
+                    'The elegant way to organize your digital world. Save, collaborate, and share curated collections that reflect your unique taste.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      color: const Color(0xFF6B7280),
+                      fontSize: 18,
+                      color: const Color(0xFF4B5563),
                       fontWeight: FontWeight.w500,
                       height: 1.5,
                     ),
@@ -138,26 +144,22 @@ class LandingScreen extends StatelessWidget {
             
             const Spacer(flex: 1),
             
-            // Modern CTA Button
+            // Updated CTA Button
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Container(
                 width: double.infinity,
                 height: 64,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(32),
+                  borderRadius: BorderRadius.circular(16),
+                  color: AppColors.primary,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryPurple.withOpacity(0.35),
+                      color: AppColors.primary.withOpacity(0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
                   ],
-                  gradient: const LinearGradient(
-                    colors: [AppColors.primaryPurple, Color(0xFF9D84FF)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
                 ),
                 child: Material(
                   color: Colors.transparent,
@@ -168,22 +170,15 @@ class LandingScreen extends StatelessWidget {
                         MaterialPageRoute(builder: (_) => const LoginScreen()),
                       );
                     },
-                    borderRadius: BorderRadius.circular(32),
+                    borderRadius: BorderRadius.circular(16),
                     child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Start Collecting',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 22),
-                        ],
+                      child: Text(
+                        'Start Curating',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -191,35 +186,18 @@ class LandingScreen extends StatelessWidget {
               ),
             ),
             
-            const SizedBox(height: 32),
+            const SizedBox(height: 48),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLogoIcon() {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: AppColors.primaryPurple.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-        ),
-        const Icon(Icons.auto_awesome_motion_rounded, color: AppColors.primaryPurple, size: 24),
-      ],
-    );
-  }
-
   Widget _buildImageCard(String imageUrl) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        color: AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -229,21 +207,14 @@ class LandingScreen extends StatelessWidget {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         child: CachedNetworkImage(
           imageUrl: imageUrl,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
           placeholder: (context, url) => Container(
-            color: const Color(0xFFF1F5F9),
-            child: const Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryPurple),
-              ),
-            ),
+            color: AppColors.surfaceMuted,
           ),
           errorWidget: (context, url, error) => const Icon(Icons.image_outlined, color: Colors.grey),
         ),

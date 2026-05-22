@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:async';
 import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
+import '../models/comment_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -28,7 +30,7 @@ class CollectionDetailScreen extends StatefulWidget {
   State<CollectionDetailScreen> createState() => _CollectionDetailScreenState();
 }
 
-class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
+class _CollectionDetailScreenState extends State<CollectionDetailScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   CollectionEntity? _collection;
   List<CollectionItemEntity> _items = [];
@@ -36,6 +38,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   bool _isLoading = true;
   bool _isOwner = false;
   String _searchQuery = '';
+  // ignore: unused_field
   final Set<String> _expandedItemIds = <String>{};
   bool _showSearch = false;
   String _currentUserName = '';
@@ -43,12 +46,19 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   bool _isFollowing = false;
   bool _isAddToCollectionsLoading = false;
   bool _isUnauthorized = false;
-  
+
+  late TabController _tabController;
+  final TextEditingController _commentController = TextEditingController();
+  String? _replyingTo; // comment ID being replied to
+
   StreamSubscription<CollectionEntity?>? _collectionSubscription;
-  
+  Stream<List<CollectionItemEntity>>? _itemsStream;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _itemsStream = _firestoreService.getCollectionItems(widget.collectionId);
     _setupCollectionStream();
     _loadCurrentUserName();
   }
@@ -120,7 +130,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: fontSize,
               fontWeight: FontWeight.w800,
               color: badgeColor,
@@ -132,6 +142,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildIconChip({required IconData icon, required VoidCallback onTap}) {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
@@ -147,11 +158,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildTrailingChips(CollectionItemEntity item) {
     if (item.rating <= 0) return const SizedBox.shrink();
     return _buildRatingBadge(item.rating, fontSize: 12);
   }
 
+  // ignore: unused_element
   double _trailingUnitReservedWidth(CollectionItemEntity item) {
     // Reserve enough right-side width so title/description never render under the
     // trailing unit (chips + menu). Keep this tight so there's no excessive whitespace.
@@ -181,6 +194,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   @override
   void dispose() {
     _collectionSubscription?.cancel();
+    _tabController.dispose();
+    _commentController.dispose();
     super.dispose();
   }
 
@@ -209,6 +224,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     }
   }
 
+  // ignore: unused_element
   void _showContributorsSheet(CollectionEntity collection) {
     showModalBottomSheet(
       context: context,
@@ -236,7 +252,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       alignment: Alignment.center,
                       child: Text(
                         initials,
-                        style: const TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           color: AppColors.primaryPurple,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -250,7 +266,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                       alignment: Alignment.center,
                       child: Text(
                         initials,
-                        style: const TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           color: AppColors.primaryPurple,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -265,7 +281,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                     alignment: Alignment.center,
                     child: Text(
                       initials,
-                      style: const TextStyle(
+                      style: GoogleFonts.plusJakartaSans(
                         color: AppColors.primaryPurple,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -282,9 +298,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               leading: buildAvatar(name: ownerName, avatarUrl: null),
               title: Text(
                 '@$ownerName',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
               ),
-              subtitle: Text('Owner', style: Theme.of(context).textTheme.bodySmall),
+              subtitle: Text('Owner', style: GoogleFonts.plusJakartaSans(fontSize: 12)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -307,9 +323,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               leading: buildAvatar(name: ownerName, avatarUrl: trimmed),
               title: Text(
                 '@$ownerName',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
               ),
-              subtitle: Text('Owner', style: Theme.of(context).textTheme.bodySmall),
+              subtitle: Text('Owner', style: GoogleFonts.plusJakartaSans(fontSize: 12)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -334,9 +350,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 leading: buildAvatar(name: ownerName, avatarUrl: resolved),
                 title: Text(
                   '@$ownerName',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text('Owner', style: Theme.of(context).textTheme.bodySmall),
+                subtitle: Text('Owner', style: GoogleFonts.plusJakartaSans(fontSize: 12)),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
@@ -363,7 +379,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
               children: [
                 Text(
                   'Contributors',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 18, fontWeight: FontWeight.w800),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -382,7 +398,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                         leading: buildAvatar(name: name, avatarUrl: avatarUrl),
                         title: Text(
                           '@$name',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
                         ),
                         onTap: () {
                           Navigator.pop(context);
@@ -433,6 +449,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     return false;
   }
 
+  // ignore: unused_element
   Future<void> _toggleFollowUser() async {
     if (_collection == null) return;
     final targetUserId = _collection!.userId;
@@ -556,7 +573,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) {
           return AlertDialog(
-            title: const Text('Add to collections'),
+            title: Text('Add to collections', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
             content: SizedBox(
               width: double.maxFinite,
               child: ListView.separated(
@@ -596,7 +613,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                             c.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.black87),
+                            style: GoogleFonts.plusJakartaSans(color: Colors.black87),
                           ),
                         ),
                       ],
@@ -609,11 +626,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             actions: [
               OutlinedButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                child: Text('Cancel', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
               ),
               ElevatedButton(
                 onPressed: selected.isEmpty ? null : () => Navigator.pop(context, true),
-                child: const Text('Add'),
+                child: Text('Add', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
               ),
             ],
           );
@@ -677,18 +694,18 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     final shouldCopy = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Copy Collection?'),
-        content: Text('This will create a copy of "${_collection!.title}" in your profile.'),
+        title: Text('Copy Collection?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Text('This will create a copy of "${_collection!.title}" in your profile.', style: GoogleFonts.plusJakartaSans()),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           OutlinedButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPurple),
-            child: const Text('Copy'),
+            child: Text('Copy', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -721,18 +738,18 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Item?'),
-        content: Text('Are you sure you want to delete "${item.title}"?'),
+        title: Text('Delete Item?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to delete "${item.title}"?', style: GoogleFonts.plusJakartaSans()),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           OutlinedButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text('Delete', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -743,6 +760,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _toggleItemLike(CollectionItemEntity item) async {
     try {
       await _firestoreService.toggleItemLike(item.id, widget.currentUserId);
@@ -778,13 +796,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Collection?'),
-        content: const Text('This will permanently delete the collection and all its items.'),
+        title: Text('Delete Collection?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Text('This will permanently delete the collection and all its items.', style: GoogleFonts.plusJakartaSans()),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           OutlinedButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
@@ -839,7 +857,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
                 }
               }
             },
-            child: const Text('Delete'),
+            child: Text('Delete', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -862,8 +880,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             onPressed: () => Navigator.pop(context),
           ),
         ),
-        body: const Center(
-          child: Text('This collection is private'),
+        body: Center(
+          child: Text('This collection is private', style: GoogleFonts.plusJakartaSans()),
         ),
       );
     }
@@ -871,7 +889,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     if (_collection == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: Text('Collection not found')),
+        body: Center(child: Text('Collection not found', style: GoogleFonts.plusJakartaSans())),
       );
     }
 
@@ -887,607 +905,398 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     final gradientColors = AppColors.categoryGradients[collection.category.name] ?? 
         AppColors.categoryGradients['other']!;
 
-    Future<String?> resolveOwnerAvatarUrl() async {
-      String? raw = collection.userAvatarUrl;
-      if (raw == null || raw.trim().isEmpty) {
-        try {
-          final owner = await _firestoreService.getUser(collection.userId);
-          raw = owner?.avatarUrl;
-        } catch (e) {
-          debugPrint('Failed to fetch owner avatar for ${collection.userId}: $e');
-          raw = null;
-        }
-      }
-      if (raw == null || raw.isEmpty) return null;
-      final trimmed = raw.trim();
-      if (trimmed.isEmpty) return null;
-      if (trimmed.startsWith('gs://')) {
-        try {
-          return await FirebaseStorage.instance.refFromURL(trimmed).getDownloadURL();
-        } catch (e) {
-          debugPrint('Failed to resolve gs:// owner avatar url: $trimmed, error: $e');
-          return null;
-        }
-      }
-      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        return trimmed;
-      }
-      return null;
-    }
-
     return Scaffold(
       extendBody: true,
-      backgroundColor: Colors.white,
-      body: CustomScrollView(
-        slivers: [
-          // Hero header with cover image
-          SliverAppBar(
-            expandedHeight: hasCoverImage ? 260 : kToolbarHeight,
-            pinned: true,
-            backgroundColor: hasCoverImage ? Colors.transparent : Colors.white,
-            leadingWidth: 56,
-            leading: Center(
-              child: _buildCircleButton(
-                icon: Icons.keyboard_arrow_left,
-                onTap: () => Navigator.pop(context),
-              ),
-            ),
-            actions: [
-              _buildCircleButton(
-                icon: Icons.search_rounded,
-                onTap: () {
-                  setState(() {
-                    _showSearch = !_showSearch;
-                    if (!_showSearch) _searchQuery = '';
-                  });
-                },
-              ),
-              _buildCircleButton(
-                icon: Icons.share,
-                onTap: _shareCollection,
-              ),
-              Theme(
-                data: Theme.of(context).copyWith(
-                  iconButtonTheme: IconButtonThemeData(
-                    style: IconButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(40, 40),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+      backgroundColor: AppColors.backgroundSurface,
+      body: StreamBuilder<List<CollectionItemEntity>>(
+        stream: _itemsStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            _items = snapshot.data!;
+          }
+          final itemsCount = snapshot.hasData ? snapshot.data!.length : collection.itemCount;
+
+          return CustomScrollView(
+            slivers: [
+              // Hero header with cover image
+              SliverAppBar(
+                expandedHeight: hasCoverImage ? 280 : kToolbarHeight,
+                pinned: true,
+                stretch: true,
+                backgroundColor: hasCoverImage ? Colors.transparent : Colors.white,
+                leadingWidth: 56,
+                leading: Center(
+                  child: _buildCircleButton(
+                    icon: Icons.keyboard_arrow_left,
+                    onTap: () => Navigator.pop(context),
                   ),
                 ),
-                child: PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  icon: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                actions: [
+                  _buildCircleButton(
+                    icon: Icons.search_rounded,
+                    onTap: () {
+                      setState(() {
+                        _showSearch = !_showSearch;
+                        if (!_showSearch) _searchQuery = '';
+                      });
+                    },
                   ),
-                  itemBuilder: (context) => [
-                    if (_isOwner)
-                      const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
-                    if (_isOwner)
-                      const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                    if (!_isOwner)
-                      const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
-                  ],
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      _navigateToEditCollection();
-                    } else if (value == 'delete') {
-                      _showDeleteDialog();
-                    } else if (value == 'add_to_new') {
-                      _duplicateCollection();
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            flexibleSpace: hasCoverImage
-                ? FlexibleSpaceBar(
-                    background: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      FutureBuilder<String?>(
-                        future: () async {
-                          final raw = collection.coverImageUrl;
-                          if (raw == null || raw.isEmpty) return null;
-                          if (raw.startsWith('gs://')) {
-                            try {
-                              return await FirebaseStorage.instance.refFromURL(raw).getDownloadURL();
-                            } catch (_) {
-                              return null;
-                            }
-                          }
-                          return raw;
-                        }(),
-                        builder: (context, snap) {
-                          final url = snap.data;
-                          if (url == null || url.isEmpty) {
-                            return Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: gradientColors,
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                              ),
-                            );
-                          }
-                          return CachedNetworkImage(
-                            imageUrl: url,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, u, error) {
-                              return Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: gradientColors,
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                  const SizedBox(width: 8),
+                  _buildCircleButton(
+                    icon: Icons.share,
+                    onTap: _shareCollection,
+                  ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    offset: const Offset(0, 40),
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                    ),
+                    itemBuilder: (context) => [
+                      if (_isOwner)
+                        const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
+                      if (_isOwner)
+                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      if (!_isOwner)
+                        const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _navigateToEditCollection();
+                      } else if (value == 'delete') {
+                        _showDeleteDialog();
+                      } else if (value == 'add_to_new') {
+                        _duplicateCollection();
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                flexibleSpace: hasCoverImage
+                    ? FlexibleSpaceBar(
+                        background: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          FutureBuilder<String?>(
+                            future: () async {
+                              final raw = collection.coverImageUrl;
+                              if (raw == null || raw.isEmpty) return null;
+                              if (raw.startsWith('gs://')) {
+                                try {
+                                  return await FirebaseStorage.instance.refFromURL(raw).getDownloadURL();
+                                } catch (_) {
+                                  return null;
+                                }
+                              }
+                              return raw;
+                            }(),
+                            builder: (context, snap) {
+                              final url = snap.data;
+                              if (url == null || url.isEmpty) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: gradientColors,
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
                                   ),
-                                ),
+                                );
+                              }
+                              return CachedNetworkImage(
+                                imageUrl: url,
+                                fit: BoxFit.cover,
+                                errorWidget: (context, u, error) {
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: gradientColors,
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                    ),
+                                  );
+                                },
                               );
                             },
-                          );
-                        },
-                      ),
-
-
-                      // White overlap to make the content sheet fit like a puzzle
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Container(
-                          height: 28,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                           ),
+                          ],
                         ),
-                      ),
-                      ],
-                    ),
-                  )
-                : null,
-          ),
-
-          // Collection info
-          SliverToBoxAdapter(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                      )
+                    : null,
               ),
-              padding: EdgeInsets.fromLTRB(18, hasCoverImage ? 0 : 10, 18, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // User info row
-                  Row(
+
+              // Collection info — matching mockup
+              SliverToBoxAdapter(
+                child: Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Updated time
+                      Text(
+                        'UPDATED ${_getTimeAgo(collection.createdAt).toUpperCase()}',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // User Info
                       GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => UserProfileScreen(
-                                userId: collection.userId,
-                                currentUserId: widget.currentUserId,
-                              ),
-                            ),
-                          );
-                        },
+                        onTap: () => _navigateToUserProfile(collection.userId),
                         child: Row(
                           children: [
-                            SizedBox(
-                              width: 40,
-                              height: 40,
-                              child: ClipOval(
-                                child: FutureBuilder<String?>(
-                                  future: resolveOwnerAvatarUrl(),
-                                  builder: (context, snap) {
-                                    final url = snap.data;
-                                    final initials = collection.userName.isNotEmpty ? collection.userName[0].toUpperCase() : '?';
-                                    if (url == null || url.isEmpty) {
-                                      return Container(
-                                        color: AppColors.primaryPurple.withOpacity(0.2),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          initials,
-                                          style: const TextStyle(
-                                            color: AppColors.primaryPurple,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                      );
-                                    }
-
-                                    return CachedNetworkImage(
-                                      imageUrl: url,
-                                      fit: BoxFit.cover,
-                                      errorWidget: (context, url, error) {
-                                        return Container(
-                                          color: AppColors.primaryPurple.withOpacity(0.2),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            initials,
-                                            style: const TextStyle(
-                                              color: AppColors.primaryPurple,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
-                                ),
+                            _buildUserAvatar(collection.userName, collection.userAvatarUrl, size: 28),
+                            const SizedBox(width: 8),
+                            Text(
+                              '@${collection.userName}',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
                               ),
                             ),
-                            const SizedBox(width: 10),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Large title — Changed from w800 to w900
+                      Text(
+                        collection.title,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 34, fontWeight: FontWeight.w900, color: AppColors.textPrimary, height: 1.1, letterSpacing: -0.8),
+                      ),
+
+                      // Description
+                      if (collection.description != null && collection.description!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          collection.description!,
+                          style: GoogleFonts.plusJakartaSans(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
+                        ),
+                      ],
+
+                      // Tags
+                      if (collection.tags.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8, runSpacing: 8,
+                          children: [
+                            ...collection.tags.map((tag) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(8)),
+                              child: Text('#${tag.toLowerCase()}', style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                            )),
+                            if (collection.isOpenForContribution)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
+                                child: Text('OPEN', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                              ),
+                          ],
+                        ),
+                      ],
+
+                      // Stats
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4.0),
+                        child: Row(
+                          children: [
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => UserProfileScreen(
-                                              userId: collection.userId,
-                                              currentUserId: widget.currentUserId,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      child: Text(
-                                        '@${collection.userName}',
-                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                    ),
-                                    if (_contributorUsers.isNotEmpty) ...[
-                                      const SizedBox(width: 6),
-                                      InkWell(
-                                        onTap: () => _showContributorsSheet(collection),
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          child: Text(
-                                            '+ ${_contributorUsers.length} others',
-                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 13,
-                                              color: AppColors.primaryPurple,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                Text(
-                                  _getTimeAgo(collection.createdAt),
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontSize: 12,
-                                    color: Colors.black87,
-                                  ),
-                                ),
+                                Text('$itemsCount', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                                Text('ITEMS', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+                              ],
+                            ),
+                            Container(width: 1, height: 36, color: AppColors.divider, margin: const EdgeInsets.symmetric(horizontal: 20)),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${collection.likes}', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                                Text('LIKES', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
                               ],
                             ),
                           ],
                         ),
                       ),
-                      const Spacer(),
-                      if (!_isOwner)
-                        OutlinedButton(
-                          onPressed: _toggleFollowUser,
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: _isFollowing
-                                ? AppColors.primaryPurple.withOpacity(0.08)
-                                : Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            side: const BorderSide(color: AppColors.primaryPurple),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                          ),
-                          child: Text(
-                            _isFollowing ? 'Following' : 'Follow',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.primaryPurple,
-                              fontWeight: FontWeight.w600,
+
+                      // Action buttons — Save, Share, +, Heart
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          // Save
+                          ElevatedButton.icon(
+                            onPressed: _toggleSave,
+                            icon: Icon(collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 16),
+                            label: Text(collection.isSaved ? 'Saved' : 'Save', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 18),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Title
-                  Text(
-                    collection.title,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-
-                  // Description
-                  if (collection.description != null && collection.description!.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      collection.description!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontSize: 15,
-                        color: Colors.black87,
+                          const SizedBox(width: 8),
+                          // Share
+                          OutlinedButton.icon(
+                            onPressed: _shareCollection,
+                            icon: const Icon(Icons.share_outlined, size: 16),
+                            label: Text('Share', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.textSecondary,
+                              side: const BorderSide(color: AppColors.divider),
+                              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Add item
+                          if (_isOwner || collection.isOpenForContribution) ...[
+                            GestureDetector(
+                              onTap: () => _navigateToAddItem(),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+                                child: const Icon(Icons.add_rounded, size: 20, color: AppColors.secondary),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          // Like (heart on the right)
+                          GestureDetector(
+                            onTap: _toggleLike,
+                            child: Icon(
+                              collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                              size: 24, color: collection.isLiked ? AppColors.heartSalmon : AppColors.textMuted,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-
-                  // Tags
-                  if (collection.tags.isNotEmpty || collection.isOpenForContribution) ...[
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ...collection.tags.map((tag) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryPurple.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '#${tag.toLowerCase()}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.primaryPurple,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            )),
-                        if (collection.isOpenForContribution)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryPurpleDark,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'OPEN',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-
-                  // Stats row
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      _buildStatChip(Icons.favorite_rounded, '${collection.likes} likes', AppColors.heartSalmon),
-                      const SizedBox(width: 18),
-                      _buildStatChip(Icons.grid_view_rounded, '${collection.itemCount} items', Colors.black87),
-                      const SizedBox(width: 18),
-                      _buildStatChip(Icons.public_rounded, collection.isPublic ? 'Public' : 'Private', Colors.black87),
-                      const Spacer(),
-                      if ((collection.websiteUrl ?? '').trim().isNotEmpty) ...[
-                        InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: () async {
-                            var raw = (collection.websiteUrl ?? '').trim();
-                            if (raw.isEmpty) return;
-                            if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-                              raw = 'https://$raw';
-                            }
-                            final uri = Uri.tryParse(raw);
-                            if (uri == null) return;
-                            try {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            } catch (e) {
-                              if (context.mounted) {
-                                SnackBarUtils.showErrorSnackBar(context, 'Could not open link');
-                              }
-                            }
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(6),
-                            child: Icon(Icons.link_rounded, size: 18, color: Colors.black87),
-                          ),
-                        ),
-                      ],
-                      if ((collection.googleMapsUrl ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: () async {
-                            final raw = (collection.googleMapsUrl ?? '').trim();
-                            if (raw.isEmpty) return;
-                            final uri = Uri.tryParse(raw);
-                            if (uri == null) return;
-                            try {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            } catch (e) {
-                              if (context.mounted) {
-                                SnackBarUtils.showErrorSnackBar(context, 'Could not open location');
-                              }
-                            }
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(6),
-                            child: Icon(Icons.location_on_rounded, size: 18, color: Colors.black87),
-                          ),
-                        ),
-                      ],
+                      const SizedBox(height: 14),
                     ],
                   ),
-                  const SizedBox(height: 18),
-                ],
+                ),
               ),
-            ),
-          ),
 
-          // Search bar (if active)
-          if (_showSearch)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                child: TextField(
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Search items...',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () {
-                        setState(() {
-                          _showSearch = false;
-                          _searchQuery = '';
-                        });
+              // Items / Discussion tab bar
+              SliverToBoxAdapter(
+                child: Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.only(top: 8),
+                  child: TabBar(
+                    controller: _tabController,
+                    onTap: (_) => setState(() {}),
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                    unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                    indicatorWeight: 3,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    dividerColor: AppColors.divider,
+                    tabs: const [Tab(text: 'Items'), Tab(text: 'Discussion')],
+                  ),
+                ),
+              ),
+
+              // Search bar (if active)
+              if (_showSearch && _tabController.index == 0)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                    child: TextField(
+                      autofocus: true,
+                      style: GoogleFonts.plusJakartaSans(),
+                      decoration: InputDecoration(
+                        hintText: 'Search items...',
+                        hintStyle: GoogleFonts.plusJakartaSans(),
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () {
+                            setState(() {
+                              _showSearch = false;
+                              _searchQuery = '';
+                            });
+                          },
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      onChanged: (value) {
+                        setState(() => _searchQuery = value);
                       },
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).inputDecorationTheme.fillColor,
-                  ),
-                  onChanged: (value) {
-                    setState(() => _searchQuery = value);
-                  },
-                ),
-              ),
-            ),
-
-          // Items list
-          StreamBuilder<List<CollectionItemEntity>>(
-            stream: _firestoreService.getCollectionItems(widget.collectionId),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                _items = snapshot.data!;
-              }
-
-              final items = _filteredItems;
-
-              if (items.isEmpty) {
-                return SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.inventory_2_rounded, size: 64, color: AppColors.textMuted),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No items yet',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final item = items[index];
-                    return _buildItemCard(item, index + 1);
-                  },
-                  childCount: items.length,
-                ),
-              );
-            },
-          ),
-
-          // Bottom padding for action bar
-          const SliverToBoxAdapter(child: SizedBox(height: 110)),
-        ],
-      ),
-
-      // Bottom action bar - Updated to float slightly above and slightly smaller
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(26),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(color: const Color(0xFFF1F5F9)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildActionButton(
-                  onPressed: _toggleLike,
-                  icon: collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  label: 'Like',
-                  color: collection.isLiked ? AppColors.heartSalmon : Colors.black87,
-                  isPrimary: false,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildActionButton(
-                  onPressed: _toggleSave,
-                  icon: collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                  label: 'Save',
-                  color: collection.isSaved ? AppColors.primaryPurple : Colors.black87,
-                  isPrimary: false,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildActionButton(
-                  onPressed: _duplicateCollection,
-                  icon: Icons.copy_all_rounded,
-                  label: 'Copy',
-                  color: Colors.white,
-                  isPrimary: true,
-                ),
-              ),
-              if (_isOwner || collection.isOpenForContribution) ...[
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildActionButton(
-                    onPressed: () => _navigateToAddItem(),
-                    icon: Icons.add_rounded,
-                    label: 'Add',
-                    color: Colors.black87,
-                    isPrimary: false,
                   ),
                 ),
+
+              // Items list
+              if (_tabController.index == 0)
+                _buildItemsList(),
+
+              // Discussion tab
+              if (_tabController.index == 1) ...[
+                SliverToBoxAdapter(child: _buildDiscussionTab()),
               ],
+
+              const SliverToBoxAdapter(child: SizedBox(height: 110)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildItemsList() {
+    final items = _filteredItems;
+
+    if (items.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.inventory_2_rounded, size: 64, color: AppColors.textMuted),
+              const SizedBox(height: 16),
+              Text(
+                'No items yet',
+                style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+              ),
             ],
           ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final item = items[index];
+            return _buildItemCard(item, index + 1);
+          },
+          childCount: items.length,
         ),
       ),
     );
   }
 
+  // ignore: unused_element
   Widget _buildActionButton({
     required VoidCallback onPressed,
     required IconData icon,
@@ -1511,7 +1320,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             const SizedBox(height: 1),
             Text(
               label,
-              style: TextStyle(
+              style: GoogleFonts.plusJakartaSans(
                 color: color,
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
@@ -1519,6 +1328,222 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDiscussionTab() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Comment input — wrapped in a white container with styling
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.divider),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Current user avatar
+                    SizedBox(
+                      width: 36, height: 36,
+                      child: ClipOval(
+                        child: FutureBuilder<UserEntity?>(
+                          future: _firestoreService.getUser(widget.currentUserId),
+                          builder: (context, snap) {
+                            final user = snap.data;
+                            if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty) {
+                              return CachedNetworkImage(imageUrl: user.avatarUrl!, fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
+                                  child: Text(user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary))));
+                            }
+                            final initial = user?.userName.isNotEmpty == true ? user!.userName[0].toUpperCase() : '?';
+                            return Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
+                              child: Text(initial, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary)));
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _commentController,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: _replyingTo != null ? 'Write a reply...' : 'Add a comment...',
+                          hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+                          border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none,
+                          filled: false, contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final text = _commentController.text.trim();
+                        if (text.isEmpty) return;
+                        _commentController.clear();
+                        final auth = await _firestoreService.getUser(widget.currentUserId);
+                        await _firestoreService.addComment(
+                          collectionId: widget.collectionId, userId: widget.currentUserId,
+                          userName: auth?.userName ?? '', userAvatarUrl: auth?.avatarUrl,
+                          text: text, parentCommentId: _replyingTo,
+                        );
+                        if (mounted) setState(() => _replyingTo = null);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      ),
+                      child: Text('Post', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13)),
+                    ),
+                  ],
+                ),
+                if (_replyingTo != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, left: 46, bottom: 6),
+                    child: GestureDetector(
+                      onTap: () => setState(() => _replyingTo = null),
+                      child: Text('Cancel reply', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Comments list
+          StreamBuilder<List<CommentEntity>>(
+            stream: _firestoreService.getCommentsStream(widget.collectionId),
+            builder: (context, snapshot) {
+              final comments = snapshot.data ?? [];
+              final topLevel = comments.where((c) => c.parentCommentId == null).toList();
+              final replies = <String, List<CommentEntity>>{};
+              for (final c in comments.where((c) => c.parentCommentId != null)) {
+                replies.putIfAbsent(c.parentCommentId!, () => []).add(c);
+              }
+
+              if (topLevel.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(child: Text('No comments yet. Start the discussion!', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted))),
+                );
+              }
+
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Text('Community Discussion', style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(8)),
+                        child: Text('${comments.length} comments', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  for (final comment in topLevel) ...[
+                    _buildCommentTile(comment),
+                    if (replies.containsKey(comment.id))
+                      Padding(
+                        padding: const EdgeInsets.only(left: 32),
+                        child: Column(children: replies[comment.id]!.map((r) => _buildCommentTile(r)).toList()),
+                      ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentTile(CommentEntity comment) {
+    final isLiked = comment.likedBy.contains(widget.currentUserId);
+    final isOwn = comment.userId == widget.currentUserId;
+    final initial = comment.userName.isNotEmpty ? comment.userName[0].toUpperCase() : '?';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Avatar
+          SizedBox(
+            width: 40, height: 40,
+            child: ClipOval(
+              child: (comment.userAvatarUrl != null && comment.userAvatarUrl!.isNotEmpty)
+                  ? CachedNetworkImage(imageUrl: comment.userAvatarUrl!, fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
+                        child: Text(initial, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary))))
+                  : Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
+                      child: Text(initial, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary))),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Content
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(comment.userName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
+                    const Spacer(),
+                    Text(_getTimeAgo(comment.createdAt), style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textMuted)),
+                    if (isOwn) ...[
+                      const SizedBox(width: 6),
+                      GestureDetector(onTap: () => _firestoreService.deleteComment(comment.id),
+                        child: const Icon(Icons.close, size: 14, color: AppColors.textMuted)),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(comment.text, style: GoogleFonts.plusJakartaSans(fontSize: 15, color: AppColors.textPrimary, height: 1.5)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _firestoreService.toggleCommentLike(comment.id, widget.currentUserId),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.thumb_up_alt_outlined, size: 15, color: isLiked ? AppColors.primary : AppColors.textMuted),
+                        const SizedBox(width: 4),
+                        Text('${comment.likes}', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: isLiked ? AppColors.primary : AppColors.textSecondary)),
+                      ]),
+                    ),
+                    const SizedBox(width: 18),
+                    GestureDetector(
+                      onTap: () => setState(() => _replyingTo = comment.parentCommentId == null ? comment.id : comment.parentCommentId),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.subdirectory_arrow_right_rounded, size: 15, color: AppColors.textMuted),
+                        const SizedBox(width: 4),
+                        Text('Reply', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1538,6 +1563,52 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     );
   }
 
+  Widget _buildUserAvatar(String name, String? avatarUrl, {double size = 28}) {
+    // ignore: unused_local_variable
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+    Widget placeholder = Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(color: AppColors.surfaceMuted, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Icon(Icons.person, size: size * 0.6, color: AppColors.textMuted),
+    );
+
+    if (avatarUrl == null || avatarUrl.trim().isEmpty) return placeholder;
+
+    final trimmed = avatarUrl.trim();
+
+    if (trimmed.startsWith('gs://')) {
+      return FutureBuilder<String>(
+        future: FirebaseStorage.instance.refFromURL(trimmed).getDownloadURL(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return _buildNetworkAvatar(snapshot.data!, size);
+          }
+          return placeholder;
+        },
+      );
+    }
+
+    return _buildNetworkAvatar(trimmed, size);
+  }
+
+  Widget _buildNetworkAvatar(String url, double size) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size),
+      child: CachedNetworkImage(
+        imageUrl: url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => Container(width: size, height: size, color: AppColors.surfaceMuted),
+        errorWidget: (_, __, ___) => Container(width: size, height: size, color: AppColors.surfaceMuted),
+      ),
+    );
+  }
+
+  // ignore: unused_element
   Widget _buildStatChip(IconData icon, String text, Color color) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1546,7 +1617,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         const SizedBox(width: 6),
         Text(
           text,
-          style: const TextStyle(fontSize: 13, color: Colors.black87),
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.black87),
         ),
       ],
     );
@@ -1554,259 +1625,168 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
 
   Widget _buildItemCard(CollectionItemEntity item, int rank) {
     final canEdit = _isOwner || item.userId == widget.currentUserId;
-    // Keep item rows compact and prevent text from flowing under trailing actions.
-    const titleMaxLines = 3;
-    const descriptionMaxLines = 2;
-    final isExpanded = _expandedItemIds.contains(item.id);
-    const leadingWidth = 28.0;
-    const leadingGap = 12.0;
-    final trailingTextInset = _trailingUnitReservedWidth(item);
-    const expandedHeaderTopPad = 2.0;
-    const imageMaxHeight = 240.0;
+    final hasImages = item.imageUrls.isNotEmpty;
+    final hasLocation = (item.googleMapsUrl ?? '').trim().isNotEmpty;
+    final hasWebsite = (item.websiteUrl ?? '').trim().isNotEmpty;
 
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isExpanded) {
-            _expandedItemIds.remove(item.id);
-          } else {
-            _expandedItemIds.add(item.id);
-          }
-        });
-      },
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFF1F5F9)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: leadingWidth,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: expandedHeaderTopPad),
-                    child: Text(
-                      '$rank',
-                      textAlign: TextAlign.center,
-                      softWrap: false,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primaryPurple,
-                        fontSize: 16,
-                        height: 1.2,
-                      ),
-                    ),
-                  ),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppColors.radiusCard),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: Rank + Title + Rating + Menu
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Rank container sized to match text line height (24px for 20px font at 1.2 height)
+              Container(
+                width: 20, height: 24,
+                alignment: Alignment.center,
+                child: Container(
+                  width: 20, height: 20,
+                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: Text('$rank', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 10, color: Colors.white)),
                 ),
-                const SizedBox(width: leadingGap),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: expandedHeaderTopPad, right: 10),
-                    child: Text(
-                      item.title,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
-                        height: 1.2,
-                      ),
-                      maxLines: isExpanded ? null : titleMaxLines,
-                      softWrap: true,
-                      overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: expandedHeaderTopPad),
-                  child: _buildTrailingChips(item),
-                ),
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: expandedHeaderTopPad),
-                  child: PopupMenuButton<String>(
-                    padding: EdgeInsets.zero,
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _navigateToAddItem(item);
-                      } else if (value == 'delete') {
-                        _deleteItem(item);
-                      } else if (value == 'add_to_collections') {
-                        _showAddToCollectionsDialog(item);
-                      } else if (value == 'open_link') {
-                        var raw = (item.websiteUrl ?? '').trim();
-                        if (raw.isEmpty) return;
-                        if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-                          raw = 'https://$raw';
-                        }
-                        final uri = Uri.tryParse(raw);
-                        if (uri == null) return;
-                        launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
-                          if (!mounted) return false;
-                          SnackBarUtils.showErrorSnackBar(context, 'Could not open link');
-                          return false;
-                        });
-                      } else if (value == 'open_location') {
-                        final raw = (item.googleMapsUrl ?? '').trim();
-                        if (raw.isEmpty) return;
-                        final uri = Uri.tryParse(raw);
-                        if (uri == null) return;
-                        launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
-                          if (!mounted) return false;
-                          SnackBarUtils.showErrorSnackBar(context, 'Could not open location');
-                          return false;
-                        });
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      if ((item.websiteUrl ?? '').trim().isNotEmpty)
-                        const PopupMenuItem(
-                          value: 'open_link',
-                          child: Row(
-                            children: [
-                              Icon(Icons.link_rounded, size: 18, color: Colors.black87),
-                              SizedBox(width: 10),
-                              Text('Link'),
-                            ],
-                          ),
-                        ),
-                      if ((item.googleMapsUrl ?? '').trim().isNotEmpty)
-                        const PopupMenuItem(
-                          value: 'open_location',
-                          child: Row(
-                            children: [
-                              Icon(Icons.location_on_rounded,
-                                  size: 18, color: Colors.black87),
-                              SizedBox(width: 10),
-                              Text('Location'),
-                            ],
-                          ),
-                        ),
-                      if (canEdit)
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(Icons.edit_rounded, size: 18, color: Colors.black87),
-                              SizedBox(width: 10),
-                              Text('Edit'),
-                            ],
-                          ),
-                        ),
-                      if (_isOwner)
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete_rounded, size: 18, color: Colors.red[700]),
-                              const SizedBox(width: 10),
-                              const Text('Delete'),
-                            ],
-                          ),
-                        ),
-                      const PopupMenuItem(
-                        value: 'add_to_collections',
-                        child: Row(
-                          children: [
-                            Icon(Icons.add_rounded, size: 18, color: Colors.black87),
-                            SizedBox(width: 10),
-                            Text('Add to another collection'),
-                          ],
-                        ),
-                      ),
-                    ],
-                    child: const Icon(Icons.more_horiz, size: 20, color: Colors.black87),
-                  ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(item.title,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.2)),
+              ),
+              if (item.rating > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  height: 24, // Align with text line height
+                  alignment: Alignment.center,
+                  child: _buildRatingBadge(item.rating),
                 ),
               ],
+              // Menu button sized to match text line height
+              Container(
+                width: 28, height: 24,
+                alignment: Alignment.centerRight,
+                child: PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textMuted),
+                onSelected: (value) {
+                  if (value == 'edit') _navigateToAddItem(item);
+                  else if (value == 'delete') _deleteItem(item);
+                  else if (value == 'add_to_collections') _showAddToCollectionsDialog(item);
+                },
+                itemBuilder: (context) => [
+                  if (canEdit) PopupMenuItem(value: 'edit', child: Text('Edit', style: GoogleFonts.plusJakartaSans())),
+                  if (_isOwner) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
+                  PopupMenuItem(value: 'add_to_collections', child: Text('Add to collection', style: GoogleFonts.plusJakartaSans())),
+                ],
+              ),
+              ),
+            ],
+          ),
+
+          // Description
+          if (item.description != null && item.description!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 30),
+              child: Text(item.description!,
+                style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textPrimary, height: 1.5)),
             ),
-            if (item.description != null && item.description!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Padding(
-                padding: EdgeInsets.only(
-                  left: leadingWidth + leadingGap,
-                  right: trailingTextInset,
-                ),
-                child: Text(
-                  item.description!,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight:
-                        FontWeight.lerp(FontWeight.w400, FontWeight.w500, 0.5) ??
-                        FontWeight.w500,
-                    color: Colors.black87,
-                    height: 1.25,
-                  ),
-                  maxLines: isExpanded ? null : descriptionMaxLines,
-                  overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-            if (isExpanded && item.imageUrls.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Padding(
-                padding: EdgeInsets.only(
-                  left: leadingWidth + leadingGap,
-                  right: trailingTextInset,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: imageMaxHeight),
-                    child: PageView.builder(
-                      itemCount: item.imageUrls.length,
-                      itemBuilder: (context, index) {
-                        final url = item.imageUrls[index];
-                        return Container(
-                          color: Colors.white,
-                          alignment: Alignment.center,
-                          child: CachedNetworkImage(
-                            imageUrl: url,
-                            fit: BoxFit.contain,
-                            placeholder: (context, _) => Container(
-                              color: const Color(0xFFF3F4F6),
-                              alignment: Alignment.center,
-                              child: const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            ),
-                            errorWidget: (context, _, __) => Container(
-                              color: const Color(0xFFF3F4F6),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.broken_image_outlined,
-                                color: AppColors.textMuted,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
-        ),
+
+          // Images below description
+          if (hasImages) ...[
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.only(left: 30, right: 4),
+              child: SizedBox(
+                height: 160,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: item.imageUrls.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) => ClipRRect(
+                    borderRadius: BorderRadius.circular(AppColors.radiusSmall),
+                    child: CachedNetworkImage(imageUrl: item.imageUrls[i], fit: BoxFit.cover, width: 200,
+                      errorWidget: (_, __, ___) => Container(width: 200, color: AppColors.surfaceMuted)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          // Website + Location links
+          if (hasWebsite || hasLocation) ...[
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.only(left: 30),
+              child: Row(
+                children: [
+                  if (hasWebsite)
+                    GestureDetector(
+                      onTap: () {
+                        var raw = (item.websiteUrl ?? '').trim();
+                        if (!raw.startsWith('http')) raw = 'https://$raw';
+                        final uri = Uri.tryParse(raw);
+                        if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                      },
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.language_rounded, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 5),
+                        Text('Website', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                      ]),
+                    ),
+                  if (hasWebsite && hasLocation) ...[
+                    const SizedBox(width: 24),
+                  ],
+                  if (hasLocation)
+                    GestureDetector(
+                      onTap: () {
+                        final uri = Uri.tryParse((item.googleMapsUrl ?? '').trim());
+                        if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                      },
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 5),
+                        Text('Location', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                      ]),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
+  }
+
+  // ignore: unused_element
+  String _extractLocationName(String url) {
+    // Try to extract query parameter
+    if (url.contains('query=')) {
+      try {
+        final q = Uri.parse(url).queryParameters['query'];
+        if (q != null && q.isNotEmpty) return Uri.decodeComponent(q).replaceAll('+', ' ');
+      } catch (_) {}
+    }
+    // Try to extract place name from /place/ URLs
+    final placeMatch = RegExp(r'/place/([^/]+)').firstMatch(url);
+    if (placeMatch != null) {
+      return Uri.decodeComponent(placeMatch.group(1)!).replaceAll('+', ' ');
+    }
+    // Fallback: show domain only
+    try {
+      return Uri.parse(url).host;
+    } catch (_) {
+      return 'View on Maps';
+    }
   }
 
   String _getTimeAgo(int timestamp) {

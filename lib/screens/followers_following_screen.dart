@@ -215,13 +215,13 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             )
-          : Text('${user.collectionsCount} collections'),
+          : null,
       trailing: isCurrentUser
           ? null
           : ElevatedButton(
               onPressed: () => _toggleFollow(user, isFollowing),
               style: ElevatedButton.styleFrom(
-                backgroundColor: isFollowing ? const Color(0xFFF1F5F9) : AppColors.primaryPurple,
+                backgroundColor: isFollowing ? AppColors.surfaceMuted : AppColors.primaryPurple,
                 foregroundColor: isFollowing ? Colors.black : Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 shape: RoundedRectangleBorder(

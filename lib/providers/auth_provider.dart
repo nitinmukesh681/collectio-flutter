@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -11,6 +12,7 @@ class AuthProvider extends ChangeNotifier {
   AuthService? _authService;
   FirestoreService? _firestoreService;
   NotificationService? _notificationService;
+  StreamSubscription<UserEntity?>? _userSubscription;
 
   User? _firebaseUser;
   UserEntity? _userEntity;
@@ -57,6 +59,8 @@ class AuthProvider extends ChangeNotifier {
         if (user != null) {
           await _loadUserEntity();
         } else {
+          _userSubscription?.cancel();
+          _userSubscription = null;
           _userEntity = null;
           _needsUsername = false;
         }
@@ -73,22 +77,38 @@ class AuthProvider extends ChangeNotifier {
     if (_firebaseUser == null || _firestoreService == null) return;
     try {
       debugPrint('Loading user entity for uid: ${_firebaseUser!.uid}');
+      // Initial one-time fetch for immediate state
       _userEntity = await _firestoreService!.getUser(_firebaseUser!.uid);
       debugPrint('User entity result: ${_userEntity?.userName ?? "null (new user)"}');
-      
+
       if (_userEntity != null) {
         // Save FCM token
         _notificationService?.saveTokenToUser(_userEntity!.id);
       }
-      
+
       _needsUsername = _userEntity == null || (_userEntity!.userName.isEmpty);
+      notifyListeners();
+
+      // Set up real-time stream for seamless updates across the app
+      _userSubscription?.cancel();
+      _userSubscription = _firestoreService!.getUserStream(_firebaseUser!.uid).listen(
+        (user) {
+          if (user != null) {
+            _userEntity = user;
+            _needsUsername = user.userName.isEmpty;
+            notifyListeners();
+          }
+        },
+        onError: (e) {
+          debugPrint('User stream error: $e');
+        },
+      );
     } catch (e) {
       debugPrint('Error loading user entity: $e');
-      // For now, assume user doesn't exist yet - they need to set username
       _userEntity = null;
       _needsUsername = true;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// Sign in with email/username and password
@@ -290,6 +310,8 @@ class AuthProvider extends ChangeNotifier {
 
   /// Sign out
   Future<void> signOut() async {
+    _userSubscription?.cancel();
+    _userSubscription = null;
     await _authService?.signOut();
     _userEntity = null;
     _needsUsername = false;

@@ -160,11 +160,11 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                                   imageUrl: photo.urls.small,
                                   fit: BoxFit.cover,
                                   placeholder: (context, url) => Container(
-                                    color: const Color(0xFFF1F5F9),
+                                    color: AppColors.surfaceMuted,
                                     child: const Center(child: CircularProgressIndicator()),
                                   ),
                                   errorWidget: (context, url, error) => Container(
-                                    color: const Color(0xFFF1F5F9),
+                                    color: AppColors.surfaceMuted,
                                     child: const Icon(Icons.error),
                                   ),
                                 ),
@@ -206,7 +206,7 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: AppColors.surfaceMuted,
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
               child: Row(

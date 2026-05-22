@@ -401,46 +401,48 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   }
 
   Widget _buildEnterTitleStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Item Title', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _titleController,
-          decoration: InputDecoration(
-            hintText: 'Enter a title for this link',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Item Title', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              hintText: 'Enter a title for this link',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: _isCreatingItem ? null : _createLinkItems,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryPurple,
-            foregroundColor: Colors.white,
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: _isCreatingItem ? null : _createLinkItems,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryPurple,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: _isCreatingItem
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(
+                    _selectedCollectionIds.length <= 1
+                        ? 'Add'
+                        : 'Add to ${_selectedCollectionIds.length} collections',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
           ),
-          child: _isCreatingItem
-              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text(
-                  _selectedCollectionIds.length <= 1 
-                      ? 'Add' 
-                      : 'Add to ${_selectedCollectionIds.length} collections',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: _isCreatingItem ? null : _handleBack,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _isCreatingItem ? null : _handleBack,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Back'),
           ),
-          child: const Text('Back'),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
 import '../models/category_type.dart';
 import '../theme/app_theme.dart';
@@ -183,7 +184,7 @@ class CollectionCard extends StatelessWidget {
                         ),
                         child: Text(
                           collection.category.displayName.toUpperCase(),
-                          style: TextStyle(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             color: gradientColors[0],
@@ -213,7 +214,7 @@ class CollectionCard extends StatelessWidget {
                             const SizedBox(width: 4),
                             Text(
                               '${collection.likes}',
-                              style: const TextStyle(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.heartSalmon,
@@ -233,7 +234,7 @@ class CollectionCard extends StatelessWidget {
                         children: [
                           Text(
                             collection.title,
-                            style: const TextStyle(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
@@ -247,7 +248,7 @@ class CollectionCard extends StatelessWidget {
                             children: [
                               Text(
                                 '${collection.itemCount} items',
-                                style: TextStyle(
+                                style: GoogleFonts.plusJakartaSans(
                                   fontSize: 12,
                                   color: Colors.white.withOpacity(0.85),
                                   fontWeight: FontWeight.w600,

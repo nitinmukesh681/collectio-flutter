@@ -154,12 +154,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final isEmailLoading = auth.isLoading && !_isGoogleLoading;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FF),
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A2E), size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -172,21 +172,26 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
-                // Brand Icon
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withOpacity(0.1),
-                      shape: BoxShape.circle,
+                // Updated Logo to match Home Screen
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                    const SizedBox(width: 12),
+                    Text(
+                      'finds',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                        letterSpacing: -1,
+                      ),
                     ),
-                    child: const Icon(Icons.auto_awesome_motion_rounded, 
-                      color: AppColors.primaryPurple, 
-                      size: 40
-                    ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 48),
                 
                 // Header
                 Text(
@@ -195,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
-                    color: const Color(0xFF1A1A2E),
+                    color: AppColors.textPrimary,
                     letterSpacing: -1,
                   ),
                 ),
@@ -207,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 16,
-                    color: const Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -251,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                      color: const Color(0xFF9CA3AF),
+                      color: AppColors.textMuted,
                       size: 20,
                     ),
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
@@ -271,7 +276,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Text(
                         'Forgot Password?',
                         style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.primaryPurple,
+                          color: AppColors.primary,
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),
@@ -288,14 +293,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryPurple.withOpacity(0.3),
+                        color: AppColors.primary.withOpacity(0.3),
                         blurRadius: 15,
                         offset: const Offset(0, 8),
                       ),
                     ],
-                    gradient: const LinearGradient(
-                      colors: [AppColors.primaryPurple, Color(0xFF9D84FF)],
-                    ),
+                    gradient: AppColors.primaryGradient,
                   ),
                   child: ElevatedButton(
                     onPressed: auth.isLoading ? null : _submit,
@@ -326,19 +329,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Divider
                 Row(
                   children: [
-                    const Expanded(child: Divider(color: Color(0xFFE5E7EB), thickness: 1)),
+                    const Expanded(child: Divider(color: AppColors.divider, thickness: 1)),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
                         'or continue with',
                         style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF9CA3AF),
+                          color: AppColors.textMuted,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                    const Expanded(child: Divider(color: Color(0xFFE5E7EB), thickness: 1)),
+                    const Expanded(child: Divider(color: AppColors.divider, thickness: 1)),
                   ],
                 ),
                 const SizedBox(height: 32),
@@ -350,14 +353,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: auth.isLoading ? null : _signInWithGoogle,
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      side: const BorderSide(color: Color(0xFFE5E7EB)),
-                      backgroundColor: Colors.white,
+                      side: const BorderSide(color: AppColors.divider),
+                      backgroundColor: AppColors.surfaceLight,
                     ),
                     child: _isGoogleLoading
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryPurple),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                           )
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -365,13 +368,13 @@ class _LoginScreenState extends State<LoginScreen> {
                               Image.network(
                                 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
                                 height: 24,
-                                errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata_rounded, color: Color(0xFF1A1A2E), size: 28),
+                                errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata_rounded, color: AppColors.textPrimary, size: 28),
                               ),
                               const SizedBox(width: 12),
                               Text(
                                 'Google',
                                 style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF1A1A2E),
+                                  color: AppColors.textPrimary,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -389,7 +392,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       _isLogin ? "New to Finds? " : "Already have an account? ",
                       style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF6B7280),
+                        color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -398,7 +401,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Text(
                         _isLogin ? 'Sign Up' : 'Sign In',
                         style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.primaryPurple,
+                          color: AppColors.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -431,7 +434,7 @@ class _LoginScreenState extends State<LoginScreen> {
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: const Color(0xFF1A1A2E),
+            color: AppColors.textPrimary,
           ),
         ),
         const SizedBox(height: 8),
@@ -441,31 +444,31 @@ class _LoginScreenState extends State<LoginScreen> {
           keyboardType: keyboardType,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
-            color: const Color(0xFF1A1A2E),
+            color: AppColors.textPrimary,
             fontWeight: FontWeight.w500,
           ),
           decoration: InputDecoration(
             hintText: 'Enter your ${label.toLowerCase()}',
             hintStyle: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF9CA3AF),
+              color: AppColors.textMuted,
               fontSize: 15,
             ),
-            prefixIcon: Icon(icon, color: const Color(0xFF9CA3AF), size: 20),
+            prefixIcon: Icon(icon, color: AppColors.textMuted, size: 20),
             suffixIcon: suffixIcon,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: AppColors.surfaceLight,
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              borderSide: const BorderSide(color: AppColors.divider),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              borderSide: const BorderSide(color: AppColors.divider),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: AppColors.primaryPurple, width: 1.5),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),

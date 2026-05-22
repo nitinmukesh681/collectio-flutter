@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import '../theme/app_theme.dart';
@@ -8,7 +9,6 @@ import '../models/category_type.dart';
 import '../models/place_prediction.dart';
 import '../services/firestore_service.dart';
 import '../services/places_service.dart';
-import '../theme/app_theme.dart';
 import '../models/collection_entity.dart';
 import '../widgets/unsplash_search_dialog.dart';
 
@@ -112,10 +112,29 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
-      setState(() {
-        _coverImage = File(pickedFile.path);
-        _selectedUnsplashUrl = null; // Clear Unsplash selection if local image is picked
-      });
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: pickedFile.path,
+        aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 9),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Cover Image',
+            toolbarColor: AppColors.primaryPurple,
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: AppColors.primaryPurple,
+            lockAspectRatio: false,
+          ),
+          IOSUiSettings(
+            title: 'Crop Cover Image',
+            aspectRatioLockEnabled: false,
+          ),
+        ],
+      );
+      if (croppedFile != null) {
+        setState(() {
+          _coverImage = File(croppedFile.path);
+          _selectedUnsplashUrl = null;
+        });
+      }
     }
   }
 
@@ -278,7 +297,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                     label: const Text('Upload'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: Color(0xFFE5E7EB)),
+                      side: const BorderSide(color: AppColors.divider),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -304,7 +323,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                     label: const Text('Unsplash'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: Color(0xFFE5E7EB)),
+                      side: const BorderSide(color: AppColors.divider),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -316,9 +335,9 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
             Container(
               height: 180,
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: AppColors.surfaceMuted,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: AppColors.divider),
                 image: _coverImage != null
                     ? DecorationImage(
                         image: FileImage(_coverImage!),
@@ -362,7 +381,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: AppColors.divider),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.04),
@@ -519,10 +538,10 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primaryPurple : const Color(0xFFF8FAFC),
+                            color: isSelected ? AppColors.primaryPurple : AppColors.surfaceMuted,
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: isSelected ? AppColors.primaryPurple : const Color(0xFFE5E7EB),
+                              color: isSelected ? AppColors.primaryPurple : AppColors.divider,
                             ),
                           ),
                           child: Text(
@@ -592,7 +611,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.primaryPurple.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                          border: Border.all(color: AppColors.divider),
                         ),
                         child: Row(
                           children: [
@@ -647,9 +666,9 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
+                            color: AppColors.surfaceMuted,
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            border: Border.all(color: AppColors.divider),
                           ),
                           child: Row(
                             children: [

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../models/collection_entity.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_grid_card.dart';
 import 'collection_detail_screen.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
@@ -46,7 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final auth = Provider.of<AuthProvider>(context);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
     final userId = auth.userId;
     if (userId.isNotEmpty && userId != _activeUserId) {
       _activeUserId = userId;
@@ -181,22 +181,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
-                  expandedHeight: 352,
+                  expandedHeight: 380,
                   pinned: true,
                   backgroundColor: Colors.white,
                   surfaceTintColor: Colors.transparent,
                   elevation: 0,
-                  title: AnimatedOpacity(
-                    opacity: innerBoxIsScrolled ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Text(
-                      'Profile',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
                   actions: [
                     IconButton(
                       icon: const Icon(Icons.settings_outlined, color: Colors.black),
@@ -219,7 +208,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                   padding: const EdgeInsets.all(2),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                                    border: Border.all(color: AppColors.divider, width: 1),
                                   ),
                                   child: ClipOval(
                                     child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
@@ -238,7 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                                         user.userName.isNotEmpty
                                                             ? user.userName[0].toUpperCase()
                                                             : '?',
-                                                        style: const TextStyle(
+                                                        style: GoogleFonts.plusJakartaSans(
                                                           fontSize: 34,
                                                           fontWeight: FontWeight.w800,
                                                           color: AppColors.primaryPurpleDark,
@@ -257,7 +246,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                                           user.userName.isNotEmpty
                                                               ? user.userName[0].toUpperCase()
                                                               : '?',
-                                                          style: const TextStyle(
+                                                          style: GoogleFonts.plusJakartaSans(
                                                             fontSize: 34,
                                                             fontWeight: FontWeight.w800,
                                                             color: AppColors.primaryPurpleDark,
@@ -279,7 +268,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                                       user.userName.isNotEmpty
                                                           ? user.userName[0].toUpperCase()
                                                           : '?',
-                                                      style: const TextStyle(
+                                                      style: GoogleFonts.plusJakartaSans(
                                                         fontSize: 34,
                                                         fontWeight: FontWeight.w800,
                                                         color: AppColors.primaryPurpleDark,
@@ -295,7 +284,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                               user.userName.isNotEmpty
                                                   ? user.userName[0].toUpperCase()
                                                   : '?',
-                                              style: const TextStyle(
+                                              style: GoogleFonts.plusJakartaSans(
                                                 fontSize: 34,
                                                 fontWeight: FontWeight.w800,
                                                 color: AppColors.primaryPurpleDark,
@@ -309,7 +298,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             const SizedBox(height: 12),
                             Text(
                               user.userName,
-                              style: const TextStyle(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 26,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.textPrimary,
@@ -322,28 +311,40 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             const SizedBox(height: 4),
                             Text(
                               '@${user.userName}',
-                              style: const TextStyle(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.textSecondary,
                               ),
                             ),
+                            if (user.bio != null && user.bio!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                user.bio!,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.4,
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                             const SizedBox(height: 14),
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
                                 onPressed: _navigateToEditProfile,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryPurple,
+                                  backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
                                   elevation: 0,
                                 ),
-                                child: const Text(
-                                  'Edit Profile',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
+                                child: Text('Edit Profile', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -370,7 +371,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                       dark: true,
                                     ),
                                   ),
-                                  Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                                  Container(width: 1, height: 32, color: AppColors.divider),
                                   Expanded(
                                     child: _buildStat(
                                       user.followers.length,
@@ -379,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                       dark: true,
                                     ),
                                   ),
-                                  Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                                  Container(width: 1, height: 32, color: AppColors.divider),
                                   Expanded(
                                     child: _buildStat(
                                       user.following.length,
@@ -406,6 +407,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       unselectedLabelColor: AppColors.textSecondary,
                       indicatorColor: AppColors.primaryPurple,
                       indicatorWeight: 3,
+                      labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14),
+                      unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 14),
                       tabs: const [
                         Tab(text: 'Collections'),
                         Tab(text: 'Saved'),
@@ -446,7 +449,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  border: Border.all(color: AppColors.divider),
                 ),
                 child: PopupMenuButton<String>(
                   padding: EdgeInsets.zero,
@@ -458,7 +461,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         children: [
                           const Icon(Icons.collections_outlined, size: 18, color: Colors.black87),
                           const SizedBox(width: 10),
-                          const Text('My collections'),
+                          Text('My collections', style: GoogleFonts.plusJakartaSans()),
                         ],
                       ),
                     ),
@@ -468,7 +471,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         children: [
                           const Icon(Icons.groups_outlined, size: 18, color: Colors.black87),
                           const SizedBox(width: 10),
-                          const Text('Collaborations'),
+                          Text('Collaborations', style: GoogleFonts.plusJakartaSans()),
                         ],
                       ),
                     ),
@@ -482,7 +485,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             filterLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
@@ -517,19 +520,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         children: [
           Text(
             '$count',
-            style: TextStyle(
-              color: dark ? AppColors.textPrimary : Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
+            style: GoogleFonts.plusJakartaSans(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.w800),
           ),
+          const SizedBox(height: 2),
           Text(
-            label,
-            style: TextStyle(
-              color: dark ? AppColors.textSecondary : Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+            label.toUpperCase(),
+            style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
           ),
         ],
       ),
@@ -550,7 +546,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             const SizedBox(height: 16),
             Text(
               isEmpty,
-              style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+              style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -559,35 +555,93 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
     return RefreshIndicator(
       onRefresh: _refreshStreams,
-      child: GridView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
         itemCount: collections.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.86,
-        ),
         itemBuilder: (context, index) {
           final collection = collections[index];
-          return CollectionGridCard(
-            collection: collection,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CollectionDetailScreen(
-                    collectionId: collection.id,
-                    currentUserId: userId,
-                  ),
-                ),
-              );
-            },
-            onUserTap: () {
-              // Self profile: username tap stays on same screen
-            },
-          );
+          return _buildCollectionListCard(collection, userId);
         },
+      ),
+    );
+  }
+
+  Widget _buildCollectionListCard(CollectionEntity collection, String userId) {
+    final gradientColors = AppColors.categoryGradients[collection.category.name] ?? AppColors.categoryGradients['other']!;
+
+    Future<String?> resolveCover() async {
+      final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)
+          ? collection.coverImageUrl!.trim()
+          : (collection.previewImageUrls.isNotEmpty ? collection.previewImageUrls.first.trim() : '');
+      if (candidate.isEmpty) return null;
+      if (candidate.startsWith('gs://')) {
+        try { return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL(); } catch (_) { return null; }
+      }
+      if (candidate.startsWith('http')) return candidate;
+      return null;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (context) => CollectionDetailScreen(collectionId: collection.id, currentUserId: userId),
+        ));
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.radiusCard),
+          boxShadow: AppColors.cardShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image with padding inside card
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppColors.radiusSmall),
+              child: AspectRatio(
+                aspectRatio: 4 / 3,
+                child: FutureBuilder<String?>(
+                  future: resolveCover(),
+                  builder: (context, snap) {
+                    final url = snap.data;
+                    if (url != null && url.isNotEmpty) {
+                      return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(
+                          decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
+                        ));
+                    }
+                    return Container(
+                      decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Category
+            Text(
+              collection.category.displayName.toUpperCase(),
+              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 1),
+            ),
+            const SizedBox(height: 6),
+            // Title
+            Text(
+              collection.title,
+              style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.2),
+            ),
+            if (collection.description != null && collection.description!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                collection.description!,
+                style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

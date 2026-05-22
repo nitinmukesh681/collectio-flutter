@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_grid_card.dart';
 import 'collection_detail_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -165,7 +165,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     if (_user == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: Text('User not found')),
+        body: Center(child: Text('User not found', style: GoogleFonts.plusJakartaSans())),
       );
     }
 
@@ -176,7 +176,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 352,
+            expandedHeight: 400,
             pinned: true,
             backgroundColor: Colors.white,
             surfaceTintColor: Colors.transparent,
@@ -193,7 +193,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   duration: const Duration(milliseconds: 150),
                   child: Text(
                     '@${user.userName}',
-                    style: const TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
@@ -215,7 +215,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                            border: Border.all(color: AppColors.divider, width: 1),
                           ),
                           child: ClipOval(
                             child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
@@ -232,7 +232,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                               alignment: Alignment.center,
                                               child: Text(
                                                 user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                                style: const TextStyle(
+                                                style: GoogleFonts.plusJakartaSans(
                                                   fontSize: 34,
                                                   fontWeight: FontWeight.w800,
                                                   color: AppColors.primaryPurpleDark,
@@ -249,7 +249,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                                 alignment: Alignment.center,
                                                 child: Text(
                                                   user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                                  style: const TextStyle(
+                                                  style: GoogleFonts.plusJakartaSans(
                                                     fontSize: 34,
                                                     fontWeight: FontWeight.w800,
                                                     color: AppColors.primaryPurpleDark,
@@ -269,7 +269,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                             alignment: Alignment.center,
                                             child: Text(
                                               user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                              style: const TextStyle(
+                                              style: GoogleFonts.plusJakartaSans(
                                                 fontSize: 34,
                                                 fontWeight: FontWeight.w800,
                                                 color: AppColors.primaryPurpleDark,
@@ -283,7 +283,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     alignment: Alignment.center,
                                     child: Text(
                                       user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                      style: const TextStyle(
+                                      style: GoogleFonts.plusJakartaSans(
                                         fontSize: 34,
                                         fontWeight: FontWeight.w800,
                                         color: AppColors.primaryPurpleDark,
@@ -296,7 +296,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       const SizedBox(height: 12),
                       Text(
                         user.userName,
-                        style: const TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 26,
                           fontWeight: FontWeight.w800,
                           color: AppColors.textPrimary,
@@ -309,12 +309,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       const SizedBox(height: 4),
                       Text(
                         '@${user.userName}',
-                        style: const TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.textSecondary,
                         ),
                       ),
+                      if (user.bio != null && user.bio!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          user.bio!,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                            height: 1.4,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                       if (!isOwnProfile) ...[
                         const SizedBox(height: 14),
                         SizedBox(
@@ -337,7 +352,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   )
                                 : Text(
                                     _isFollowing ? 'Following' : 'Follow',
-                                    style: const TextStyle(fontWeight: FontWeight.w800),
+                                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
                                   ),
                           ),
                         ),
@@ -359,9 +374,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         child: Row(
                           children: [
                             Expanded(child: _buildStat(_collections.length, 'Collections', dark: true)),
-                            Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                            Container(width: 1, height: 32, color: AppColors.divider),
                             Expanded(child: _buildStat(user.followers.length, 'Followers', dark: true)),
-                            Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
+                            Container(width: 1, height: 32, color: AppColors.divider),
                             Expanded(child: _buildStat(user.following.length, 'Following', dark: true)),
                           ],
                         ),
@@ -375,16 +390,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
           // Collections list
           if (_collections.isEmpty)
-            const SliverFillRemaining(
+             SliverFillRemaining(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.collections_outlined, size: 64, color: AppColors.textMuted),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'No collections yet',
-                      style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -392,40 +407,83 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.86,
-                ),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final collection = _collections[index];
-                    return CollectionGridCard(
-                      collection: collection,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => CollectionDetailScreen(
-                              collectionId: collection.id,
-                              currentUserId: widget.currentUserId,
-                            ),
-                          ),
-                        );
-                      },
-                      onUserTap: () {
-                        // No-op: tapping username line isn't shown on grid cards.
-                      },
-                    );
+                    return _buildCollectionCard(collection);
                   },
                   childCount: _collections.length,
                 ),
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCollectionCard(CollectionEntity collection) {
+    final gradientColors = AppColors.categoryGradients[collection.category.name] ?? AppColors.categoryGradients['other']!;
+
+    Future<String?> resolveCover() async {
+      final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)
+          ? collection.coverImageUrl!.trim()
+          : (collection.previewImageUrls.isNotEmpty ? collection.previewImageUrls.first.trim() : '');
+      if (candidate.isEmpty) return null;
+      if (candidate.startsWith('gs://')) {
+        try { return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL(); } catch (_) { return null; }
+      }
+      if (candidate.startsWith('http')) return candidate;
+      return null;
+    }
+
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(
+        builder: (context) => CollectionDetailScreen(collectionId: collection.id, currentUserId: widget.currentUserId),
+      )),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.radiusCard),
+          boxShadow: AppColors.cardShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppColors.radiusSmall),
+              child: AspectRatio(
+                aspectRatio: 4 / 3,
+                child: FutureBuilder<String?>(
+                  future: resolveCover(),
+                  builder: (context, snap) {
+                    final url = snap.data;
+                    if (url != null && url.isNotEmpty) {
+                      return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors))));
+                    }
+                    return Container(decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)));
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(collection.category.displayName.toUpperCase(),
+              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 1)),
+            const SizedBox(height: 6),
+            Text(collection.title,
+              style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.2)),
+            if (collection.description != null && collection.description!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(collection.description!,
+                style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondary, height: 1.4, fontWeight: FontWeight.w500),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -439,14 +497,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         children: [
           Text(
             '$count',
-            style: const TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 20,
               fontWeight: FontWeight.w800,
             ),
           ),
           Text(
             label,
-            style: const TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),

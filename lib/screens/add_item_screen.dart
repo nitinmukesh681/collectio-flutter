@@ -202,18 +202,25 @@ class _AddItemScreenState extends State<AddItemScreen> {
         // we might just ignore it for the map URL but keep it in description? 
         // For now, if no URL selected/typed, set null.
 
-        // Update existing item
-        final updated = widget.existingItem!.copyWith(
+        // Update existing item — use direct map update to allow nulling fields
+        final updatedItem = CollectionItemEntity(
+          id: widget.existingItem!.id,
+          collectionId: widget.collectionId,
+          userId: widget.existingItem!.userId,
+          userName: widget.existingItem!.userName,
           title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
+          description: _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null,
           googleMapsUrl: finalMapsUrl,
           websiteUrl: _websiteUrlController.text.trim().isNotEmpty ? _websiteUrlController.text.trim() : null,
           rating: _rating,
           imageUrls: imageUrls,
+          order: widget.existingItem!.order,
+          likes: widget.existingItem!.likes,
+          likedBy: widget.existingItem!.likedBy,
         );
         await _firestoreService.updateCollectionItem(
           widget.collectionId,
-          updated,
+          updatedItem,
         );
       } else {
         // Determine final Google Maps URL
@@ -325,7 +332,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.primaryPurple.withOpacity(0.06),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        border: Border.all(color: AppColors.divider),
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -367,9 +374,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       height: 100,
                       margin: const EdgeInsets.only(right: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
+                        color: AppColors.surfaceMuted,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        border: Border.all(color: AppColors.divider),
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -404,7 +411,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                           margin: const EdgeInsets.only(right: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            color: const Color(0xFFF1F5F9),
+                            color: AppColors.surfaceMuted,
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
@@ -413,7 +420,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                                     imageUrl: item.url ?? '',
                                     fit: BoxFit.cover,
                                     placeholder: (context, url) => Container(
-                                      color: const Color(0xFFF1F5F9),
+                                      color: AppColors.surfaceMuted,
                                       child: const Center(
                                         child: SizedBox(
                                           width: 18,
@@ -423,7 +430,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                                       ),
                                     ),
                                     errorWidget: (context, url, error) => Container(
-                                      color: const Color(0xFFF1F5F9),
+                                      color: AppColors.surfaceMuted,
                                       alignment: Alignment.center,
                                       child: const Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
                                     ),
@@ -462,7 +469,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: AppColors.divider),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.04),

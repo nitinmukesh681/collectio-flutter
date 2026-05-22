@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -10,6 +11,7 @@ import '../models/user_entity.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/collection_card.dart';
 import '../widgets/collection_grid_card.dart';
+import '../widgets/collection_list_card.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
@@ -195,7 +197,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
         builder: (context) => _CollectionsListScreen(
           title: 'Trending now',
           icon: Icons.local_fire_department,
-          useCategoryCollectionCard: true,
           loader: () async {
             final all = await _firestoreService.getPublicCollectionsList(limit: 50);
             return _computeTrending(all, limit: 50);
@@ -251,7 +252,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return scored.take(limit).map((e) => e.key).toList();
   }
 
-  IconData _categoryIcon(CategoryType category) {
+  static IconData _categoryIcon(CategoryType category) {
     switch (category) {
       case CategoryType.food:
         return Icons.restaurant;
@@ -302,57 +303,41 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  void _navigateToCategory(CategoryType category) async {
-    final collections = await _firestoreService.getCollectionsByCategory(
-      category.name,
-      limit: 50,
-    );
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => _CategoryCollectionsScreen(
-            category: category,
-            collections: collections,
-            currentUserId: widget.currentUserId,
+  void _navigateToCategory(CategoryType category) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _CollectionsListScreen(
+          title: category.displayName,
+          icon: _categoryIcon(category),
+          currentUserId: widget.currentUserId,
+          emptyMessage: 'No collections in ${category.displayName} yet',
+          loader: () => _firestoreService.getCollectionsByCategory(
+            category.name,
+            limit: 50,
           ),
         ),
-      );
-    }
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Title
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-                child: const Text(
-                  'Explore',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    height: 1.1,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ),
-            ),
             // Search bar
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: TextField(
                   controller: _searchController,
                   focusNode: _searchFocus,
                   decoration: InputDecoration(
-                    hintText: 'Find topics, people, or trends...',
-                    hintStyle: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                    hintText: 'Search curated collections, items, or creators...',
+                    hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontWeight: FontWeight.w600),
                     prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
@@ -367,14 +352,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           )
                         : null,
                     filled: true,
-                    fillColor: Theme.of(context).inputDecorationTheme.fillColor,
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: const BorderSide(color: AppColors.divider),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: const BorderSide(color: AppColors.divider),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -412,23 +397,22 @@ class _ExploreScreenState extends State<ExploreScreen> {
               _buildCategoryGrid(),
 
               // Trending Now
-              _buildSectionHeader('Trending now', icon: Icons.local_fire_department, onViewAll: _navigateToTrendingViewAll),
+              _buildSectionHeader('Trending now', onViewAll: _navigateToTrendingViewAll),
               _buildTrendingCarousel(),
 
               // Top Liked
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 10, 12),
                   child: Row(
                     children: [
-                      Icon(Icons.favorite, size: 20, color: AppColors.primaryPurple),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Top liked',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      Text('Top liked', 
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 26, 
+                          fontWeight: FontWeight.w800, 
+                          color: AppColors.textPrimary, 
+                          letterSpacing: -0.5
+                        )
                       ),
                       const Spacer(),
                       PopupMenuButton<_TopLikedRange>(
@@ -457,14 +441,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            border: Border.all(color: AppColors.divider),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
                                 _topLikedRangeLabel(_topLikedRange),
-                                style: const TextStyle(
+                                style: GoogleFonts.plusJakartaSans(
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.textPrimary,
                                   fontSize: 12,
@@ -493,30 +477,21 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Widget _buildSectionHeader(String title, {IconData? icon, required VoidCallback onViewAll}) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 16, 10, 12),
         child: Row(
           children: [
-            if (icon != null) ...[
-              Icon(icon, size: 20, color: AppColors.primaryPurple),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
+            Text(title, 
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 26, 
+                fontWeight: FontWeight.w800, 
+                color: AppColors.textPrimary, 
+                letterSpacing: -0.5
+              )
             ),
             const Spacer(),
             TextButton(
               onPressed: onViewAll,
-              child: const Text(
-                'View All',
-                style: TextStyle(
-                  color: AppColors.primaryPurple,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              child: Text('View all', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.primary, fontSize: 14)),
             ),
           ],
         ),
@@ -531,22 +506,21 @@ class _ExploreScreenState extends State<ExploreScreen> {
       CategoryType.tech,
       CategoryType.shopping,
     ];
-    
+
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 2.85,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 1.6,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             if (index >= categories.length) return null;
             final category = categories[index];
-            final count = _categoryCounts[category] ?? 0;
-            return _buildCategoryPill(category, count);
+            return _buildCategoryTile(category);
           },
           childCount: categories.length,
         ),
@@ -554,69 +528,47 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Widget _buildCategoryPill(CategoryType category, int count) {
-    final gradientColors = AppColors.categoryGradients[category.name] ?? 
-        AppColors.categoryGradients['other']!;
+  // Design-system palette only: primary, secondary, tertiary, light indigo
+  static const _lightIndigo = Color(0xFF818CF8);
+  static const _categoryColors = <String, Color>{
+    'food': AppColors.primary,        // deep indigo
+    'travel': AppColors.secondary,    // dark navy
+    'tech': _lightIndigo,             // lighter indigo
+    'shopping': AppColors.tertiary,   // warm brown
+    'finance': AppColors.secondary,   // navy
+    'wellness': _lightIndigo,         // lighter indigo
+    'career': AppColors.secondary,    // navy
+    'home': AppColors.primary,        // indigo
+    'gaming': AppColors.primary,      // indigo
+    'entertainment': AppColors.secondary, // navy
+    'books': AppColors.tertiary,      // brown
+    'growth': _lightIndigo,           // lighter indigo
+    'projects': AppColors.tertiary,   // brown
+    'creativity': AppColors.primary,  // indigo
+    'sports': AppColors.secondary,    // navy
+    'other': Color(0xFF94A3B8),       // neutral
+  };
 
+  Widget _buildCategoryTile(CategoryType category) {
+    final color = _categoryColors[category.name] ?? AppColors.primary;
     return GestureDetector(
       onTap: () => _navigateToCategory(category),
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(18),
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(AppColors.radiusCard),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.25),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Icon(
-                    _categoryIcon(category),
-                    size: 18,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      category.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$count items',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.85),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: Icon(_categoryIcon(category), size: 20, color: Colors.white),
+            ),
+            const SizedBox(height: 6),
+            Text(category.displayName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+          ],
         ),
       ),
     );
@@ -634,7 +586,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
     return SliverToBoxAdapter(
       child: SizedBox(
-        height: 240,
+        height: 280,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -642,7 +594,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           itemBuilder: (context, index) {
             final collection = _trendingCollections[index];
             return Padding(
-              padding: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.only(right: 14),
               child: _buildTrendingCard(collection),
             );
           },
@@ -677,180 +629,67 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return GestureDetector(
       onTap: () => _navigateToCollection(collection.id),
       child: Container(
-        width: 280,
+        width: 240,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.radiusCard),
+          border: Border.all(color: AppColors.divider),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Background
-              FutureBuilder<String?>(
-                future: resolveCoverUrl(),
-                builder: (context, snap) {
-                  final url = snap.data;
-                  if (url == null || url.isEmpty) {
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image top
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppColors.radiusCard)),
+              child: SizedBox(
+                height: 160,
+                width: double.infinity,
+                child: FutureBuilder<String?>(
+                  future: resolveCoverUrl(),
+                  builder: (context, snap) {
+                    final url = snap.data;
+                    if (url != null && url.isNotEmpty) {
+                      return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(
+                          decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
+                          child: Center(child: Icon(_categoryIcon(collection.category), size: 40, color: Colors.white70)),
+                        ));
+                    }
                     return Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: gradientColors,
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          _categoryIcon(collection.category),
-                          size: 48,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                      ),
+                      decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
+                      child: Center(child: Icon(_categoryIcon(collection.category), size: 40, color: Colors.white70)),
                     );
-                  }
-                  return CachedNetworkImage(
-                    imageUrl: url,
-                    fit: BoxFit.cover,
-                    placeholder: (context, _) => Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: gradientColors,
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                    ),
-                    errorWidget: (context, u, error) {
-                      debugPrint('Trending cover image failed: $u, error: $error');
-                      return Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: gradientColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          _categoryIcon(collection.category),
-                          size: 48,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                      );
-                    },
-                  );
-                },
+                  },
+                ),
               ),
-              
-              // Gradient overlay
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.82),
+            ),
+            // Text below
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(collection.title,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary, height: 1.2),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                  if (collection.description != null && collection.description!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(collection.description!.trim(),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, height: 1.3),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.trending_up_rounded, size: 14, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text('High Momentum', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
                     ],
                   ),
-                ),
+                ],
               ),
-
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.92),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        collection.category.displayName.toUpperCase(),
-                        style: TextStyle(
-                          color: gradientColors[0],
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.6,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      collection.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                        shadows: [
-                          Shadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 2)),
-                        ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (collection.description != null && collection.description!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        collection.description!.trim(),
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.85),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          height: 1.2,
-                          shadows: const [
-                            Shadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 2)),
-                          ],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.92),
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.favorite, size: 14, color: AppColors.heartSalmon),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${collection.likes} likes',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF111827),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -869,40 +708,22 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Widget _buildTopLikedList() {
     if (_isLoading) {
-      return const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
+      return const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator())));
     }
 
-    final count = _topLikedCollections.length > 5 ? 5 : _topLikedCollections.length;
-    if (count == 0) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-    }
+    final count = _topLikedCollections.length > 4 ? 4 : _topLikedCollections.length;
+    if (count == 0) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            children: List.generate(count, (index) {
-              final collection = _topLikedCollections[index];
-              return _buildTopLikedRow(index + 1, collection, isLast: index == count - 1);
-            }),
-          ),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.radiusCard),
+        ),
+        child: Column(
+          children: List.generate(count, (i) =>
+            _buildTopLikedRow(i + 1, _topLikedCollections[i], isLast: i == count - 1)),
         ),
       ),
     );
@@ -920,115 +741,60 @@ class _ExploreScreenState extends State<ExploreScreen> {
     if (rank == 1) return AppColors.primaryPurple;
     if (rank == 2) return const Color(0xFF22C55E);
     if (rank == 3) return const Color(0xFFF59E0B);
-    return const Color(0xFFE5E7EB);
+    return AppColors.divider;
   }
 
   Widget _buildTopLikedRow(int rank, CollectionEntity collection, {required bool isLast}) {
-    final rankColor = _topLikedRankColor(rank);
-    final subtitleParts = <String>[
-      collection.category.displayName,
-      '${collection.itemCount} items',
-    ];
-    if (collection.isOpenForContribution) {
-      subtitleParts.add('OPEN');
-    }
-    final subtitle = subtitleParts.join(' • ');
-
     return GestureDetector(
       onTap: () => _navigateToCollection(collection.id),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 18),
         decoration: BoxDecoration(
-          border: isLast
-              ? null
-              : const Border(
-                  bottom: BorderSide(color: Color(0xFFF1F5F9)),
-                ),
+          border: isLast ? null : const Border(bottom: BorderSide(color: AppColors.divider)),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Rank
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: rankColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Text(
-                  '#$rank',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: rank <= 3 ? Colors.white : Colors.black87,
-                    fontSize: 12,
-                  ),
-                ),
+            SizedBox(
+              width: 40,
+              child: Text(
+                rank.toString().padLeft(2, '0'),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 24, color: AppColors.textMuted),
               ),
             ),
-            const SizedBox(width: 12),
-            // Info
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    collection.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  Text(collection.title,
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.textPrimary),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 3),
+                  Text('by ${collection.userName}',
+                    style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 13)),
                 ],
               ),
             ),
-            const SizedBox(width: 10),
-            // Likes pill
-            Container(
-              width: 46,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    '${collection.likes}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'LIKES',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textSecondary,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(width: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.favorite, size: 16, color: AppColors.textPrimary.withOpacity(0.4)),
+                const SizedBox(width: 4),
+                Text(_formatCount(collection.likes),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary.withOpacity(0.4))),
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}k';
+    return '$count';
   }
 
   Widget _buildSearchResults() {
@@ -1055,14 +821,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
           color: isSelected ? AppColors.primaryPurple : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? AppColors.primaryPurple : const Color(0xFFE5E7EB),
+            color: isSelected ? AppColors.primaryPurple : AppColors.divider,
           ),
         ),
         child: Text(
           label,
-          style: TextStyle(
+          style: GoogleFonts.plusJakartaSans(
             color: isSelected ? Colors.white : AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -1108,7 +874,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                 user.userName.isNotEmpty
                                     ? user.userName[0].toUpperCase()
                                     : '?',
-                                style: const TextStyle(
+                                style: GoogleFonts.plusJakartaSans(
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.primaryPurple,
                                 ),
@@ -1123,7 +889,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             user.userName.isNotEmpty
                                 ? user.userName[0].toUpperCase()
                                 : '?',
-                            style: const TextStyle(
+                            style: GoogleFonts.plusJakartaSans(
                               fontWeight: FontWeight.bold,
                               color: AppColors.primaryPurple,
                             ),
@@ -1133,13 +899,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
               title: Text(
                 '@${user.userName}',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
               ),
               subtitle: user.bio != null && user.bio!.isNotEmpty
                   ? Text(
                       user.bio!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(),
                     )
                   : null,
             );
@@ -1156,31 +923,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.all(16),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.86,
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+      sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final collection = _searchResults[index];
-            return CollectionGridCard(
+            return CollectionListCard(
               collection: collection,
-              onTap: () => _navigateToCollection(collection.id),
-              onUserTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UserProfileScreen(
-                      userId: collection.userId,
-                      currentUserId: widget.currentUserId,
-                    ),
-                  ),
-                );
-              },
+              currentUserId: widget.currentUserId,
             );
           },
           childCount: _searchResults.length,
@@ -1199,7 +949,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             const SizedBox(height: 16),
             Text(
               'No results found',
-              style: const TextStyle(
+              style: GoogleFonts.plusJakartaSans(
                 color: AppColors.textSecondary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -1210,45 +960,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
     );
   }
-
-  static IconData _iconForCategory(CategoryType category) {
-    switch (category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
-  }
 }
 
 class _CollectionsListScreen extends StatefulWidget {
@@ -1257,7 +968,7 @@ class _CollectionsListScreen extends StatefulWidget {
   final String? trailing;
   final Future<List<CollectionEntity>> Function() loader;
   final String currentUserId;
-  final bool useCategoryCollectionCard;
+  final String? emptyMessage;
 
   const _CollectionsListScreen({
     required this.title,
@@ -1265,7 +976,7 @@ class _CollectionsListScreen extends StatefulWidget {
     required this.loader,
     required this.currentUserId,
     this.trailing,
-    this.useCategoryCollectionCard = false,
+    this.emptyMessage,
   });
 
   @override
@@ -1294,24 +1005,14 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
-  void _navigateToCollection(BuildContext context, String collectionId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CollectionDetailScreen(
-          collectionId: collectionId,
-          currentUserId: widget.currentUserId,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
@@ -1322,7 +1023,7 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
             const SizedBox(width: 8),
             Text(
               widget.title,
-              style: const TextStyle(
+              style: GoogleFonts.plusJakartaSans(
                 fontWeight: FontWeight.w800,
                 color: Colors.black,
               ),
@@ -1331,7 +1032,7 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
               const Spacer(),
               Text(
                 widget.trailing!,
-                style: const TextStyle(
+                style: GoogleFonts.plusJakartaSans(
                   fontWeight: FontWeight.w700,
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -1343,43 +1044,34 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: GridView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                itemCount: _collections.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.86,
+          : _collections.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(widget.icon, size: 64, color: AppColors.primaryPurple.withOpacity(0.5)),
+                      const SizedBox(height: 16),
+                      Text(
+                        widget.emptyMessage ?? 'No collections found',
+                        style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                    itemCount: _collections.length,
+                    itemBuilder: (context, index) {
+                      final c = _collections[index];
+                      return CollectionListCard(
+                        collection: c,
+                        currentUserId: widget.currentUserId,
+                      );
+                    },
+                  ),
                 ),
-                itemBuilder: (context, index) {
-                  final c = _collections[index];
-                  if (widget.useCategoryCollectionCard) {
-                    return CollectionGridCard(
-                      collection: c,
-                      onTap: () => _navigateToCollection(context, c.id),
-                      onUserTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => UserProfileScreen(
-                              userId: c.userId,
-                              currentUserId: widget.currentUserId,
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  }
-                  return CollectionCard(
-                    collection: c,
-                    onTap: () => _navigateToCollection(context, c.id),
-                  );
-                },
-              ),
-            ),
     );
   }
 }
@@ -1439,16 +1131,18 @@ class _BrowseCategoriesScreen extends StatelessWidget {
     final categories = CategoryType.values.where((c) => c != CategoryType.other).toList();
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
         backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Browse categories',
-          style: TextStyle(
+          style: GoogleFonts.plusJakartaSans(
             fontWeight: FontWeight.w800,
             color: Colors.black,
           ),
@@ -1462,438 +1156,40 @@ class _BrowseCategoriesScreen extends StatelessWidget {
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 2.85,
+            childAspectRatio: 1.4,
           ),
           itemBuilder: (context, index) {
             final category = categories[index];
             final count = categoryCounts[category] ?? 0;
-            final gradient = AppColors.categoryGradients[category.name] ??
-                AppColors.categoryGradients['other']!;
+            final colors = _ExploreScreenState._categoryColors;
+            final color = colors[category.name] ?? AppColors.primary;
 
             return GestureDetector(
               onTap: () {
-                Navigator.pop(context);
                 onCategoryTap(category);
               },
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: gradient,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(18),
+                  color: color.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(AppColors.radiusCard),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Icon(
-                            _iconForCategory(category),
-                            size: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              category.displayName,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                                height: 1.1,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '$count items',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.85),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 48, height: 48,
+                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                      child: Icon(_iconForCategory(category), size: 22, color: Colors.white),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(category.displayName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text('$count items', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary)),
+                  ],
                 ),
               ),
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-// Category collections screen
-class _CategoryCollectionsScreen extends StatelessWidget {
-  final CategoryType category;
-  final List<CollectionEntity> collections;
-  final String currentUserId;
-
-  const _CategoryCollectionsScreen({
-    required this.category,
-    required this.collections,
-    required this.currentUserId,
-  });
-
-  static IconData _iconForCategory(CategoryType category) {
-    switch (category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(category.displayName, style: const TextStyle(fontWeight: FontWeight.w800)),
-      ),
-      backgroundColor: Colors.white,
-      body: collections.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(_iconForCategory(category), size: 64, color: AppColors.primaryPurple),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No collections in ${category.displayName} yet',
-                    style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            )
-          : GridView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              itemCount: collections.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.86,
-              ),
-              itemBuilder: (context, index) {
-                final collection = collections[index];
-                return CollectionGridCard(
-                  collection: collection,
-                  onUserTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => UserProfileScreen(
-                          userId: collection.userId,
-                          currentUserId: currentUserId,
-                        ),
-                      ),
-                    );
-                  },
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CollectionDetailScreen(
-                          collectionId: collection.id,
-                          currentUserId: currentUserId,
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-    );
-  }
-}
-
-class _CategoryCollectionCard extends StatelessWidget {
-  final CollectionEntity collection;
-  final VoidCallback onTap;
-  final VoidCallback? onUserTap;
-
-  const _CategoryCollectionCard({required this.collection, required this.onTap, this.onUserTap});
-
-  Future<String?> _resolveCoverUrl() async {
-    final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)
-        ? collection.coverImageUrl!.trim()
-        : (collection.previewImageUrls.isNotEmpty ? collection.previewImageUrls.first.trim() : '');
-    if (candidate.isEmpty) return null;
-    if (!(candidate.startsWith('http://') || candidate.startsWith('https://') || candidate.startsWith('gs://'))) {
-      return null;
-    }
-    if (candidate.startsWith('gs://')) {
-      try {
-        return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL();
-      } catch (_) {
-        return null;
-      }
-    }
-    return candidate;
-  }
-
-  IconData _categoryIcon(CategoryType category) {
-    switch (category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final gradientColors = AppColors.categoryGradients[collection.category.name] ??
-        AppColors.categoryGradients['other']!;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              FutureBuilder<String?>(
-                future: _resolveCoverUrl(),
-                builder: (context, snap) {
-                  final url = snap.data;
-                  if (url == null || url.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  return Stack(
-                    children: [
-                      AspectRatio(
-                        aspectRatio: 16 / 8,
-                        child: CachedNetworkImage(
-                          imageUrl: url,
-                          fit: BoxFit.cover,
-                          placeholder: (context, _) => Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: gradientColors,
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                          ),
-                          errorWidget: (context, _, __) => Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: gradientColors,
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              _categoryIcon(collection.category),
-                              size: 44,
-                              color: Colors.white.withOpacity(0.9),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            collection.title,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.black,
-                              height: 1.15,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (collection.coverImageUrl == null || collection.coverImageUrl!.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF4D7E7),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.favorite, size: 14, color: Color(0xFFE11D48)),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '${collection.likes}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
-                                    color: Color(0xFF111827),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    GestureDetector(
-                      onTap: onUserTap,
-                      child: Text(
-                        'by @${collection.userName}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    if (collection.description != null && collection.description!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        collection.description!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                          height: 1.25,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: gradientColors[0].withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            collection.category.displayName.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: gradientColors[0],
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          '${collection.itemCount} items',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

@@ -6,6 +6,7 @@ import 'dart:io';
 import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
 import '../models/user_entity.dart';
+import '../models/comment_entity.dart';
 
 
 /// Firestore service for database operations
@@ -17,7 +18,111 @@ class FirestoreService {
   CollectionReference get _usersRef => _firestore.collection('users');
   CollectionReference get _collectionsRef => _firestore.collection('collections');
   CollectionReference get _collectionItemsRef => _firestore.collection('collectionItems');
+  CollectionReference get _commentsRef => _firestore.collection('comments');
 
+  // ==================== COMMENTS ====================
+
+  Stream<List<CommentEntity>> getCommentsStream(String collectionId) {
+    return _commentsRef
+        .where('collectionId', isEqualTo: collectionId)
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .handleError((e) {
+          debugPrint('Comments stream error (may need Firestore index): $e');
+        })
+        .map((snap) => snap.docs.map((d) => CommentEntity.fromMap(d.data() as Map<String, dynamic>, d.id)).toList());
+  }
+
+  Future<String> addComment({
+    required String collectionId,
+    required String userId,
+    required String userName,
+    String? userAvatarUrl,
+    required String text,
+    String? parentCommentId,
+  }) async {
+    final docRef = await _commentsRef.add({
+      'collectionId': collectionId,
+      'userId': userId,
+      'userName': userName,
+      'userAvatarUrl': userAvatarUrl,
+      'text': text,
+      'parentCommentId': parentCommentId,
+      'likes': 0,
+      'likedBy': [],
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Send notification to collection owner
+    try {
+      final collectionSnap = await _collectionsRef.doc(collectionId).get();
+      if (collectionSnap.exists) {
+        final data = collectionSnap.data() as Map<String, dynamic>;
+        final ownerId = data['userId'] as String? ?? '';
+        final title = data['title'] as String? ?? '';
+        if (ownerId.isNotEmpty && ownerId != userId) {
+          await _firestore.collection('notifications').add({
+            'toUserId': ownerId,
+            'type': parentCommentId != null ? 'COMMENT_REPLY' : 'COMMENT',
+            'fromUserId': userId,
+            'fromUsername': userName,
+            'fromUserAvatarUrl': userAvatarUrl,
+            'collectionId': collectionId,
+            'collectionTitle': title,
+            'message': text,
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Comment notification error: $e');
+    }
+
+    return docRef.id;
+  }
+
+  Future<void> toggleCommentLike(String commentId, String userId) async {
+    final ref = _commentsRef.doc(commentId);
+    final snap = await ref.get();
+    if (!snap.exists) return;
+    final data = snap.data() as Map<String, dynamic>;
+    final likedBy = List<String>.from(data['likedBy'] ?? []);
+
+    if (likedBy.contains(userId)) {
+      await ref.update({
+        'likedBy': FieldValue.arrayRemove([userId]),
+        'likes': FieldValue.increment(-1),
+      });
+    } else {
+      await ref.update({
+        'likedBy': FieldValue.arrayUnion([userId]),
+        'likes': FieldValue.increment(1),
+      });
+
+      // Notify comment author
+      try {
+        final commentUserId = data['userId'] as String? ?? '';
+        if (commentUserId.isNotEmpty && commentUserId != userId) {
+          final fromUsername = await _getUsername(userId);
+          await _firestore.collection('notifications').add({
+            'toUserId': commentUserId,
+            'type': 'COMMENT_LIKE',
+            'fromUserId': userId,
+            'fromUsername': fromUsername,
+            'collectionId': data['collectionId'] ?? '',
+            'message': data['text'] ?? '',
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> deleteComment(String commentId) async {
+    await _commentsRef.doc(commentId).delete();
+  }
 
   Future<String> _getUsername(String userId) async {
     final userDoc = await _usersRef.doc(userId).get();
@@ -533,39 +638,43 @@ class FirestoreService {
       final fromUsername = await _getUsername(userId);
       final docRef = _collectionsRef.doc(collectionId);
 
-      final result = await _firestore.runTransaction<(bool, String, String)>((tx) async {
-        final snap = await tx.get(docRef);
-        if (!snap.exists) return (false, '', '');
+      // Read current state
+      final snap = await docRef.get();
+      if (!snap.exists) return;
+      final data = snap.data() as Map<String, dynamic>;
+      final likedBy = List<String>.from(data['likedBy'] ?? const <String>[]);
+      final ownerId = (data['userId'] as String?) ?? '';
+      final title = (data['title'] as String?) ?? '';
+      final isLiked = likedBy.contains(userId);
 
-        final data = snap.data() as Map<String, dynamic>;
-        final likedBy = List<String>.from(data['likedBy'] ?? const <String>[]);
-        final currentLikes = (data['likes'] as int?) ?? 0;
-        final ownerId = (data['userId'] as String?) ?? '';
-        final title = (data['title'] as String?) ?? '';
-
-        if (likedBy.contains(userId)) {
-          tx.update(docRef, {
+      // Update collection document (best-effort for non-owners)
+      try {
+        if (isLiked) {
+          await docRef.update({
             'likedBy': FieldValue.arrayRemove([userId]),
-            'likes': (currentLikes - 1) < 0 ? 0 : (currentLikes - 1),
+            'likes': FieldValue.increment(-1),
           });
-          return (false, ownerId, title);
         } else {
-          tx.update(docRef, {
+          await docRef.update({
             'likedBy': FieldValue.arrayUnion([userId]),
-            'likes': currentLikes + 1,
+            'likes': FieldValue.increment(1),
           });
-          return (true, ownerId, title);
         }
-      });
+      } catch (e) {
+        debugPrint('Could not update collection likes (permission): $e');
+        // Don't rethrow — the user's intent is recorded via optimistic UI
+        return;
+      }
 
-      if (result.$1) {
+      // Send notification on new like
+      if (!isLiked) {
         try {
           await _createLikeNotification(
-            toUserId: result.$2,
+            toUserId: ownerId,
             fromUserId: userId,
             fromUsername: fromUsername,
             collectionId: collectionId,
-            collectionTitle: result.$3,
+            collectionTitle: title,
             type: 'LIKE_COLLECTION',
           );
         } catch (e) {
@@ -573,10 +682,6 @@ class FirestoreService {
         }
       }
       debugPrint('FirestoreService: toggleCollectionLike SUCCESS');
-    } on FirebaseException catch (e) {
-      debugPrint(
-          'FirestoreService: toggleCollectionLike FirebaseException code=${e.code} message=${e.message}');
-      rethrow;
     } catch (e) {
       debugPrint('FirestoreService: toggleCollectionLike ERROR: $e');
       rethrow;
@@ -615,36 +720,40 @@ class FirestoreService {
     final collectionRef = _collectionsRef.doc(collectionId);
     final userRef = _usersRef.doc(userId);
 
-    await _firestore.runTransaction<void>((tx) async {
-      final snap = await tx.get(collectionRef);
-      if (!snap.exists) return;
-      final data = snap.data() as Map<String, dynamic>;
-      final savedBy = List<String>.from(data['savedBy'] ?? const <String>[]);
-      final savedAt = Map<String, dynamic>.from(data['savedAt'] ?? const <String, dynamic>{});
-      final currentSaves = (data['saveCount'] as int?) ?? 0;
+    // Read current state
+    final snap = await collectionRef.get();
+    if (!snap.exists) return;
+    final data = snap.data() as Map<String, dynamic>;
+    final savedBy = List<String>.from(data['savedBy'] ?? const <String>[]);
+    final isSaved = savedBy.contains(userId);
 
-      if (savedBy.contains(userId)) {
-        savedAt.remove(userId);
-        tx.update(collectionRef, {
+    // Always update user's own document first (user has permission on their own doc)
+    if (isSaved) {
+      await userRef.update({
+        'savedCollections': FieldValue.arrayRemove([collectionId]),
+      });
+    } else {
+      await userRef.update({
+        'savedCollections': FieldValue.arrayUnion([collectionId]),
+      });
+    }
+
+    // Best-effort update of collection document (may fail if user is not owner)
+    try {
+      if (isSaved) {
+        await collectionRef.update({
           'savedBy': FieldValue.arrayRemove([userId]),
-          'saveCount': (currentSaves - 1) < 0 ? 0 : (currentSaves - 1),
-          'savedAt': savedAt,
-        });
-        tx.update(userRef, {
-          'savedCollections': FieldValue.arrayRemove([collectionId]),
+          'saveCount': FieldValue.increment(-1),
         });
       } else {
-        savedAt[userId] = DateTime.now().millisecondsSinceEpoch;
-        tx.update(collectionRef, {
+        await collectionRef.update({
           'savedBy': FieldValue.arrayUnion([userId]),
-          'saveCount': currentSaves + 1,
-          'savedAt': savedAt,
-        });
-        tx.update(userRef, {
-          'savedCollections': FieldValue.arrayUnion([collectionId]),
+          'saveCount': FieldValue.increment(1),
         });
       }
-    });
+    } catch (e) {
+      debugPrint('Could not update collection savedBy (permission): $e');
+    }
   }
 
   /// Unsave a collection
@@ -831,54 +940,75 @@ class FirestoreService {
     final docRef = _collectionItemsRef.doc();
     final collectionRef = _collectionsRef.doc(collectionId);
 
-    await _firestore.runTransaction((tx) async {
-      final collectionSnap = await tx.get(collectionRef);
-      if (!collectionSnap.exists) {
-        throw Exception('Collection not found');
-      }
+    final itemData = {
+      'collectionId': collectionId,
+      'userId': item.userId,
+      'userName': item.userName,
+      'title': item.title,
+      'description': item.description,
+      'rating': item.rating,
+      'imageUrls': item.imageUrls,
+      'googleMapsUrl': item.googleMapsUrl,
+      'websiteUrl': item.websiteUrl,
+      'likes': item.likes,
+      'likedBy': item.likedBy,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
 
-      final data = collectionSnap.data() as Map<String, dynamic>;
-      final currentItemCount = (data['itemCount'] as int?) ?? 0;
-      final contributorIds = List<String>.from(data['contributorIds'] ?? const <String>[]);
-      final currentContributorCount = (data['contributorCount'] as int?) ?? 0;
-      final currentPreviewImages = List<String>.from(data['previewImageUrls'] ?? const <String>[]);
-
-      final isNewContributor = !contributorIds.contains(item.userId);
-      final computedOrder = currentItemCount;
-
-      tx.update(collectionRef, {
-        'itemCount': currentItemCount + 1,
-        if (isNewContributor) 'contributorIds': FieldValue.arrayUnion([item.userId]),
-        if (isNewContributor) 'contributorCount': currentContributorCount + 1,
-      });
-
-      if (item.imageUrls.isNotEmpty) {
-        final merged = <String>[...item.imageUrls, ...currentPreviewImages];
-        final distinct = <String>[];
-        for (final url in merged) {
-          if (!distinct.contains(url)) distinct.add(url);
-          if (distinct.length >= 5) break;
+    try {
+      // Full transaction: add item + update collection metadata (works for owners)
+      await _firestore.runTransaction((tx) async {
+        final collectionSnap = await tx.get(collectionRef);
+        if (!collectionSnap.exists) {
+          throw Exception('Collection not found');
         }
-        tx.update(collectionRef, {'previewImageUrls': distinct});
-      }
 
-      tx.set(docRef, {
-        'collectionId': collectionId,
-        'userId': item.userId,
-        'userName': item.userName,
-        'title': item.title,
-        'description': item.description,
-        'rating': item.rating,
-        'imageUrls': item.imageUrls,
-        'googleMapsUrl': item.googleMapsUrl,
-        'websiteUrl': item.websiteUrl,
-        'order': computedOrder,
-        'likes': item.likes,
-        'likedBy': item.likedBy,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        final data = collectionSnap.data() as Map<String, dynamic>;
+        final currentItemCount = (data['itemCount'] as int?) ?? 0;
+        final contributorIds = List<String>.from(data['contributorIds'] ?? const <String>[]);
+        final currentContributorCount = (data['contributorCount'] as int?) ?? 0;
+        final currentPreviewImages = List<String>.from(data['previewImageUrls'] ?? const <String>[]);
+
+        final isNewContributor = !contributorIds.contains(item.userId);
+        final computedOrder = currentItemCount;
+
+        tx.update(collectionRef, {
+          'itemCount': currentItemCount + 1,
+          if (isNewContributor) 'contributorIds': FieldValue.arrayUnion([item.userId]),
+          if (isNewContributor) 'contributorCount': currentContributorCount + 1,
+        });
+
+        if (item.imageUrls.isNotEmpty) {
+          final merged = <String>[...item.imageUrls, ...currentPreviewImages];
+          final distinct = <String>[];
+          for (final url in merged) {
+            if (!distinct.contains(url)) distinct.add(url);
+            if (distinct.length >= 5) break;
+          }
+          tx.update(collectionRef, {'previewImageUrls': distinct});
+        }
+
+        tx.set(docRef, {...itemData, 'order': computedOrder});
       });
-    });
+    } catch (e) {
+      // Fallback for open-collaboration contributors who lack collection write permission
+      if (e.toString().contains('permission-denied')) {
+        debugPrint('Transaction permission-denied, falling back to direct item add');
+        await docRef.set({...itemData, 'order': 0});
+        // Best-effort update of collection metadata (may also fail, that's OK)
+        try {
+          await collectionRef.update({
+            'itemCount': FieldValue.increment(1),
+            'contributorIds': FieldValue.arrayUnion([item.userId]),
+          });
+        } catch (_) {
+          debugPrint('Could not update collection metadata (contributor) — will sync later');
+        }
+      } else {
+        rethrow;
+      }
+    }
 
     return docRef.id;
   }
@@ -895,10 +1025,14 @@ class FirestoreService {
   Future<void> deleteItem(String collectionId, String itemId) async {
     await _collectionItemsRef.doc(itemId).delete();
 
-    // Update collection item count
-    await _collectionsRef.doc(collectionId).update({
-      'itemCount': FieldValue.increment(-1),
-    });
+    // Best-effort update of collection item count (may fail for non-owners)
+    try {
+      await _collectionsRef.doc(collectionId).update({
+        'itemCount': FieldValue.increment(-1),
+      });
+    } catch (e) {
+      debugPrint('Could not update collection itemCount after delete: $e');
+    }
   }
 
   /// Toggle like on an item

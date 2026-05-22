@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/collection_entity.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_grid_card.dart';
-import 'collection_detail_screen.dart';
-import 'user_profile_screen.dart';
+import '../widgets/collection_list_card.dart';
 
 class OpenCollaborationsScreen extends StatefulWidget {
   const OpenCollaborationsScreen({super.key});
@@ -43,40 +42,27 @@ class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
     }
   }
 
-  Future<void> _navigateToCollection(String collectionId) async {
-    final auth = context.read<AuthProvider>();
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CollectionDetailScreen(
-          collectionId: collectionId,
-          currentUserId: auth.userId,
-        ),
-      ),
-    );
-  }
-
-  void _navigateToUserProfile(String userId, String currentUserId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserProfileScreen(
-          userId: userId,
-          currentUserId: currentUserId,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
-        title: const Text(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
           'Open Collaborations',
-          style: TextStyle(fontWeight: FontWeight.w800),
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w800,
+            color: Colors.black,
+            fontSize: 18,
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: _isLoading
@@ -90,26 +76,19 @@ class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
                       const SizedBox(height: 16),
                       Text(
                         'No open collaborations found',
-                        style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                 )
-              : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
                   itemCount: _collections.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.86,
-                  ),
                   itemBuilder: (context, index) {
                     final c = _collections[index];
-                    return CollectionGridCard(
+                    return CollectionListCard(
                       collection: c,
-                      onTap: () => _navigateToCollection(c.id),
-                      onUserTap: () => _navigateToUserProfile(c.userId, auth.userId),
+                      currentUserId: auth.userId,
                     );
                   },
                 ),
