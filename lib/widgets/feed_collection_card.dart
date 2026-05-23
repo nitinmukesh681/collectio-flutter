@@ -49,7 +49,7 @@ class FeedCollectionCard extends StatelessWidget {
         return GestureDetector(
           onTap: onTap,
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            margin: const EdgeInsets.symmetric(vertical: 6),
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: Colors.white,

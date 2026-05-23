@@ -1043,7 +1043,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                     children: [
                       // Updated time
                       Text(
-                        'UPDATED ${_getTimeAgo(collection.createdAt).toUpperCase()}',
+                        'UPDATED ${_getTimeAgo(collection.lastActivityAt).toUpperCase()}',
                         style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
                       ),
                       const SizedBox(height: 10),
@@ -1738,8 +1738,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
                       },
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.language_rounded, size: 16, color: AppColors.primary),
-                        const SizedBox(width: 5),
+                        Transform.translate(
+                          offset: const Offset(-2, 0),
+                          child: Icon(Icons.language_rounded, size: 16, color: AppColors.primary),
+                        ),
+                        const SizedBox(width: 1),
                         Text('Website', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
                       ]),
                     ),
@@ -1753,8 +1756,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
                       },
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
-                        const SizedBox(width: 5),
+                        Transform.translate(
+                          offset: const Offset(-2, 0),
+                          child: Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
+                        ),
+                        const SizedBox(width: 1),
                         Text('Location', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
                       ]),
                     ),

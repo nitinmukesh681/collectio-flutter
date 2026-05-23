@@ -54,6 +54,7 @@ class CollectionEntity {
   final List<String> editors;
   final List<String> viewers;
   final int createdAt;
+  final int updatedAt;
   final List<String> searchKeywords;
 
   CollectionEntity({
@@ -91,7 +92,13 @@ class CollectionEntity {
     this.viewers = const [],
     this.searchKeywords = const [],
     int? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
+    int? updatedAt,
+  })  : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
+        updatedAt = updatedAt ?? createdAt ?? DateTime.now().millisecondsSinceEpoch;
+
+  /// Latest activity on this collection (items, comments, edits).
+  int get lastActivityAt =>
+      updatedAt > 0 ? updatedAt : createdAt;
 
   /// Create from Firestore document
   factory CollectionEntity.fromMap(Map<String, dynamic> map, String docId) {
@@ -150,6 +157,9 @@ class CollectionEntity {
       viewers: List<String>.from(map['viewers'] ?? []),
       searchKeywords: List<String>.from(map['searchKeywords'] ?? []),
       createdAt: _timestampToInt(map['createdAt']),
+      updatedAt: map['updatedAt'] != null
+          ? _timestampToInt(map['updatedAt'])
+          : _timestampToInt(map['createdAt']),
     );
   }
 
@@ -186,6 +196,7 @@ class CollectionEntity {
       'viewers': viewers,
       'searchKeywords': searchKeywords,
       'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
 
@@ -224,6 +235,7 @@ class CollectionEntity {
     List<String>? viewers,
     List<String>? searchKeywords,
     int? createdAt,
+    int? updatedAt,
   }) {
     return CollectionEntity(
       id: id ?? this.id,
@@ -260,6 +272,7 @@ class CollectionEntity {
       viewers: viewers ?? this.viewers,
       searchKeywords: searchKeywords ?? this.searchKeywords,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

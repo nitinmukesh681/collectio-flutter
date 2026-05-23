@@ -1,20 +1,27 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import '../utils/snackbar_utils.dart';
-import '../services/firestore_service.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
-import 'create_collection_screen.dart';
+import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/link_import_defaults.dart';
+import '../utils/link_title_utils.dart';
+import '../utils/snackbar_utils.dart';
 import 'collection_detail_screen.dart';
+import 'create_collection_screen.dart';
 
-/// Screen for handling shared URLs/links and adding them to collections
+/// Screen for handling shared URLs/links and adding them to collections.
 class ImportLinkScreen extends StatefulWidget {
   final String sharedUrl;
+  final String? sharedTitle;
   final String userId;
   final String userName;
 
   const ImportLinkScreen({
     super.key,
     required this.sharedUrl,
+    this.sharedTitle,
     required this.userId,
     required this.userName,
   });
@@ -23,59 +30,56 @@ class ImportLinkScreen extends StatefulWidget {
   State<ImportLinkScreen> createState() => _ImportLinkScreenState();
 }
 
-enum _ImportStep { choose, selectCollection, enterTitle }
-
 class _ImportLinkScreenState extends State<ImportLinkScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _titleController = TextEditingController();
-  
-  _ImportStep _currentStep = _ImportStep.choose;
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+
   List<CollectionEntity> _userCollections = [];
   Set<String> _selectedCollectionIds = {};
+  String _searchQuery = '';
   bool _isLoading = false;
   bool _isCreatingItem = false;
 
   @override
   void initState() {
     super.initState();
-    debugPrint('[ImportLink:init] initState — sharedUrl=${widget.sharedUrl} userId=${widget.userId} userName=${widget.userName}');
     _checkIfCollectionUrl();
     _loadUserCollections();
-    _titleController.text = _extractTitleFromUrl(widget.sharedUrl);
-    debugPrint('[ImportLink:init] pre-filled title: ${_titleController.text}');
+    _titleController.text = LinkTitleUtils.resolveItemTitle(
+      sharedTitle: widget.sharedTitle,
+      url: widget.sharedUrl,
+    );
+    _descriptionController.text = LinkImportDefaults.randomDescription();
+    _searchController.addListener(() {
+      setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
+    });
+    _titleController.addListener(() => setState(() {}));
   }
 
   void _checkIfCollectionUrl() {
-    debugPrint('[ImportLink:check] _checkIfCollectionUrl — url=${widget.sharedUrl}');
     final collectionId = _extractCollectionId(widget.sharedUrl);
-    debugPrint('[ImportLink:check] extractedCollectionId=$collectionId');
-    if (collectionId != null) {
-      debugPrint('[ImportLink:check] detected internal collection URL — will redirect to CollectionDetailScreen');
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          debugPrint('[ImportLink:check] redirecting to CollectionDetailScreen collectionId=$collectionId');
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CollectionDetailScreen(
-                collectionId: collectionId,
-                currentUserId: widget.userId,
-              ),
-            ),
-          );
-        } else {
-          debugPrint('[ImportLink:check] unmounted before redirect could happen');
-        }
-      });
-    } else {
-      debugPrint('[ImportLink:check] external URL — staying on ImportLinkScreen');
-    }
+    if (collectionId == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CollectionDetailScreen(
+            collectionId: collectionId,
+            currentUserId: widget.userId,
+          ),
+        ),
+      );
+    });
   }
 
   String? _extractCollectionId(String url) {
     try {
       final uri = Uri.parse(url);
-      if (uri.host.contains('collectio-b6b15.web.app') || 
+      if (uri.host.contains('collectio-b6b15.web.app') ||
           uri.host.contains('collectio') ||
           uri.host == 'localhost') {
         final pathSegments = uri.pathSegments;
@@ -89,33 +93,31 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
     return null;
   }
 
+  List<CollectionEntity> get _filteredCollections {
+    if (_searchQuery.isEmpty) return _userCollections;
+    return _userCollections
+        .where((c) => c.title.toLowerCase().contains(_searchQuery))
+        .toList();
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
+    _descriptionController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  String _extractTitleFromUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      return uri.host.replaceFirst('www.', '');
-    } catch (_) {
-      return 'Shared Link';
-    }
-  }
-
   Future<void> _loadUserCollections() async {
-    debugPrint('[ImportLink:load] _loadUserCollections — userId=${widget.userId}');
     setState(() => _isLoading = true);
     try {
-      final collections = await _firestoreService.getUserCollectionsList(widget.userId);
-      debugPrint('[ImportLink:load] loaded ${collections.length} collections: ${collections.map((c) => c.title).toList()}');
-      setState(() => _userCollections = collections);
+      final collections =
+          await _firestoreService.getUserCollectionsList(widget.userId);
+      if (mounted) setState(() => _userCollections = collections);
     } catch (e) {
-      debugPrint('[ImportLink:load] ERROR loading collections: $e');
+      debugPrint('[ImportLink] Error loading collections: $e');
     }
-    setState(() => _isLoading = false);
-    debugPrint('[ImportLink:load] done — _userCollections.length=${_userCollections.length}');
+    if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _createNewCollection() async {
@@ -131,10 +133,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
 
     if (created == true && mounted) {
       await _loadUserCollections();
-      setState(() {
-        _currentStep = _ImportStep.selectCollection;
-        _selectedCollectionIds.clear();
-      });
+      setState(_selectedCollectionIds.clear);
     }
   }
 
@@ -149,40 +148,29 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   }
 
   Future<void> _createLinkItems() async {
-    debugPrint('[ImportLink:save] _createLinkItems — selectedIds=$_selectedCollectionIds title=${_titleController.text.trim()} url=${widget.sharedUrl}');
-    if (_selectedCollectionIds.isEmpty) {
-      debugPrint('[ImportLink:save] no collections selected');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one collection')),
-      );
-      return;
-    }
+    if (_selectedCollectionIds.isEmpty) return;
 
-    if (_titleController.text.trim().isEmpty) {
-      debugPrint('[ImportLink:save] title is empty');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a title')),
-      );
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      SnackBarUtils.showErrorSnackBar(context, 'Could not determine a link title');
       return;
     }
 
     setState(() => _isCreatingItem = true);
-    int addedCount = 0;
+    var addedCount = 0;
 
     try {
       for (final collectionId in _selectedCollectionIds) {
-        debugPrint('[ImportLink:save] adding to collectionId=$collectionId');
         await _firestoreService.addLinkItem(
           collectionId: collectionId,
           userId: widget.userId,
           userName: widget.userName,
-          title: _titleController.text.trim(),
+          title: title,
           websiteUrl: widget.sharedUrl,
+          description: _descriptionController.text.trim(),
         );
         addedCount++;
-        debugPrint('[ImportLink:save] added to collectionId=$collectionId (total=$addedCount)');
       }
-      debugPrint('[ImportLink:save] all done — added to $addedCount collection(s)');
 
       if (mounted) {
         SnackBarUtils.showSuccessSnackBar(
@@ -192,256 +180,502 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      debugPrint('[ImportLink:save] ERROR: $e');
       if (mounted) {
         SnackBarUtils.showErrorSnackBar(context, 'Error: $e');
       }
     }
 
-    setState(() => _isCreatingItem = false);
-  }
-
-  void _handleBack() {
-    switch (_currentStep) {
-      case _ImportStep.choose:
-        Navigator.pop(context);
-        break;
-      case _ImportStep.selectCollection:
-        setState(() {
-          _currentStep = _ImportStep.choose;
-          _selectedCollectionIds.clear();
-        });
-        break;
-      case _ImportStep.enterTitle:
-        setState(() => _currentStep = _ImportStep.selectCollection);
-        break;
-    }
+    if (mounted) setState(() => _isCreatingItem = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final selectedCount = _selectedCollectionIds.length;
+    final hasTitle = _titleController.text.trim().isNotEmpty;
+    final canContinue = selectedCount > 0 && hasTitle && !_isCreatingItem;
+
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
+        backgroundColor: AppColors.backgroundSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _handleBack,
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Add to Collection'),
+        title: Text(
+          'Save Link',
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            fontSize: 18,
+          ),
+        ),
+        centerTitle: false,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Shared URL card
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Shared Link',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),                  const SizedBox(height: 6),
-                  Text(
-                    widget.sharedUrl,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                _buildSharedLinkCard(),
+                const SizedBox(height: 16),
+                      _buildTitleField(),
+                      const SizedBox(height: 16),
+                      _buildDescriptionField(),
+                      const SizedBox(height: 16),
+                      _buildSearchField(),
+                const SizedBox(height: 20),
+                _buildSectionHeader(),
+                const SizedBox(height: 12),
+                if (_isLoading && _userCollections.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  ..._buildCollectionRows(),
+              ],
             ),
-            const SizedBox(height: 20),
-
-            // Step content
-            Expanded(child: _buildStepContent()),
-          ],
-        ),
+          ),
+          _buildContinueButton(canContinue, selectedCount),
+        ],
       ),
     );
   }
 
-  Widget _buildStepContent() {
-    switch (_currentStep) {
-      case _ImportStep.choose:
-        return _buildChooseStep();
-      case _ImportStep.selectCollection:
-        return _buildSelectCollectionStep();
-      case _ImportStep.enterTitle:
-        return _buildEnterTitleStep();
-    }
-  }
-
-  Widget _buildChooseStep() {
-    return Column(
-      children: [
-        ElevatedButton(
-          onPressed: () {
-            // Navigate to create new collection, then come back
-            // For simplicity, we'll go straight to existing collections
-            setState(() => _currentStep = _ImportStep.selectCollection);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryPurple,
-            foregroundColor: Colors.white,
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  Widget _buildSharedLinkCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.link_rounded, color: Colors.white, size: 22),
           ),
-          child: const Text('Add to existing collection', style: TextStyle(fontWeight: FontWeight.bold)),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: _createNewCollection,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SHARED LINK',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.sharedUrl,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: const Text('Add to new collection'),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: () {
-            // For simplicity, just select first collection if any
-            if (_userCollections.isNotEmpty) {
-              _toggleCollectionSelected(_userCollections.first.id);
-              setState(() => _currentStep = _ImportStep.enterTitle);
-            }
-          },
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          child: const Text('Quick add to latest collection'),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildSelectCollectionStep() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_userCollections.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.folder_off, size: 64, color: AppColors.textMuted),
-            const SizedBox(height: 16),
-            const Text('No collections yet'),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Create one first'),
-            ),
-          ],
-        ),
-      );
-    }
-
+  Widget _buildLabeledField({
+    required String label,
+    required TextEditingController controller,
+    required String hintText,
+    int maxLines = 1,
+    TextCapitalization textCapitalization = TextCapitalization.sentences,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Select collections', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        ElevatedButton(
-          onPressed: _selectedCollectionIds.isNotEmpty
-              ? () => setState(() => _currentStep = _ImportStep.enterTitle)
-              : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryPurple,
-            foregroundColor: Colors.white,
-            minimumSize: const Size.fromHeight(46),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+            color: AppColors.textSecondary,
           ),
-          child: Text('Continue (${_selectedCollectionIds.length} selected)'),
         ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _userCollections.length,
-            itemBuilder: (context, index) {
-              final collection = _userCollections[index];
-              final isSelected = _selectedCollectionIds.contains(collection.id);
-              
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleCollectionSelected(collection.id),
-                    activeColor: AppColors.primaryPurple,
-                  ),
-                  title: Text(collection.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('${collection.itemCount} items'),
-                  onTap: () => _toggleCollectionSelected(collection.id),
-                ),
-              );
-            },
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          maxLines: maxLines,
+          textCapitalization: textCapitalization,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.divider),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildEnterTitleStep() {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Item Title', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _titleController,
-            decoration: InputDecoration(
-              hintText: 'Enter a title for this link',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+  Widget _buildTitleField() {
+    return _buildLabeledField(
+      label: 'ITEM TITLE',
+      controller: _titleController,
+      hintText: 'Enter a title for this link',
+    );
+  }
+
+  Widget _buildDescriptionField() {
+    return _buildLabeledField(
+      label: 'DESCRIPTION',
+      controller: _descriptionController,
+      hintText: 'Add a note about this link',
+      maxLines: 2,
+    );
+  }
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 15,
+        color: AppColors.textPrimary,
+      ),
+      decoration: InputDecoration(
+        hintText: 'Search your collections...',
+        hintStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textMuted,
+          fontSize: 15,
+        ),
+        prefixIcon: const Icon(Icons.search, color: AppColors.textMuted, size: 22),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: const BorderSide(color: AppColors.divider),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader() {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'YOUR COLLECTIONS',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: _isCreatingItem ? null : _createLinkItems,
+        ),
+        TextButton(
+          onPressed: _isCreatingItem ? null : _createNewCollection,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(
+            '+ Create New',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildCollectionRows() {
+    final collections = _filteredCollections;
+
+    if (!_isLoading && _userCollections.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Column(
+            children: [
+              const Icon(Icons.folder_off_outlined,
+                  size: 48, color: AppColors.textMuted),
+              const SizedBox(height: 12),
+              Text(
+                'No collections yet',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _createNewCollection,
+                child: const Text('Create your first collection'),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    if (collections.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Text(
+            'No collections match your search',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+          ),
+        ),
+      ];
+    }
+
+    return collections
+        .map(
+          (collection) => _ImportCollectionRow(
+            collection: collection,
+            isSelected: _selectedCollectionIds.contains(collection.id),
+            onTap: () => _toggleCollectionSelected(collection.id),
+          ),
+        )
+        .toList();
+  }
+
+  Widget _buildContinueButton(bool canContinue, int selectedCount) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: canContinue ? _createLinkItems : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryPurple,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(50),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              backgroundColor:
+                  canContinue ? AppColors.primary : AppColors.surfaceMuted,
+              foregroundColor:
+                  canContinue ? Colors.white : AppColors.textMuted,
+              disabledBackgroundColor: AppColors.surfaceMuted,
+              disabledForegroundColor: AppColors.textMuted,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(26),
+              ),
             ),
             child: _isCreatingItem
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                 : Text(
-                    _selectedCollectionIds.length <= 1
-                        ? 'Add'
-                        : 'Add to ${_selectedCollectionIds.length} collections',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    'Continue ($selectedCount selected)',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: _isCreatingItem ? null : _handleBack,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(50),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportCollectionRow extends StatelessWidget {
+  final CollectionEntity collection;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ImportCollectionRow({
+    required this.collection,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  Future<String?> _resolveCover() async {
+    final candidate = (collection.coverImageUrl != null &&
+            collection.coverImageUrl!.isNotEmpty)
+        ? collection.coverImageUrl!.trim()
+        : (collection.previewImageUrls.isNotEmpty
+            ? collection.previewImageUrls.first.trim()
+            : '');
+    if (candidate.isEmpty) return null;
+    if (candidate.startsWith('gs://')) {
+      try {
+        return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL();
+      } catch (_) {
+        return null;
+      }
+    }
+    if (candidate.startsWith('http')) return candidate;
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gradientColors = AppColors.categoryGradients[collection.category.name] ??
+        AppColors.categoryGradients['other']!;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isSelected ? AppColors.primary : AppColors.divider,
+                width: isSelected ? 1.5 : 1,
+              ),
+              boxShadow: AppColors.cardShadow,
             ),
-            child: const Text('Back'),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => onTap(),
+                    activeColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.textMuted, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        collection.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${collection.itemCount} item${collection.itemCount == 1 ? '' : 's'}',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: FutureBuilder<String?>(
+                      future: _resolveCover(),
+                      builder: (context, snap) {
+                        final url = snap.data;
+                        if (url != null && url.isNotEmpty) {
+                          return CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _gradientThumb(gradientColors),
+                          );
+                        }
+                        return _gradientThumb(gradientColors);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _gradientThumb(List<Color> colors) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
     );
   }

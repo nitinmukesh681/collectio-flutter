@@ -18,6 +18,17 @@ class FirestoreService {
   CollectionReference get _usersRef => _firestore.collection('users');
   CollectionReference get _collectionsRef => _firestore.collection('collections');
   CollectionReference get _collectionItemsRef => _firestore.collection('collectionItems');
+
+  /// Bumps collection `updatedAt` when items or other collection content changes.
+  Future<void> _touchCollectionUpdatedAt(String collectionId) async {
+    try {
+      await _collectionsRef.doc(collectionId).update({
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Could not update collection updatedAt: $e');
+    }
+  }
   CollectionReference get _commentsRef => _firestore.collection('comments');
 
   // ==================== COMMENTS ====================
@@ -79,6 +90,7 @@ class FirestoreService {
       debugPrint('Comment notification error: $e');
     }
 
+    await _touchCollectionUpdatedAt(collectionId);
     return docRef.id;
   }
 
@@ -121,7 +133,14 @@ class FirestoreService {
   }
 
   Future<void> deleteComment(String commentId) async {
+    final snap = await _commentsRef.doc(commentId).get();
+    final collectionId = snap.data() != null
+        ? (snap.data() as Map<String, dynamic>)['collectionId'] as String?
+        : null;
     await _commentsRef.doc(commentId).delete();
+    if (collectionId != null && collectionId.isNotEmpty) {
+      await _touchCollectionUpdatedAt(collectionId);
+    }
   }
 
   Future<String> _getUsername(String userId) async {
@@ -518,14 +537,18 @@ class FirestoreService {
     required String userName,
     required String title,
     required String websiteUrl,
+    String? description,
   }) async {
+    final trimmedDescription = description?.trim();
     await _collectionItemsRef.add({
       'collectionId': collectionId,
       'userId': userId,
       'userName': userName,
       'title': title,
       'websiteUrl': websiteUrl,
-      'description': null,
+      'description': (trimmedDescription != null && trimmedDescription.isNotEmpty)
+          ? trimmedDescription
+          : null,
       'imageUrls': [],
       'order': await _getNextItemOrder(collectionId),
       'likes': 0,
@@ -534,9 +557,9 @@ class FirestoreService {
       'createdAt': FieldValue.serverTimestamp(),
     });
     
-    // Update collection item count
     await _collectionsRef.doc(collectionId).update({
       'itemCount': FieldValue.increment(1),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -975,6 +998,7 @@ class FirestoreService {
 
         tx.update(collectionRef, {
           'itemCount': currentItemCount + 1,
+          'updatedAt': FieldValue.serverTimestamp(),
           if (isNewContributor) 'contributorIds': FieldValue.arrayUnion([item.userId]),
           if (isNewContributor) 'contributorCount': currentContributorCount + 1,
         });
@@ -1001,6 +1025,7 @@ class FirestoreService {
           await collectionRef.update({
             'itemCount': FieldValue.increment(1),
             'contributorIds': FieldValue.arrayUnion([item.userId]),
+            'updatedAt': FieldValue.serverTimestamp(),
           });
         } catch (_) {
           debugPrint('Could not update collection metadata (contributor) — will sync later');
@@ -1019,6 +1044,7 @@ class FirestoreService {
       ...item.toMap(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await _touchCollectionUpdatedAt(collectionId);
   }
 
   /// Delete an item
@@ -1029,6 +1055,7 @@ class FirestoreService {
     try {
       await _collectionsRef.doc(collectionId).update({
         'itemCount': FieldValue.increment(-1),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
       debugPrint('Could not update collection itemCount after delete: $e');
@@ -1115,6 +1142,7 @@ class FirestoreService {
       });
     }
     await batch.commit();
+    await _touchCollectionUpdatedAt(collectionId);
   }
 
   /// Duplicate a collection with all its items
