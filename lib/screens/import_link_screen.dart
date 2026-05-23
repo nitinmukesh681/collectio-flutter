@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:async';
 import '../models/collection_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -39,14 +39,15 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   List<CollectionEntity> _userCollections = [];
   Set<String> _selectedCollectionIds = {};
   String _searchQuery = '';
-  bool _isLoading = false;
+  bool _isLoading = true;
   bool _isCreatingItem = false;
+  StreamSubscription<List<CollectionEntity>>? _collectionsSubscription;
 
   @override
   void initState() {
     super.initState();
     _checkIfCollectionUrl();
-    _loadUserCollections();
+    _listenToUserCollections();
     _titleController.text = LinkTitleUtils.resolveItemTitle(
       sharedTitle: widget.sharedTitle,
       url: widget.sharedUrl,
@@ -102,22 +103,47 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
 
   @override
   void dispose() {
+    _collectionsSubscription?.cancel();
     _titleController.dispose();
     _descriptionController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadUserCollections() async {
+  void _listenToUserCollections() {
+    _collectionsSubscription?.cancel();
+    _collectionsSubscription =
+        _firestoreService.getUserCollectionsStream(widget.userId).listen(
+      (collections) {
+        if (mounted) {
+          setState(() {
+            _userCollections = collections;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('[ImportLink] Error loading collections: $error');
+        if (mounted) setState(() => _isLoading = false);
+      },
+    );
+  }
+
+  Future<void> _refreshUserCollections() async {
     setState(() => _isLoading = true);
     try {
       final collections =
           await _firestoreService.getUserCollectionsList(widget.userId);
-      if (mounted) setState(() => _userCollections = collections);
+      if (mounted) {
+        setState(() {
+          _userCollections = collections;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      debugPrint('[ImportLink] Error loading collections: $e');
+      debugPrint('[ImportLink] Error refreshing collections: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
-    if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _createNewCollection() async {
@@ -132,7 +158,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
     );
 
     if (created == true && mounted) {
-      await _loadUserCollections();
+      await _refreshUserCollections();
       setState(_selectedCollectionIds.clear);
     }
   }
@@ -160,17 +186,19 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
     var addedCount = 0;
 
     try {
-      for (final collectionId in _selectedCollectionIds) {
-        await _firestoreService.addLinkItem(
-          collectionId: collectionId,
-          userId: widget.userId,
-          userName: widget.userName,
-          title: title,
-          websiteUrl: widget.sharedUrl,
-          description: _descriptionController.text.trim(),
-        );
-        addedCount++;
-      }
+      await Future.wait(
+        _selectedCollectionIds.map(
+          (collectionId) => _firestoreService.addLinkItem(
+            collectionId: collectionId,
+            userId: widget.userId,
+            userName: widget.userName,
+            title: title,
+            websiteUrl: widget.sharedUrl,
+            description: _descriptionController.text.trim(),
+          ),
+        ),
+      );
+      addedCount = _selectedCollectionIds.length;
 
       if (mounted) {
         SnackBarUtils.showSuccessSnackBar(
@@ -552,23 +580,23 @@ class _ImportCollectionRow extends StatelessWidget {
     required this.onTap,
   });
 
-  Future<String?> _resolveCover() async {
+  Widget _buildThumb(List<Color> gradientColors) {
     final candidate = (collection.coverImageUrl != null &&
             collection.coverImageUrl!.isNotEmpty)
         ? collection.coverImageUrl!.trim()
         : (collection.previewImageUrls.isNotEmpty
             ? collection.previewImageUrls.first.trim()
             : '');
-    if (candidate.isEmpty) return null;
-    if (candidate.startsWith('gs://')) {
-      try {
-        return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL();
-      } catch (_) {
-        return null;
-      }
+
+    if (candidate.startsWith('http')) {
+      return CachedNetworkImage(
+        imageUrl: candidate,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => _gradientThumb(gradientColors),
+      );
     }
-    if (candidate.startsWith('http')) return candidate;
-    return null;
+
+    return _gradientThumb(gradientColors);
   }
 
   @override
@@ -644,20 +672,7 @@ class _ImportCollectionRow extends StatelessWidget {
                   child: SizedBox(
                     width: 52,
                     height: 52,
-                    child: FutureBuilder<String?>(
-                      future: _resolveCover(),
-                      builder: (context, snap) {
-                        final url = snap.data;
-                        if (url != null && url.isNotEmpty) {
-                          return CachedNetworkImage(
-                            imageUrl: url,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => _gradientThumb(gradientColors),
-                          );
-                        }
-                        return _gradientThumb(gradientColors);
-                      },
-                    ),
+                    child: _buildThumb(gradientColors),
                   ),
                 ),
               ],

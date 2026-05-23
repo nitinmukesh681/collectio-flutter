@@ -540,7 +540,10 @@ class FirestoreService {
     String? description,
   }) async {
     final trimmedDescription = description?.trim();
-    await _collectionItemsRef.add({
+    final docRef = _collectionItemsRef.doc();
+    final collectionRef = _collectionsRef.doc(collectionId);
+
+  final itemData = {
       'collectionId': collectionId,
       'userId': userId,
       'userName': userName,
@@ -550,38 +553,28 @@ class FirestoreService {
           ? trimmedDescription
           : null,
       'imageUrls': [],
-      'order': await _getNextItemOrder(collectionId),
       'likes': 0,
       'likedBy': [],
       'rating': 0.0,
       'createdAt': FieldValue.serverTimestamp(),
-    });
-    
-    await _collectionsRef.doc(collectionId).update({
-      'itemCount': FieldValue.increment(1),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
+    };
 
-  /// Get next order number for items in a collection
-  Future<int> _getNextItemOrder(String collectionId) async {
-    // NOTE: Avoid a composite index requirement (where + orderBy) by fetching items
-    // by collectionId and determining max order client-side.
-    final snapshot = await _collectionItemsRef
-        .where('collectionId', isEqualTo: collectionId)
-        .get();
-
-    var maxOrder = -1;
-    for (final doc in snapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final order = data['order'];
-      if (order is int && order > maxOrder) {
-        maxOrder = order;
+    await _firestore.runTransaction((tx) async {
+      final collectionSnap = await tx.get(collectionRef);
+      if (!collectionSnap.exists) {
+        throw Exception('Collection not found');
       }
-    }
-    return maxOrder + 1;
-  }
 
+      final data = collectionSnap.data() as Map<String, dynamic>;
+      final currentItemCount = (data['itemCount'] as int?) ?? 0;
+
+      tx.set(docRef, {...itemData, 'order': currentItemCount});
+      tx.update(collectionRef, {
+        'itemCount': currentItemCount + 1,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
 
   Future<CollectionEntity?> getCollection(String collectionId) async {
     final doc = await _collectionsRef.doc(collectionId).get();

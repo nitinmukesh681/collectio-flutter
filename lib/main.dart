@@ -459,11 +459,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     final userName = auth.userEntity?.userName ??
         auth.firebaseUser?.displayName ??
         auth.firebaseUser?.email?.split('@').first ??
-        '';
-    if (userName.isEmpty) {
-      debugPrint('[Share] waiting — user profile not loaded yet');
-      return;
-    }
+        'User';
 
     _isOpeningImport = true;
     final url = _pendingSharedUrl!;
