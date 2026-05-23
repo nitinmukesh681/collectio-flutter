@@ -1083,8 +1083,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         ),
                       ],
 
-                      // Tags
-                      if (collection.tags.isNotEmpty) ...[
+                      // Tags and open badge
+                      if (collection.tags.isNotEmpty || collection.isOpenForContribution) ...[
                         const SizedBox(height: 14),
                         Wrap(
                           spacing: 8, runSpacing: 8,
