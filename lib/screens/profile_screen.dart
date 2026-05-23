@@ -5,10 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../models/collection_entity.dart';
+import '../models/user_entity.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import 'collection_detail_screen.dart';
+import '../widgets/collection_list_card.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
 import 'followers_following_screen.dart';
@@ -21,20 +22,22 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+  static const Color _listBackground = Color(0xFFF7F6FC);
+  static const Color _editButtonBg = Color(0xFFEEF2FF);
+
   late TabController _tabController;
   final FirestoreService _firestoreService = FirestoreService();
-  final ScrollController _scrollController = ScrollController();
-  
+
   StreamSubscription<List<CollectionEntity>>? _myCollectionsSubscription;
   StreamSubscription<List<CollectionEntity>>? _savedCollectionsSubscription;
   StreamSubscription<List<CollectionEntity>>? _collaborationsSubscription;
-  
+
   List<CollectionEntity> _myCollections = [];
   List<CollectionEntity> _savedCollections = [];
+  // ignore: unused_field
   List<CollectionEntity> _collaborationCollections = [];
   bool _isLoading = true;
 
-  String _collectionsFilter = 'my';
   String? _activeUserId;
 
   @override
@@ -55,7 +58,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   void _setupRealtimeStreams({bool isInitial = false}) {
-    // Always cancel any existing subscriptions before wiring new ones
     _cancelSubscriptions();
 
     final auth = context.read<AuthProvider>();
@@ -65,12 +67,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       return;
     }
 
-    // Only show loading indicator on initial setup, not on refresh
     if (isInitial && mounted) {
       setState(() => _isLoading = true);
     }
-    
-    // Setup real-time streams for immediate updates
+
     _myCollectionsSubscription = _firestoreService.getUserCollectionsStream(auth.userId).listen(
       (collections) {
         if (mounted) {
@@ -83,7 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       onError: (error) {
         debugPrint('Error in my collections stream: $error');
         if (mounted) setState(() => _isLoading = false);
-      }
+      },
     );
 
     _savedCollectionsSubscription = _firestoreService.getSavedCollectionsStream(auth.userId).listen(
@@ -96,7 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       },
       onError: (error) {
         debugPrint('Error in saved collections stream: $error');
-      }
+      },
     );
 
     _collaborationsSubscription = _firestoreService.getUserCollaborationsStream(auth.userId).listen(
@@ -109,14 +109,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       },
       onError: (error) {
         debugPrint('Error in collaborations stream: $error');
-      }
+      },
     );
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _scrollController.dispose();
     _cancelSubscriptions();
     super.dispose();
   }
@@ -131,7 +130,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Future<void> _refreshStreams() async {
-    // Setup new streams (existing ones will be cancelled in _setupRealtimeStreams)
     _setupRealtimeStreams();
   }
 
@@ -148,7 +146,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       MaterialPageRoute(builder: (context) => const EditProfileScreen()),
     );
     if (result == true) {
-      // Refresh streams if profile was updated
       _refreshStreams();
     }
   }
@@ -166,6 +163,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      final value = count / 1000000;
+      return '${value >= 10 ? value.toStringAsFixed(0) : value.toStringAsFixed(1)}M';
+    }
+    if (count >= 10000) {
+      return '${(count / 1000).round()}k';
+    }
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
+    }
+    return '$count';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
@@ -173,225 +184,42 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         final user = auth.userEntity;
 
         if (user == null) {
-          return const Center(child: CircularProgressIndicator());
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         return Scaffold(
+          backgroundColor: Colors.white,
           body: NestedScrollView(
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
-                  expandedHeight: 380,
+                  expandedHeight: 248,
                   pinned: true,
                   backgroundColor: Colors.white,
                   surfaceTintColor: Colors.transparent,
                   elevation: 0,
+                  automaticallyImplyLeading: false,
                   actions: [
                     IconButton(
-                      icon: const Icon(Icons.settings_outlined, color: Colors.black),
+                      icon: const Icon(Icons.settings_outlined, color: AppColors.textPrimary),
                       onPressed: _navigateToSettings,
                     ),
                   ],
                   flexibleSpace: FlexibleSpaceBar(
                     background: SafeArea(
+                      bottom: false,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const SizedBox(height: 44),
-                            GestureDetector(
-                              onTap: _navigateToEditProfile,
-                              child: SizedBox(
-                                width: 78,
-                                height: 78,
-                                child: Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: AppColors.divider, width: 1),
-                                  ),
-                                  child: ClipOval(
-                                    child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-                                        ? (user.avatarUrl!.trim().startsWith('gs://')
-                                            ? FutureBuilder<String>(
-                                                future: FirebaseStorage.instance
-                                                    .refFromURL(user.avatarUrl!.trim())
-                                                    .getDownloadURL(),
-                                                builder: (context, snap) {
-                                                  final url = snap.data;
-                                                  if (url == null || url.isEmpty) {
-                                                    return Container(
-                                                      color: AppColors.primaryPurple.withOpacity(0.10),
-                                                      alignment: Alignment.center,
-                                                      child: Text(
-                                                        user.userName.isNotEmpty
-                                                            ? user.userName[0].toUpperCase()
-                                                            : '?',
-                                                        style: GoogleFonts.plusJakartaSans(
-                                                          fontSize: 34,
-                                                          fontWeight: FontWeight.w800,
-                                                          color: AppColors.primaryPurpleDark,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                  return CachedNetworkImage(
-                                                    imageUrl: url,
-                                                    fit: BoxFit.cover,
-                                                    errorWidget: (context, _, __) {
-                                                      return Container(
-                                                        color: AppColors.primaryPurple.withOpacity(0.10),
-                                                        alignment: Alignment.center,
-                                                        child: Text(
-                                                          user.userName.isNotEmpty
-                                                              ? user.userName[0].toUpperCase()
-                                                              : '?',
-                                                          style: GoogleFonts.plusJakartaSans(
-                                                            fontSize: 34,
-                                                            fontWeight: FontWeight.w800,
-                                                            color: AppColors.primaryPurpleDark,
-                                                          ),
-                                                        ),
-                                                      );
-                                                    },
-                                                  );
-                                                },
-                                              )
-                                            : CachedNetworkImage(
-                                                imageUrl: user.avatarUrl!.trim(),
-                                                fit: BoxFit.cover,
-                                                errorWidget: (context, url, error) {
-                                                  return Container(
-                                                    color: AppColors.primaryPurple.withOpacity(0.10),
-                                                    alignment: Alignment.center,
-                                                    child: Text(
-                                                      user.userName.isNotEmpty
-                                                          ? user.userName[0].toUpperCase()
-                                                          : '?',
-                                                      style: GoogleFonts.plusJakartaSans(
-                                                        fontSize: 34,
-                                                        fontWeight: FontWeight.w800,
-                                                        color: AppColors.primaryPurpleDark,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ))
-                                        : Container(
-                                            color: AppColors.primaryPurple.withOpacity(0.10),
-                                            alignment: Alignment.center,
-                                            child: Text(
-                                              user.userName.isNotEmpty
-                                                  ? user.userName[0].toUpperCase()
-                                                  : '?',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 34,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.primaryPurpleDark,
-                                              ),
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              user.userName,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textPrimary,
-                                height: 1.1,
-                                letterSpacing: -0.5,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '@${user.userName}',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            if (user.bio != null && user.bio!.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                user.bio!,
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.4,
-                                ),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                            const SizedBox(height: 14),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _navigateToEditProfile,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  elevation: 0,
-                                ),
-                                child: Text('Edit Profile', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(22),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.04),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildStat(
-                                      _myCollections.length,
-                                      'Collections',
-                                      onTap: null,
-                                      dark: true,
-                                    ),
-                                  ),
-                                  Container(width: 1, height: 32, color: AppColors.divider),
-                                  Expanded(
-                                    child: _buildStat(
-                                      user.followers.length,
-                                      'Followers',
-                                      onTap: () => _navigateToFollowers(auth.userId, showFollowers: true),
-                                      dark: true,
-                                    ),
-                                  ),
-                                  Container(width: 1, height: 32, color: AppColors.divider),
-                                  Expanded(
-                                    child: _buildStat(
-                                      user.following.length,
-                                      'Following',
-                                      onTap: () => _navigateToFollowers(auth.userId, showFollowers: false),
-                                      dark: true,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            const SizedBox(height: 40),
+                            _buildProfileHeader(user),
+                            const SizedBox(height: 20),
+                            _buildStatsRow(user, auth.userId),
                           ],
                         ),
                       ),
@@ -403,28 +231,48 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   delegate: _TabBarDelegate(
                     TabBar(
                       controller: _tabController,
-                      labelColor: AppColors.primaryPurple,
+                      labelColor: AppColors.primary,
                       unselectedLabelColor: AppColors.textSecondary,
-                      indicatorColor: AppColors.primaryPurple,
+                      indicatorColor: AppColors.primary,
                       indicatorWeight: 3,
-                      labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14),
-                      unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 14),
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: AppColors.divider,
+                      labelStyle: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        letterSpacing: 0.6,
+                      ),
+                      unselectedLabelStyle: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        letterSpacing: 0.6,
+                      ),
                       tabs: const [
-                        Tab(text: 'Collections'),
-                        Tab(text: 'Saved'),
+                        Tab(text: 'COLLECTIONS'),
+                        Tab(text: 'SAVED'),
                       ],
                     ),
                   ),
                 ),
               ];
             },
-            body: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildCollectionsTab(auth.userId),
-                // Saved Collections
-                _buildCollectionsList(_savedCollections, auth.userId, isEmpty: 'No saved collections'),
-              ],
+            body: ColoredBox(
+              color: _listBackground,
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildCollectionsList(
+                    _myCollections,
+                    auth.userId,
+                    isEmpty: 'You haven\'t created any collections yet',
+                  ),
+                  _buildCollectionsList(
+                    _savedCollections,
+                    auth.userId,
+                    isEmpty: 'No saved collections',
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -432,100 +280,194 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildCollectionsTab(String userId) {
-    final list = _collectionsFilter == 'collab' ? _collaborationCollections : _myCollections;
-    final filterLabel = _collectionsFilter == 'collab' ? 'Collaborations' : 'My collections';
-
-    return Column(
+  Widget _buildProfileHeader(UserEntity user) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: 176,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.divider),
+        GestureDetector(
+          onTap: _navigateToEditProfile,
+          child: SizedBox(
+            width: 88,
+            height: 88,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: ClipOval(
+                    child: SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: _buildAvatar(user),
+                    ),
+                  ),
                 ),
-                child: PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  onSelected: (value) => setState(() => _collectionsFilter = value),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'my',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.collections_outlined, size: 18, color: Colors.black87),
-                          const SizedBox(width: 10),
-                          Text('My collections', style: GoogleFonts.plusJakartaSans()),
-                        ],
-                      ),
+                Positioned(
+                  right: 4,
+                  bottom: 4,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
-                    PopupMenuItem(
-                      value: 'collab',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.groups_outlined, size: 18, color: Colors.black87),
-                          const SizedBox(width: 10),
-                          Text('Collaborations', style: GoogleFonts.plusJakartaSans()),
-                        ],
-                      ),
+                    child: const Icon(Icons.add, size: 16, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                user.displayName.isNotEmpty ? user.displayName : user.userName,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  height: 1.1,
+                  letterSpacing: -0.3,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '@${user.userName}',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: _navigateToEditProfile,
+                  style: TextButton.styleFrom(
+                    backgroundColor: _editButtonBg,
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppColors.radiusSmall),
                     ),
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            filterLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        const Icon(Icons.keyboard_arrow_down, size: 18, color: Colors.black87),
-                      ],
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Edit Profile',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: _buildCollectionsList(
-            list,
-            userId,
-            isEmpty: _collectionsFilter == 'collab' ? 'No collaborations' : 'You haven\'t created any collections yet',
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStat(int count, String label, {VoidCallback? onTap, bool dark = false}) {
+  Widget _buildAvatar(UserEntity user) {
+    Widget fallback() {
+      return Container(
+        color: AppColors.primary.withOpacity(0.10),
+        alignment: Alignment.center,
+        child: Text(
+          user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            color: AppColors.primaryDark,
+          ),
+        ),
+      );
+    }
+
+    if (user.avatarUrl == null || user.avatarUrl!.isEmpty) {
+      return fallback();
+    }
+
+    if (user.avatarUrl!.trim().startsWith('gs://')) {
+      return FutureBuilder<String>(
+        future: FirebaseStorage.instance.refFromURL(user.avatarUrl!.trim()).getDownloadURL(),
+        builder: (context, snap) {
+          final url = snap.data;
+          if (url == null || url.isEmpty) return fallback();
+          return CachedNetworkImage(
+            imageUrl: url,
+            fit: BoxFit.cover,
+            errorWidget: (_, __, ___) => fallback(),
+          );
+        },
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: user.avatarUrl!.trim(),
+      fit: BoxFit.cover,
+      errorWidget: (_, __, ___) => fallback(),
+    );
+  }
+
+  Widget _buildStatsRow(UserEntity user, String userId) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildStat(_formatCount(_myCollections.length), 'COLLECTIONS'),
+        ),
+        Container(width: 1, height: 36, color: AppColors.divider),
+        Expanded(
+          child: _buildStat(
+            _formatCount(user.followers.length),
+            'FOLLOWERS',
+            onTap: () => _navigateToFollowers(userId, showFollowers: true),
+          ),
+        ),
+        Container(width: 1, height: 36, color: AppColors.divider),
+        Expanded(
+          child: _buildStat(
+            _formatCount(user.following.length),
+            'FOLLOWING',
+            onTap: () => _navigateToFollowers(userId, showFollowers: false),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStat(String count, String label, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Column(
         children: [
           Text(
-            '$count',
-            style: GoogleFonts.plusJakartaSans(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.w800),
+            count,
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.primary,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
-            label.toUpperCase(),
-            style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
           ),
         ],
       ),
@@ -546,7 +488,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             const SizedBox(height: 16),
             Text(
               isEmpty,
-              style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+              style: GoogleFonts.plusJakartaSans(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -555,93 +500,17 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
     return RefreshIndicator(
       onRefresh: _refreshStreams,
+      color: AppColors.primary,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         itemCount: collections.length,
         itemBuilder: (context, index) {
-          final collection = collections[index];
-          return _buildCollectionListCard(collection, userId);
+          return CollectionListCard(
+            collection: collections[index],
+            currentUserId: userId,
+            compact: true,
+          );
         },
-      ),
-    );
-  }
-
-  Widget _buildCollectionListCard(CollectionEntity collection, String userId) {
-    final gradientColors = AppColors.categoryGradients[collection.category.name] ?? AppColors.categoryGradients['other']!;
-
-    Future<String?> resolveCover() async {
-      final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)
-          ? collection.coverImageUrl!.trim()
-          : (collection.previewImageUrls.isNotEmpty ? collection.previewImageUrls.first.trim() : '');
-      if (candidate.isEmpty) return null;
-      if (candidate.startsWith('gs://')) {
-        try { return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL(); } catch (_) { return null; }
-      }
-      if (candidate.startsWith('http')) return candidate;
-      return null;
-    }
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(
-          builder: (context) => CollectionDetailScreen(collectionId: collection.id, currentUserId: userId),
-        ));
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(AppColors.radiusCard),
-          boxShadow: AppColors.cardShadow,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image with padding inside card
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppColors.radiusSmall),
-              child: AspectRatio(
-                aspectRatio: 4 / 3,
-                child: FutureBuilder<String?>(
-                  future: resolveCover(),
-                  builder: (context, snap) {
-                    final url = snap.data;
-                    if (url != null && url.isNotEmpty) {
-                      return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Container(
-                          decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
-                        ));
-                    }
-                    return Container(
-                      decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
-                    );
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Category
-            Text(
-              collection.category.displayName.toUpperCase(),
-              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 1),
-            ),
-            const SizedBox(height: 6),
-            // Title
-            Text(
-              collection.title,
-              style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.2),
-            ),
-            if (collection.description != null && collection.description!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                collection.description!,
-                style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
