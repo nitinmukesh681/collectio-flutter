@@ -104,7 +104,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
-  Widget _buildRatingBadge(double rating, {double fontSize = 12}) {
+  Widget _buildRatingBadge(
+    double rating, {
+    double fontSize = 12,
+    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    double borderRadius = 6,
+    double iconGap = 4,
+  }) {
     final displayScore = rating;
     final label = (displayScore % 1 == 0) ? displayScore.toStringAsFixed(0) : displayScore.toStringAsFixed(1);
 
@@ -118,16 +124,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: padding,
       decoration: BoxDecoration(
         color: badgeColor.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.star, size: fontSize, color: badgeColor),
-          const SizedBox(width: 4),
+          SizedBox(width: iconGap),
           Text(
             label,
             style: GoogleFonts.plusJakartaSans(
@@ -1644,33 +1650,39 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Rank container sized to match text line height (24px for 20px font at 1.2 height)
+              // Rank container sized to match text line height (22px for 18px font at 1.2 height)
               Container(
-                width: 20, height: 24,
+                width: 18, height: 22,
                 alignment: Alignment.center,
                 child: Container(
-                  width: 20, height: 20,
+                  width: 18, height: 18,
                   decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
                   alignment: Alignment.center,
-                  child: Text('$rank', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 10, color: Colors.white)),
+                  child: Text('$rank', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 9, color: Colors.white)),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(item.title,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.2)),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.2)),
               ),
               if (item.rating > 0) ...[
                 const SizedBox(width: 6),
                 Container(
-                  height: 24, // Align with text line height
+                  height: 22, // Align with text line height
                   alignment: Alignment.center,
-                  child: _buildRatingBadge(item.rating),
+                  child: _buildRatingBadge(
+                    item.rating,
+                    fontSize: 10,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    borderRadius: 5,
+                    iconGap: 3,
+                  ),
                 ),
               ],
               // Menu button sized to match text line height
               Container(
-                width: 28, height: 24,
+                width: 28, height: 22,
                 alignment: Alignment.centerRight,
                 child: PopupMenuButton<String>(
                 padding: EdgeInsets.zero,
@@ -1695,7 +1707,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           if (item.description != null && item.description!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Padding(
-              padding: const EdgeInsets.only(left: 30),
+              padding: const EdgeInsets.only(left: 28),
               child: Text(item.description!,
                 style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textPrimary, height: 1.5)),
             ),
@@ -1705,7 +1717,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           if (hasImages) ...[
             const SizedBox(height: 14),
             Padding(
-              padding: const EdgeInsets.only(left: 30, right: 4),
+              padding: const EdgeInsets.only(left: 28, right: 4),
               child: SizedBox(
                 height: 160,
                 child: ListView.separated(
@@ -1724,9 +1736,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
           // Website + Location links
           if (hasWebsite || hasLocation) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             Padding(
-              padding: const EdgeInsets.only(left: 30),
+              padding: const EdgeInsets.only(left: 28),
               child: Row(
                 children: [
                   if (hasWebsite)
