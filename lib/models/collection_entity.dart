@@ -103,6 +103,8 @@ class CollectionEntity {
   /// Create from Firestore document
   factory CollectionEntity.fromMap(Map<String, dynamic> map, String docId) {
     final rawVisibility = (map['visibility'] as String?)?.toUpperCase();
+    final isPublic = map['isPublic'] as bool? ?? true;
+    final visibility = _visibilityFromFields(isPublic: isPublic, rawVisibility: rawVisibility);
 
     final rawCover = map['coverImageUrl'];
     final coverImageUrl = rawCover is String ? rawCover.trim() : null;
@@ -125,15 +127,8 @@ class CollectionEntity {
       tags: List<String>.from(map['tags'] ?? []),
       coverImageUrl: (coverImageUrl != null && coverImageUrl.isNotEmpty) ? coverImageUrl : null,
       previewImageUrls: previewImageUrls,
-      visibility: CollectionVisibility.values.firstWhere(
-        (e) => e.name == (rawVisibility ?? 'PUBLIC').toLowerCase(),
-        orElse: () {
-          if (rawVisibility == 'FOLLOWERS') return CollectionVisibility.followers;
-          if (rawVisibility == 'PRIVATE') return CollectionVisibility.private;
-          return CollectionVisibility.public;
-        },
-      ),
-      isPublic: map['isPublic'] ?? true,
+      visibility: visibility,
+      isPublic: isPublic,
       itemCount: map['itemCount'] ?? 0,
       isOpenForContribution: map['isOpenForContribution'] ?? false,
       contributorCount: map['contributorCount'] ?? 0,
@@ -161,6 +156,15 @@ class CollectionEntity {
           ? _timestampToInt(map['updatedAt'])
           : _timestampToInt(map['createdAt']),
     );
+  }
+
+  static CollectionVisibility _visibilityFromFields({
+    required bool isPublic,
+    String? rawVisibility,
+  }) {
+    if (rawVisibility == 'FOLLOWERS') return CollectionVisibility.followers;
+    if (!isPublic || rawVisibility == 'PRIVATE') return CollectionVisibility.private;
+    return CollectionVisibility.public;
   }
 
   /// Convert to Firestore document

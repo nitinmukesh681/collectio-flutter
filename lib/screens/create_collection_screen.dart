@@ -196,6 +196,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
           googleMapsUrl: finalizeMapsUrl(),
           category: _selectedCategory,
           tags: _tags,
+          visibility: _isPublic ? CollectionVisibility.public : CollectionVisibility.private,
           isPublic: _isPublic,
           isOpenForContribution: _isOpenForContribution,
           coverImageUrl: finalCoverImageUrl,
@@ -217,6 +218,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
           category: _selectedCategory,
           tags: _tags,
           coverImageUrl: finalCoverImageUrl,
+          visibility: _isPublic ? CollectionVisibility.public : CollectionVisibility.private,
           isPublic: _isPublic,
           isOpenForContribution: _isOpenForContribution,
         );

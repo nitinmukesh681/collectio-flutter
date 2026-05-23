@@ -508,7 +508,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           return CollectionListCard(
             collection: collections[index],
             currentUserId: userId,
-            compact: true,
+            profileStyle: true,
           );
         },
       ),

@@ -7,7 +7,7 @@ import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import 'collection_detail_screen.dart';
+import '../widgets/collection_list_card.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -412,78 +412,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final collection = _collections[index];
-                    return _buildCollectionCard(collection);
+                    return CollectionListCard(
+                      collection: collection,
+                      currentUserId: widget.currentUserId,
+                      profileStyle: true,
+                    );
                   },
                   childCount: _collections.length,
                 ),
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildCollectionCard(CollectionEntity collection) {
-    final gradientColors = AppColors.categoryGradients[collection.category.name] ?? AppColors.categoryGradients['other']!;
-
-    Future<String?> resolveCover() async {
-      final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)
-          ? collection.coverImageUrl!.trim()
-          : (collection.previewImageUrls.isNotEmpty ? collection.previewImageUrls.first.trim() : '');
-      if (candidate.isEmpty) return null;
-      if (candidate.startsWith('gs://')) {
-        try { return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL(); } catch (_) { return null; }
-      }
-      if (candidate.startsWith('http')) return candidate;
-      return null;
-    }
-
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (context) => CollectionDetailScreen(collectionId: collection.id, currentUserId: widget.currentUserId),
-      )),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(AppColors.radiusCard),
-          boxShadow: AppColors.cardShadow,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppColors.radiusSmall),
-              child: AspectRatio(
-                aspectRatio: 4 / 3,
-                child: FutureBuilder<String?>(
-                  future: resolveCover(),
-                  builder: (context, snap) {
-                    final url = snap.data;
-                    if (url != null && url.isNotEmpty) {
-                      return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Container(decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors))));
-                    }
-                    return Container(decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)));
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(collection.category.displayName.toUpperCase(),
-              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 1)),
-            const SizedBox(height: 6),
-            Text(collection.title,
-              style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.2)),
-            if (collection.description != null && collection.description!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(collection.description!,
-                style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondary, height: 1.4, fontWeight: FontWeight.w500),
-                maxLines: 2, overflow: TextOverflow.ellipsis),
-            ],
-          ],
-        ),
       ),
     );
   }
