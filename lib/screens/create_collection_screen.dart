@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http;
 import 'dart:io';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
@@ -47,8 +48,10 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
   bool _isPublic = true;
   bool _isOpenForContribution = false;
   File? _coverImage;
+  String? _coverImageSourcePath;
   String? _selectedUnsplashUrl; // New state variable for Unsplash image
   bool _isLoading = false;
+  bool _isCoverPreparing = false;
   String? _selectedGoogleMapsUrl;
 
   bool get _isEditing => widget.existingCollection != null;
@@ -108,33 +111,180 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
     super.dispose();
   }
 
+  bool get _canCropCover =>
+      !_isCoverPreparing &&
+      (_coverImageSourcePath != null ||
+          _coverImage != null ||
+          (_selectedUnsplashUrl != null && _selectedUnsplashUrl!.isNotEmpty) ||
+          (_isEditing &&
+              widget.existingCollection?.coverImageUrl != null &&
+              widget.existingCollection!.coverImageUrl!.isNotEmpty));
+
+  String? get _remoteCoverUrl {
+    if (_selectedUnsplashUrl != null && _selectedUnsplashUrl!.isNotEmpty) {
+      return _selectedUnsplashUrl;
+    }
+    if (_coverImage == null &&
+        _isEditing &&
+        widget.existingCollection?.coverImageUrl != null &&
+        widget.existingCollection!.coverImageUrl!.isNotEmpty) {
+      return widget.existingCollection!.coverImageUrl;
+    }
+    return null;
+  }
+
+  Future<String> _downloadCoverToTemp(String url) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      throw const FormatException('Invalid image URL');
+    }
+
+    final host = uri.host.toLowerCase();
+    if (host == 'localhost' ||
+        host.endsWith('.local') ||
+        host.startsWith('127.') ||
+        host.startsWith('10.') ||
+        host.startsWith('192.168.') ||
+        host.startsWith('172.')) {
+      throw const FormatException('Invalid image URL');
+    }
+
+    final response = await http.get(uri).timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to download image');
+    }
+
+    final extension = uri.path.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+    final file = File(
+      '${Directory.systemTemp.path}/cover_${DateTime.now().millisecondsSinceEpoch}.$extension',
+    );
+    await file.writeAsBytes(response.bodyBytes);
+    return file.path;
+  }
+
+  Future<void> _applyRemoteCover(String imageUrl) async {
+    setState(() => _isCoverPreparing = true);
+    try {
+      final path = await _downloadCoverToTemp(imageUrl);
+      if (!mounted) return;
+      setState(() {
+        _coverImageSourcePath = path;
+        _coverImage = File(path);
+        _selectedUnsplashUrl = imageUrl;
+      });
+    } catch (e) {
+      debugPrint('Failed to prepare Unsplash cover: $e');
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(
+          context,
+          'Could not load Unsplash image for cropping.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCoverPreparing = false);
+    }
+  }
+
+  Future<String?> _resolveCropSourcePath() async {
+    if (_coverImageSourcePath != null && File(_coverImageSourcePath!).existsSync()) {
+      return _coverImageSourcePath;
+    }
+    if (_coverImage != null && _coverImage!.existsSync()) {
+      return _coverImage!.path;
+    }
+
+    final remoteUrl = _remoteCoverUrl;
+    if (remoteUrl == null) return null;
+
+    final path = await _downloadCoverToTemp(remoteUrl);
+    if (mounted) {
+      setState(() {
+        _coverImageSourcePath = path;
+        _coverImage = File(path);
+      });
+    }
+    return path;
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
+    if (pickedFile == null) return;
+
+    setState(() {
+      _coverImageSourcePath = pickedFile.path;
+      _coverImage = File(pickedFile.path);
+      _selectedUnsplashUrl = null;
+    });
+  }
+
+  Future<void> _cropCoverImage() async {
+    setState(() => _isCoverPreparing = true);
+
+    try {
+      final sourcePath = await _resolveCropSourcePath();
+      if (sourcePath == null) {
+        if (mounted) {
+          SnackBarUtils.showErrorSnackBar(context, 'No image available to crop.');
+        }
+        return;
+      }
+
       final croppedFile = await ImageCropper().cropImage(
-        sourcePath: pickedFile.path,
-        aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 9),
+        sourcePath: sourcePath,
+        compressQuality: 90,
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Crop Cover Image',
             toolbarColor: AppColors.primaryPurple,
             toolbarWidgetColor: Colors.white,
             activeControlsWidgetColor: AppColors.primaryPurple,
+            initAspectRatio: CropAspectRatioPreset.original,
             lockAspectRatio: false,
+            hideBottomControls: false,
+            aspectRatioPresets: [
+              CropAspectRatioPreset.original,
+              CropAspectRatioPreset.ratio16x9,
+              CropAspectRatioPreset.ratio4x3,
+              CropAspectRatioPreset.ratio3x2,
+              CropAspectRatioPreset.square,
+            ],
           ),
           IOSUiSettings(
             title: 'Crop Cover Image',
             aspectRatioLockEnabled: false,
+            resetAspectRatioEnabled: true,
+            embedInNavigationController: true,
+            aspectRatioPresets: [
+              CropAspectRatioPreset.original,
+              CropAspectRatioPreset.ratio16x9,
+              CropAspectRatioPreset.ratio4x3,
+              CropAspectRatioPreset.ratio3x2,
+              CropAspectRatioPreset.square,
+            ],
           ),
         ],
       );
+
+      if (!mounted) return;
+
       if (croppedFile != null) {
         setState(() {
+          _coverImageSourcePath = croppedFile.path;
           _coverImage = File(croppedFile.path);
           _selectedUnsplashUrl = null;
         });
       }
+    } catch (e) {
+      debugPrint('Cover image crop failed: $e');
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(
+          context,
+          'Could not open image cropper. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCoverPreparing = false);
     }
   }
 
@@ -308,21 +458,34 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => UnsplashSearchDialog(
-                          onImageSelected: (imageUrl, attribution) {
-                            setState(() {
-                              _coverImage = null;
-                              _selectedUnsplashUrl = imageUrl;
-                            });
+                    onPressed: _isCoverPreparing
+                        ? null
+                        : () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => UnsplashSearchDialog(
+                                onImageSelected: (imageUrl, attribution) {
+                                  _applyRemoteCover(imageUrl);
+                                },
+                              ),
+                            );
                           },
-                        ),
-                      );
-                    },
                     icon: const Icon(Icons.image_outlined),
                     label: const Text('Unsplash'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.divider),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _canCropCover ? _cropCoverImage : null,
+                    icon: const Icon(Icons.crop),
+                    label: const Text('Crop'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
                       side: const BorderSide(color: AppColors.divider),
@@ -334,47 +497,65 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Container(
-              height: 180,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceMuted,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.divider),
-                image: _coverImage != null
-                    ? DecorationImage(
-                        image: FileImage(_coverImage!),
-                        fit: BoxFit.cover,
-                      )
-                    : _selectedUnsplashUrl != null
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  height: 180,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.divider),
+                    image: _coverImage != null
                         ? DecorationImage(
-                            image: NetworkImage(_selectedUnsplashUrl!),
+                            image: FileImage(_coverImage!),
                             fit: BoxFit.cover,
                           )
-                        : widget.existingCollection?.coverImageUrl != null
+                        : _selectedUnsplashUrl != null
                             ? DecorationImage(
-                                image: NetworkImage(widget.existingCollection!.coverImageUrl!),
+                                image: NetworkImage(_selectedUnsplashUrl!),
                                 fit: BoxFit.cover,
                               )
-                            : null,
-              ),
-              child: _coverImage == null &&
-                      _selectedUnsplashUrl == null &&
-                      widget.existingCollection?.coverImageUrl == null
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.image_outlined, size: 42, color: AppColors.textMuted),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No cover selected',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
+                            : widget.existingCollection?.coverImageUrl != null
+                                ? DecorationImage(
+                                    image: NetworkImage(widget.existingCollection!.coverImageUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                  ),
+                  child: _coverImage == null &&
+                          _selectedUnsplashUrl == null &&
+                          widget.existingCollection?.coverImageUrl == null
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.image_outlined, size: 42, color: AppColors.textMuted),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No cover selected',
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                if (_isCoverPreparing)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.35),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 24),
 

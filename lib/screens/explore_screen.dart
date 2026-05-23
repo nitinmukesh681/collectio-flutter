@@ -310,6 +310,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         builder: (context) => _CollectionsListScreen(
           title: category.displayName,
           icon: _categoryIcon(category),
+          accentColor: AppColors.categoryLabelColor(category.name),
           currentUserId: widget.currentUserId,
           emptyMessage: 'No collections in ${category.displayName} yet',
           loader: () => _firestoreService.getCollectionsByCategory(
@@ -529,28 +530,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   // Design-system palette only: primary, secondary, tertiary, light indigo
-  static const _lightIndigo = Color(0xFF818CF8);
-  static const _categoryColors = <String, Color>{
-    'food': AppColors.primary,        // deep indigo
-    'travel': AppColors.secondary,    // dark navy
-    'tech': _lightIndigo,             // lighter indigo
-    'shopping': AppColors.tertiary,   // warm brown
-    'finance': AppColors.secondary,   // navy
-    'wellness': _lightIndigo,         // lighter indigo
-    'career': AppColors.secondary,    // navy
-    'home': AppColors.primary,        // indigo
-    'gaming': AppColors.primary,      // indigo
-    'entertainment': AppColors.secondary, // navy
-    'books': AppColors.tertiary,      // brown
-    'growth': _lightIndigo,           // lighter indigo
-    'projects': AppColors.tertiary,   // brown
-    'creativity': AppColors.primary,  // indigo
-    'sports': AppColors.secondary,    // navy
-    'other': Color(0xFF94A3B8),       // neutral
-  };
+  static Color _categoryColor(CategoryType category) =>
+      AppColors.categoryLabelColor(category.name);
 
   Widget _buildCategoryTile(CategoryType category) {
-    final color = _categoryColors[category.name] ?? AppColors.primary;
+    final color = _categoryColor(category);
     return GestureDetector(
       onTap: () => _navigateToCategory(category),
       child: Container(
@@ -965,6 +949,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 class _CollectionsListScreen extends StatefulWidget {
   final String title;
   final IconData icon;
+  final Color accentColor;
   final String? trailing;
   final Future<List<CollectionEntity>> Function() loader;
   final String currentUserId;
@@ -975,6 +960,7 @@ class _CollectionsListScreen extends StatefulWidget {
     required this.icon,
     required this.loader,
     required this.currentUserId,
+    this.accentColor = AppColors.primary,
     this.trailing,
     this.emptyMessage,
   });
@@ -1019,7 +1005,7 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
         ),
         title: Row(
           children: [
-            Icon(widget.icon, size: 18, color: AppColors.primaryPurple),
+            Icon(widget.icon, size: 18, color: widget.accentColor),
             const SizedBox(width: 8),
             Text(
               widget.title,
@@ -1049,7 +1035,7 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(widget.icon, size: 64, color: AppColors.primaryPurple.withOpacity(0.5)),
+                      Icon(widget.icon, size: 64, color: widget.accentColor.withOpacity(0.5)),
                       const SizedBox(height: 16),
                       Text(
                         widget.emptyMessage ?? 'No collections found',
@@ -1161,8 +1147,7 @@ class _BrowseCategoriesScreen extends StatelessWidget {
           itemBuilder: (context, index) {
             final category = categories[index];
             final count = categoryCounts[category] ?? 0;
-            final colors = _ExploreScreenState._categoryColors;
-            final color = colors[category.name] ?? AppColors.primary;
+            final color = AppColors.categoryLabelColor(category.name);
 
             return GestureDetector(
               onTap: () {

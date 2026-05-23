@@ -9,6 +9,7 @@ class AppColors {
   static const Color secondary = Color(0xFF0F172A);      // Near-black
   static const Color tertiary = Color(0xFFB95F00);        // Warm accent
   static const Color heartSalmon = Color(0xFFEF4444);     // Red for likes
+  static const Color lightIndigo = Color(0xFF818CF8);
 
   // Keep old name aliases so existing code doesn't break
   static const Color primaryPurple = primary;
@@ -75,6 +76,30 @@ class AppColors {
     'sports': [Color(0xFF0F172A), Color(0xFF334155)],      // navy
     'other': [Color(0xFF94A3B8), Color(0xFFCBD5E1)],       // neutral grey
   };
+
+  // Category label / browse tile accent colors
+  static const Map<String, Color> categoryLabelColors = {
+    'food': primary,
+    'travel': secondary,
+    'tech': lightIndigo,
+    'shopping': tertiary,
+    'finance': secondary,
+    'wellness': lightIndigo,
+    'career': secondary,
+    'home': primary,
+    'gaming': primary,
+    'entertainment': secondary,
+    'books': tertiary,
+    'growth': lightIndigo,
+    'projects': tertiary,
+    'creativity': primary,
+    'sports': secondary,
+    'style': lightIndigo,
+    'other': textMuted,
+  };
+
+  static Color categoryLabelColor(String categoryName) =>
+      categoryLabelColors[categoryName] ?? primary;
 
   // Helpers (keep for existing code that uses them)
   static Widget gradientIcon(IconData icon, {double size = 18}) {
