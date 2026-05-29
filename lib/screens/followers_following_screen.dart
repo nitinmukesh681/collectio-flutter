@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/avatar_fallback.dart';
 import 'user_profile_screen.dart';
 
 class FollowersFollowingScreen extends StatefulWidget {
@@ -142,68 +143,37 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
           ),
         );
       },
-      leading: CircleAvatar(
-        backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
-        child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-            ? ClipOval(
-                child: (user.avatarUrl!.trim().startsWith('gs://')
-                    ? FutureBuilder<String>(
-                        future: FirebaseStorage.instance
-                            .refFromURL(user.avatarUrl!.trim())
-                            .getDownloadURL(),
-                        builder: (context, snap) {
-                          final url = snap.data;
-                          if (url == null || url.isEmpty) {
-                            return Center(
-                              child: Text(
-                                user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primaryPurple,
-                                ),
-                              ),
-                            );
-                          }
-                          return CachedNetworkImage(
-                            imageUrl: url,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, _, __) {
-                              return Center(
-                                child: Text(
-                                  user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryPurple,
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      )
-                    : CachedNetworkImage(
-                        imageUrl: user.avatarUrl!.trim(),
-                        fit: BoxFit.cover,
-                        errorWidget: (context, _, __) {
-                          return Center(
-                            child: Text(
-                              user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryPurple,
-                              ),
-                            ),
-                          );
-                        },
-                      )),
-              )
-            : Text(
-                user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryPurple,
-                ),
-              ),
+      leading: SizedBox(
+        width: 48,
+        height: 48,
+        child: ClipOval(
+          child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+              ? (user.avatarUrl!.trim().startsWith('gs://')
+                  ? FutureBuilder<String>(
+                      future: FirebaseStorage.instance
+                          .refFromURL(user.avatarUrl!.trim())
+                          .getDownloadURL(),
+                      builder: (context, snap) {
+                        final url = snap.data;
+                        if (url == null || url.isEmpty) {
+                          return AvatarFallback(name: user.userName, size: 48);
+                        }
+                        return CachedNetworkImage(
+                          imageUrl: url,
+                          fit: BoxFit.cover,
+                          errorWidget: (context, _, __) =>
+                              AvatarFallback(name: user.userName, size: 48),
+                        );
+                      },
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: user.avatarUrl!.trim(),
+                      fit: BoxFit.cover,
+                      errorWidget: (context, _, __) =>
+                          AvatarFallback(name: user.userName, size: 48),
+                    ))
+              : AvatarFallback(name: user.userName, size: 48),
+        ),
       ),
       title: Text(
         '@${user.userName}',

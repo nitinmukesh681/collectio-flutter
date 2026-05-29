@@ -12,6 +12,7 @@ import '../providers/auth_provider.dart';
 import '../widgets/collection_card.dart';
 import '../widgets/collection_grid_card.dart';
 import '../widgets/collection_list_card.dart';
+import '../widgets/avatar_fallback.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
@@ -850,35 +851,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ? CachedNetworkImage(
                           imageUrl: user.avatarUrl!,
                           fit: BoxFit.cover,
-                          errorWidget: (context, url, error) {
-                            return Container(
-                              color: AppColors.primaryPurple.withOpacity(0.1),
-                              alignment: Alignment.center,
-                              child: Text(
-                                user.userName.isNotEmpty
-                                    ? user.userName[0].toUpperCase()
-                                    : '?',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primaryPurple,
-                                ),
-                              ),
-                            );
-                          },
+                          errorWidget: (context, url, error) =>
+                              AvatarFallback(name: user.userName, size: 48),
                         )
-                      : Container(
-                          color: AppColors.primaryPurple.withOpacity(0.1),
-                          alignment: Alignment.center,
-                          child: Text(
-                            user.userName.isNotEmpty
-                                ? user.userName[0].toUpperCase()
-                                : '?',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryPurple,
-                            ),
-                          ),
-                        ),
+                      : AvatarFallback(name: user.userName, size: 48),
                 ),
               ),
               title: Text(

@@ -150,42 +150,48 @@ class LandingScreen extends StatelessWidget {
     final headingSize = isCompact ? 34.0 : 44.0;
     final bodySize = isCompact ? 15.0 : 17.0;
 
+    final baseStyle = GoogleFonts.plusJakartaSans(
+      fontSize: headingSize,
+      height: 1.08,
+      color: const Color(0xFF1F2937),
+      fontWeight: FontWeight.w800,
+      letterSpacing: -1.2,
+    );
+
+    final accentStyle = baseStyle.copyWith(
+      fontStyle: FontStyle.italic,
+      color: AppColors.primary,
+      fontWeight: FontWeight.w700,
+    );
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         FittedBox(
           fit: BoxFit.scaleDown,
-          child: RichText(
-            textAlign: TextAlign.center,
-            text: TextSpan(
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: headingSize,
-                height: 1.08,
-                color: const Color(0xFF1F2937),
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1.2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Curate', style: baseStyle, textAlign: TextAlign.center),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: 'everything ', style: baseStyle),
+                    TextSpan(text: 'you', style: accentStyle),
+                  ],
+                ),
+                textAlign: TextAlign.center,
               ),
-              children: [
-                const TextSpan(text: 'Curate\neverything '),
+              Text.rich(
                 TextSpan(
-                  text: 'you\n',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  children: [
+                    TextSpan(text: 'love', style: accentStyle),
+                    TextSpan(text: '.', style: baseStyle),
+                  ],
                 ),
-                TextSpan(
-                  text: 'love',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const TextSpan(text: '.'),
-              ],
-            ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
         SizedBox(height: isCompact ? 12 : 16),

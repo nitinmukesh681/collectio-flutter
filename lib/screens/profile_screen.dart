@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/collection_list_card.dart';
+import '../widgets/avatar_fallback.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
 import 'followers_following_screen.dart';
@@ -378,20 +379,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Widget _buildAvatar(UserEntity user) {
-    Widget fallback() {
-      return Container(
-        color: AppColors.primary.withOpacity(0.10),
-        alignment: Alignment.center,
-        child: Text(
-          user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 30,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primaryDark,
-          ),
-        ),
-      );
-    }
+    Widget fallback() => AvatarFallback(name: user.userName, size: 80);
 
     if (user.avatarUrl == null || user.avatarUrl!.isEmpty) {
       return fallback();

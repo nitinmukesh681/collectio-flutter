@@ -410,12 +410,18 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
-          margin: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(AppColors.radiusLarge),
-            boxShadow: AppColors.elevatedShadow,
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1A000000),
+                blurRadius: 24,
+                offset: Offset(0, 8),
+              ),
+            ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -446,7 +452,10 @@ class _HomeScreenState extends State<HomeScreen> {
           child: isSelected
               ? Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
                   child: Icon(selectedIcon, color: Colors.white, size: 22),
                 )
               : Icon(icon, color: AppColors.textSecondary, size: 26),
@@ -473,7 +482,10 @@ class _HomeScreenState extends State<HomeScreen> {
               final icon = isSelected
                   ? Container(
                       width: 44, height: 44,
-                      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
                       child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 22),
                     )
                   : const Icon(Icons.notifications_none_rounded, color: AppColors.textSecondary, size: 26);

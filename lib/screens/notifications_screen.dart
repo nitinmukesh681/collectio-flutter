@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../services/firestore_service.dart';
 import '../utils/snackbar_utils.dart';
+import '../widgets/avatar_fallback.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -340,7 +341,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     final hasAvatar = data['fromUserAvatarUrl'] != null && (data['fromUserAvatarUrl'] as String).isNotEmpty;
-    final initial = fromUsername.isNotEmpty ? fromUsername[0].toUpperCase() : '?';
 
     return InkWell(
       onTap: () => _handleNotificationTap(id, data),
@@ -364,9 +364,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       child: hasAvatar
                           ? CachedNetworkImage(
                               imageUrl: data['fromUserAvatarUrl'], fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => _avatarFallback(initial),
+                              errorWidget: (_, __, ___) => _avatarFallback(fromUsername),
                             )
-                          : _avatarFallback(initial),
+                          : _avatarFallback(fromUsername),
                     ),
                   ),
                   Positioned(
@@ -417,12 +417,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  Widget _avatarFallback(String initial) {
-    return Container(
-      color: AppColors.surfaceMuted,
-      alignment: Alignment.center,
-      child: Text(initial, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18, color: AppColors.textSecondary)),
-    );
+  Widget _avatarFallback(String name) {
+    return AvatarFallback(name: name, size: 48);
   }
 
   // ignore: unused_element

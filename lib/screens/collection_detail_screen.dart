@@ -12,6 +12,7 @@ import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
+import '../widgets/avatar_fallback.dart';
 import 'add_item_screen.dart';
 import 'create_collection_screen.dart';
 import 'user_profile_screen.dart';
@@ -179,7 +180,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     const leftPaddingBeforeTrailing = 8.0;
 
     // Approximate chip widths (they are fairly consistent due to fixed padding).
-    const ratingChipWidth = 54.0;
+    const ratingChipWidth = 62.0;
     final hasRating = item.rating > 0;
 
     double chipsWidth = 0;
@@ -948,11 +949,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                     },
                   ),
                   const SizedBox(width: 8),
-                  _buildCircleButton(
-                    icon: Icons.share,
-                    onTap: _shareCollection,
-                  ),
-                  const SizedBox(width: 8),
                   PopupMenuButton<String>(
                     padding: EdgeInsets.zero,
                     offset: const Offset(0, 40),
@@ -1373,14 +1369,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                           future: _firestoreService.getUser(widget.currentUserId),
                           builder: (context, snap) {
                             final user = snap.data;
+                            final userName = user?.userName ?? '';
                             if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty) {
-                              return CachedNetworkImage(imageUrl: user.avatarUrl!, fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
-                                  child: Text(user.userName.isNotEmpty ? user.userName[0].toUpperCase() : '?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary))));
+                              return CachedNetworkImage(
+                                imageUrl: user.avatarUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) =>
+                                    AvatarFallback(name: userName, size: 36),
+                              );
                             }
-                            final initial = user?.userName.isNotEmpty == true ? user!.userName[0].toUpperCase() : '?';
-                            return Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
-                              child: Text(initial, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary)));
+                            return AvatarFallback(name: userName, size: 36);
                           },
                         ),
                       ),
@@ -1485,7 +1483,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   Widget _buildCommentTile(CommentEntity comment) {
     final isLiked = comment.likedBy.contains(widget.currentUserId);
     final isOwn = comment.userId == widget.currentUserId;
-    final initial = comment.userName.isNotEmpty ? comment.userName[0].toUpperCase() : '?';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -1497,11 +1494,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             width: 40, height: 40,
             child: ClipOval(
               child: (comment.userAvatarUrl != null && comment.userAvatarUrl!.isNotEmpty)
-                  ? CachedNetworkImage(imageUrl: comment.userAvatarUrl!, fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
-                        child: Text(initial, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary))))
-                  : Container(color: AppColors.surfaceMuted, alignment: Alignment.center,
-                      child: Text(initial, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AppColors.textSecondary))),
+                  ? CachedNetworkImage(
+                      imageUrl: comment.userAvatarUrl!,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) =>
+                          AvatarFallback(name: comment.userName, size: 40),
+                    )
+                  : AvatarFallback(name: comment.userName, size: 40),
             ),
           ),
           const SizedBox(width: 12),
@@ -1570,16 +1569,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   Widget _buildUserAvatar(String name, String? avatarUrl, {double size = 28}) {
-    // ignore: unused_local_variable
-    final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
-
-    Widget placeholder = Container(
-      width: size,
-      height: size,
-      decoration: const BoxDecoration(color: AppColors.surfaceMuted, shape: BoxShape.circle),
-      alignment: Alignment.center,
-      child: Icon(Icons.person, size: size * 0.6, color: AppColors.textMuted),
-    );
+    Widget placeholder = AvatarFallback(name: name, size: size);
 
     if (avatarUrl == null || avatarUrl.trim().isEmpty) return placeholder;
 
@@ -1590,17 +1580,17 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         future: FirebaseStorage.instance.refFromURL(trimmed).getDownloadURL(),
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            return _buildNetworkAvatar(snapshot.data!, size);
+            return _buildNetworkAvatar(snapshot.data!, size, name: name);
           }
           return placeholder;
         },
       );
     }
 
-    return _buildNetworkAvatar(trimmed, size);
+    return _buildNetworkAvatar(trimmed, size, name: name);
   }
 
-  Widget _buildNetworkAvatar(String url, double size) {
+  Widget _buildNetworkAvatar(String url, double size, {required String name}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(size),
       child: CachedNetworkImage(
@@ -1608,8 +1598,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         width: size,
         height: size,
         fit: BoxFit.cover,
-        placeholder: (_, __) => Container(width: size, height: size, color: AppColors.surfaceMuted),
-        errorWidget: (_, __, ___) => Container(width: size, height: size, color: AppColors.surfaceMuted),
+        placeholder: (_, __) => AvatarFallback(name: name, size: size),
+        errorWidget: (_, __, ___) => AvatarFallback(name: name, size: size),
       ),
     );
   }
@@ -1668,16 +1658,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
               ),
               if (item.rating > 0) ...[
                 const SizedBox(width: 6),
-                Container(
-                  height: 22, // Align with text line height
-                  alignment: Alignment.center,
-                  child: _buildRatingBadge(
-                    item.rating,
-                    fontSize: 10,
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    borderRadius: 5,
-                    iconGap: 3,
-                  ),
+                _buildRatingBadge(
+                  item.rating,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  borderRadius: 6,
+                  iconGap: 4,
                 ),
               ],
               // Menu button sized to match text line height

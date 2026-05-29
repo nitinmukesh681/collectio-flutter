@@ -10,6 +10,7 @@ import '../models/category_type.dart';
 import '../models/place_prediction.dart';
 import '../services/firestore_service.dart';
 import '../services/places_service.dart';
+import '../services/unsplash_service.dart';
 import '../models/collection_entity.dart';
 import '../widgets/unsplash_search_dialog.dart';
 
@@ -35,6 +36,7 @@ class CreateCollectionScreen extends StatefulWidget {
 class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final PlacesService _placesService = PlacesService();
+  final UnsplashService _unsplashService = UnsplashService();
   final _formKey = GlobalKey<FormState>();
   
   final TextEditingController _titleController = TextEditingController();
@@ -52,7 +54,13 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
   String? _selectedUnsplashUrl; // New state variable for Unsplash image
   bool _isLoading = false;
   bool _isCoverPreparing = false;
+  bool _isAutoSearchingCover = false;
+  bool _coverManuallySet = false;
+  bool _coverClearedForTitle = false;
+  bool _coverExplicitlyCleared = false;
+  String? _coverAutoSearchTitle;
   String? _selectedGoogleMapsUrl;
+  final FocusNode _titleFocusNode = FocusNode();
 
   bool get _isEditing => widget.existingCollection != null;
 
@@ -98,11 +106,85 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
           _selectedUnsplashUrl = raw;
         }
       }
+    } else {
+      _titleFocusNode.addListener(_onTitleFocusChanged);
     }
+  }
+
+  void _onTitleFocusChanged() {
+    if (_isEditing || _titleFocusNode.hasFocus) return;
+    _maybeAutoFetchCover();
+  }
+
+  void _onTitleSubmitted(String _) {
+    _titleFocusNode.unfocus();
+    _maybeAutoFetchCover();
+  }
+
+  Future<void> _maybeAutoFetchCover() async {
+    if (_isEditing || _coverManuallySet || !mounted) return;
+
+    final title = _titleController.text.trim();
+    if (title.length < 3) return;
+
+    if (_coverClearedForTitle && _coverAutoSearchTitle != title) {
+      _coverClearedForTitle = false;
+      _coverExplicitlyCleared = false;
+    }
+
+    if (_coverClearedForTitle && _coverAutoSearchTitle == title) return;
+    if (_selectedUnsplashUrl != null &&
+        _coverAutoSearchTitle == title &&
+        !_coverClearedForTitle) {
+      return;
+    }
+
+    setState(() => _isAutoSearchingCover = true);
+    try {
+      final photos = await _unsplashService.searchPhotos(title, perPage: 1);
+      if (!mounted || _coverManuallySet) return;
+      if (photos.isNotEmpty) {
+        setState(() {
+          _selectedUnsplashUrl = photos.first.urls.regular;
+          _coverImage = null;
+          _coverImageSourcePath = null;
+          _coverAutoSearchTitle = title;
+          _coverClearedForTitle = false;
+          _coverExplicitlyCleared = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Auto Unsplash cover failed: $e');
+    } finally {
+      if (mounted) setState(() => _isAutoSearchingCover = false);
+    }
+  }
+
+  void _clearCover() {
+    setState(() {
+      _coverImage = null;
+      _coverImageSourcePath = null;
+      _selectedUnsplashUrl = null;
+      _coverManuallySet = false;
+      _coverClearedForTitle = true;
+      _coverExplicitlyCleared = true;
+      _coverAutoSearchTitle = _titleController.text.trim();
+    });
+  }
+
+  bool get _hasCover {
+    if (_coverExplicitlyCleared) return false;
+    return _coverImage != null ||
+        (_selectedUnsplashUrl != null && _selectedUnsplashUrl!.isNotEmpty) ||
+        (_isEditing &&
+            widget.existingCollection?.coverImageUrl != null &&
+            widget.existingCollection!.coverImageUrl!.isNotEmpty);
   }
 
   @override
   void dispose() {
+    _titleFocusNode.removeListener(_onTitleFocusChanged);
+    _titleFocusNode.dispose();
     _titleController.dispose();
     _descriptionController.dispose();
     _websiteUrlController.dispose();
@@ -162,7 +244,11 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
     return file.path;
   }
 
-  Future<void> _applyRemoteCover(String imageUrl) async {
+  Future<void> _applyRemoteCover(String imageUrl, {bool manual = true}) async {
+    if (manual) {
+      _coverManuallySet = true;
+      _coverExplicitlyCleared = false;
+    }
     setState(() => _isCoverPreparing = true);
     try {
       final path = await _downloadCoverToTemp(imageUrl);
@@ -215,6 +301,8 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
       _coverImageSourcePath = pickedFile.path;
       _coverImage = File(pickedFile.path);
       _selectedUnsplashUrl = null;
+      _coverManuallySet = true;
+      _coverExplicitlyCleared = false;
     });
   }
 
@@ -273,6 +361,8 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
           _coverImageSourcePath = croppedFile.path;
           _coverImage = File(croppedFile.path);
           _selectedUnsplashUrl = null;
+          _coverManuallySet = true;
+          _coverExplicitlyCleared = false;
         });
       }
     } catch (e) {
@@ -328,10 +418,10 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
           'collections/${widget.userId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
         );
       } else if (_selectedUnsplashUrl != null) {
-        // Use Unsplash URL directly
         finalCoverImageUrl = _selectedUnsplashUrl;
-      } else if (_isEditing && widget.existingCollection?.coverImageUrl != null) {
-        // If editing and no new image selected, retain existing image URL
+      } else if (_isEditing &&
+          !_coverExplicitlyCleared &&
+          widget.existingCollection?.coverImageUrl != null) {
         finalCoverImageUrl = widget.existingCollection!.coverImageUrl;
       }
 
@@ -507,33 +597,43 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                     color: AppColors.surfaceMuted,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppColors.divider),
-                    image: _coverImage != null
-                        ? DecorationImage(
-                            image: FileImage(_coverImage!),
-                            fit: BoxFit.cover,
-                          )
-                        : _selectedUnsplashUrl != null
+                    image: _hasCover
+                        ? (_coverImage != null
                             ? DecorationImage(
-                                image: NetworkImage(_selectedUnsplashUrl!),
+                                image: FileImage(_coverImage!),
                                 fit: BoxFit.cover,
                               )
-                            : widget.existingCollection?.coverImageUrl != null
+                            : _selectedUnsplashUrl != null
                                 ? DecorationImage(
-                                    image: NetworkImage(widget.existingCollection!.coverImageUrl!),
+                                    image: NetworkImage(_selectedUnsplashUrl!),
                                     fit: BoxFit.cover,
                                   )
-                                : null,
+                                : widget.existingCollection?.coverImageUrl != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(
+                                          widget.existingCollection!.coverImageUrl!,
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null)
+                        : null,
                   ),
-                  child: _coverImage == null &&
-                          _selectedUnsplashUrl == null &&
-                          widget.existingCollection?.coverImageUrl == null
+                  child: !_hasCover
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.image_outlined, size: 42, color: AppColors.textMuted),
+                            Icon(
+                              _isAutoSearchingCover
+                                  ? Icons.hourglass_top_rounded
+                                  : Icons.image_outlined,
+                              size: 42,
+                              color: AppColors.textMuted,
+                            ),
                             const SizedBox(height: 8),
                             Text(
-                              'No cover selected',
+                              _isAutoSearchingCover
+                                  ? 'Finding a cover...'
+                                  : 'No cover selected',
                               style: const TextStyle(
                                 color: AppColors.textSecondary,
                                 fontWeight: FontWeight.w600,
@@ -543,11 +643,26 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                         )
                       : const SizedBox.shrink(),
                 ),
-                if (_isCoverPreparing)
+                if (_hasCover)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Material(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        onPressed: _clearCover,
+                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        tooltip: 'Clear cover',
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+                if (_isCoverPreparing || _isAutoSearchingCover)
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.35),
+                        color: Colors.black.withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Center(
@@ -583,6 +698,9 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: _titleController,
+                    focusNode: _titleFocusNode,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: _onTitleSubmitted,
                     decoration: const InputDecoration(
                       hintText: 'e.g., Summer Reading List',
                     ),

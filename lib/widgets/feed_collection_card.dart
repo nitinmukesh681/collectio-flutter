@@ -9,6 +9,7 @@ import '../models/collection_item_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'avatar_fallback.dart';
 
 class FeedCollectionCard extends StatelessWidget {
   final CollectionEntity collection;
@@ -49,12 +50,18 @@ class FeedCollectionCard extends StatelessWidget {
         return GestureDetector(
           onTap: onTap,
           child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(18),
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(AppColors.radiusCard),
-              boxShadow: AppColors.cardShadow,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0D000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,7 +124,7 @@ class FeedCollectionCard extends StatelessWidget {
                       children: [
                         for (int i = 0; i < items.length; i++) ...[
                           _itemRow(items[i], i + 1),
-                          if (i < items.length - 1) const SizedBox(height: 14),
+                          if (i < items.length - 1) const SizedBox(height: 10),
                         ],
                       ],
                     );
@@ -169,46 +176,41 @@ class FeedCollectionCard extends StatelessWidget {
     );
   }
 
-  Widget _avatar() {
-    return Container(
-      color: AppColors.divider,
-      alignment: Alignment.center,
-      child: Text(
-        collection.userName.isNotEmpty ? collection.userName[0].toUpperCase() : '?',
-        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18, color: AppColors.textSecondary),
-      ),
-    );
-  }
+  Widget _avatar() => AvatarFallback(name: collection.userName, size: 44);
 
   Widget _itemRow(CollectionItemEntity item, int rank) {
-    final hasImg = item.imageUrls.isNotEmpty;
-    return Row(
-      children: [
-        SizedBox(
-          width: 28,
-          child: Text(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSurface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Text(
             rank.toString().padLeft(2, '0'),
-            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.primary.withOpacity(0.5)),
-          ),
-        ),
-        const SizedBox(width: 10),
-        if (hasImg) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 44, height: 44,
-              child: CachedNetworkImage(imageUrl: item.imageUrls.first, fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => Container(color: AppColors.divider)),
+            style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: AppColors.primary,
             ),
           ),
           const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              item.title,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
-        Expanded(
-          child: Text(item.title,
-            style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-      ],
+      ),
     );
   }
 }
