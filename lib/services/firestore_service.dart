@@ -1175,7 +1175,7 @@ class FirestoreService {
 
     final originalData = originalDoc.data() as Map<String, dynamic>;
 
-    // Create new collection
+    // Create new collection — copies default to private regardless of original visibility
     final newCollectionData = {
       ...originalData,
       'userId': newOwnerId,
@@ -1184,6 +1184,8 @@ class FirestoreService {
       'description': newDescription ?? originalData['description'],
       'websiteUrl': originalData['websiteUrl'],
       'googleMapsUrl': originalData['googleMapsUrl'],
+      'isPublic': false,
+      'visibility': 'PRIVATE',
       'likes': 0,
       'likedBy': [],
       'saveCount': 0,
