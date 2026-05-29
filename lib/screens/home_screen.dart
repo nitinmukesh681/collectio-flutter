@@ -496,7 +496,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (context) => CreateCollectionScreen(
           userId: auth.userId,
-          userName: auth.userEntity?.userName ?? 'User',
+          userName: auth.resolvedUserName,
           userAvatarUrl: auth.userEntity?.avatarUrl,
         ),
       ),

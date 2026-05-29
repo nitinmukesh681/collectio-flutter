@@ -107,7 +107,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _didHandlePendingShare = false;
   bool _isCheckingAndroidShare = false;
   bool _isOpeningImport = false;
-  bool _isImportScreenOpen = false;
   static const _shareExtensionChannel = MethodChannel('com.collectio.app/share_extension');
 
   @override
@@ -456,10 +455,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       return;
     }
 
-    final userName = auth.userEntity?.userName ??
-        auth.firebaseUser?.displayName ??
-        auth.firebaseUser?.email?.split('@').first ??
-        'User';
+    final userName = auth.resolvedUserName;
 
     _isOpeningImport = true;
     final url = _pendingSharedUrl!;
@@ -511,8 +507,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         ReceiveSharingIntent.instance.reset();
       }
 
-      setState(() => _isImportScreenOpen = true);
-
       navigator
           .push(
             MaterialPageRoute(
@@ -531,16 +525,12 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
               setState(() {
                 _didHandlePendingShare = false;
                 _isOpeningImport = false;
-                _isImportScreenOpen = false;
               });
             }
           })
           .whenComplete(() {
             if (mounted) {
-              setState(() {
-                _isOpeningImport = false;
-                _isImportScreenOpen = false;
-              });
+              setState(() => _isOpeningImport = false);
             }
           });
     });
@@ -588,39 +578,8 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         if (!auth.isEmailVerified) return const EmailVerificationScreen();
         if (auth.needsUsername) return const UsernameScreen();
 
-        return _buildWithShareOverlay(const HomeScreen());
+        return const HomeScreen();
       },
-    );
-  }
-
-  Widget _buildWithShareOverlay(Widget child) {
-    final showShareWait = _pendingSharedUrl != null &&
-        !_didHandlePendingShare &&
-        !_isImportScreenOpen;
-
-    if (!showShareWait) return child;
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        ColoredBox(
-          color: Colors.white.withValues(alpha: 0.92),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(
-                  'Opening shared link…',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

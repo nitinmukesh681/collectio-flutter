@@ -32,6 +32,17 @@ class AuthProvider extends ChangeNotifier {
   String get userId => _firebaseUser?.uid ?? '';
   bool get firebaseReady => _firebaseReady;
 
+  /// Best available display username for denormalized fields (collections, comments).
+  String get resolvedUserName {
+    final fromEntity = _userEntity?.userName.trim();
+    if (fromEntity != null && fromEntity.isNotEmpty) return fromEntity;
+    final fromDisplay = _firebaseUser?.displayName?.trim();
+    if (fromDisplay != null && fromDisplay.isNotEmpty) return fromDisplay;
+    final fromEmail = _firebaseUser?.email?.split('@').first.trim();
+    if (fromEmail != null && fromEmail.isNotEmpty) return fromEmail;
+    return 'User';
+  }
+
   AuthProvider() {
     _init();
   }

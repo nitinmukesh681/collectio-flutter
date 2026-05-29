@@ -117,7 +117,7 @@ class CollectionEntity {
     return CollectionEntity(
       id: docId,
       userId: map['userId'] ?? '',
-      userName: map['userName'] ?? '',
+      userName: map['userName'] ?? map['username'] ?? '',
       userAvatarUrl: map['userAvatarUrl'],
       title: map['title'] ?? '',
       description: map['description'],

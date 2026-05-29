@@ -147,7 +147,12 @@ class FirestoreService {
     final userDoc = await _usersRef.doc(userId).get();
     if (!userDoc.exists) return 'Someone';
     final data = userDoc.data() as Map<String, dynamic>;
-    return (data['username'] as String?) ?? 'Someone';
+    final name = (data['username'] as String?) ??
+        (data['userName'] as String?) ??
+        (data['displayName'] as String?) ??
+        '';
+    final trimmed = name.trim();
+    return trimmed.isNotEmpty ? trimmed : 'Someone';
   }
 
   Future<void> _createLikeNotification({
@@ -593,11 +598,29 @@ class FirestoreService {
 
   /// Create a new collection
   Future<String> createCollection(CollectionEntity collection) async {
+    var userName = collection.userName.trim();
+    var userAvatarUrl = collection.userAvatarUrl;
+
+    if (userName.isEmpty) {
+      final user = await getUser(collection.userId);
+      userName = user?.userName.trim() ?? '';
+      userAvatarUrl ??= user?.avatarUrl;
+    }
+    if (userName.isEmpty) {
+      final resolved = await _getUsername(collection.userId);
+      userName = resolved == 'Someone' ? 'User' : resolved;
+    }
+
+    final resolvedCollection = collection.copyWith(
+      userName: userName,
+      userAvatarUrl: userAvatarUrl,
+    );
+
     final docRef = await _collectionsRef.add({
-      ...collection.toMap(),
-      'searchKeywords': collection.searchKeywords,
-      'savedBy': collection.savedBy,
-      'contributorIds': collection.contributorIds,
+      ...resolvedCollection.toMap(),
+      'searchKeywords': resolvedCollection.searchKeywords,
+      'savedBy': resolvedCollection.savedBy,
+      'contributorIds': resolvedCollection.contributorIds,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });

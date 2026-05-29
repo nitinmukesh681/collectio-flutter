@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'dart:async';
 import '../models/collection_entity.dart';
+import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/link_import_defaults.dart';
@@ -39,7 +41,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   List<CollectionEntity> _userCollections = [];
   Set<String> _selectedCollectionIds = {};
   String _searchQuery = '';
-  bool _isLoading = true;
+  bool _collectionsLoading = true;
   bool _isCreatingItem = false;
   StreamSubscription<List<CollectionEntity>>? _collectionsSubscription;
 
@@ -47,7 +49,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   void initState() {
     super.initState();
     _checkIfCollectionUrl();
-    _listenToUserCollections();
+    _loadUserCollections();
     _titleController.text = LinkTitleUtils.resolveItemTitle(
       sharedTitle: widget.sharedTitle,
       url: widget.sharedUrl,
@@ -101,6 +103,18 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
         .toList();
   }
 
+  String _resolvedUserName(BuildContext context) {
+    final fromAuth = context.read<AuthProvider>().resolvedUserName.trim();
+    if (fromAuth.isNotEmpty) return fromAuth;
+    final fromWidget = widget.userName.trim();
+    if (fromWidget.isNotEmpty) return fromWidget;
+    return 'User';
+  }
+
+  String? _resolvedUserAvatarUrl(BuildContext context) {
+    return context.read<AuthProvider>().userEntity?.avatarUrl;
+  }
+
   @override
   void dispose() {
     _collectionsSubscription?.cancel();
@@ -108,6 +122,24 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
     _descriptionController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUserCollections() async {
+    try {
+      final collections =
+          await _firestoreService.getUserCollectionsList(widget.userId);
+      if (mounted) {
+        setState(() {
+          _userCollections = collections;
+          _collectionsLoading = false;
+        });
+      }
+    } catch (error) {
+      debugPrint('[ImportLink] Error loading collections: $error');
+      if (mounted) setState(() => _collectionsLoading = false);
+    }
+
+    _listenToUserCollections();
   }
 
   void _listenToUserCollections() {
@@ -118,31 +150,32 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
         if (mounted) {
           setState(() {
             _userCollections = collections;
-            _isLoading = false;
+            _collectionsLoading = false;
           });
         }
       },
       onError: (error) {
         debugPrint('[ImportLink] Error loading collections: $error');
-        if (mounted) setState(() => _isLoading = false);
+        if (mounted) setState(() => _collectionsLoading = false);
       },
     );
   }
 
   Future<void> _refreshUserCollections() async {
-    setState(() => _isLoading = true);
+    final showLoading = _userCollections.isEmpty;
+    if (showLoading) setState(() => _collectionsLoading = true);
     try {
       final collections =
           await _firestoreService.getUserCollectionsList(widget.userId);
       if (mounted) {
         setState(() {
           _userCollections = collections;
-          _isLoading = false;
+          _collectionsLoading = false;
         });
       }
     } catch (e) {
       debugPrint('[ImportLink] Error refreshing collections: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _collectionsLoading = false);
     }
   }
 
@@ -152,7 +185,8 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
       MaterialPageRoute(
         builder: (context) => CreateCollectionScreen(
           userId: widget.userId,
-          userName: widget.userName,
+          userName: _resolvedUserName(context),
+          userAvatarUrl: _resolvedUserAvatarUrl(context),
         ),
       ),
     );
@@ -184,6 +218,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
 
     setState(() => _isCreatingItem = true);
     var addedCount = 0;
+    final userName = _resolvedUserName(context);
 
     try {
       await Future.wait(
@@ -191,7 +226,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
           (collectionId) => _firestoreService.addLinkItem(
             collectionId: collectionId,
             userId: widget.userId,
-            userName: widget.userName,
+            userName: userName,
             title: title,
             websiteUrl: widget.sharedUrl,
             description: _descriptionController.text.trim(),
@@ -258,13 +293,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
                 const SizedBox(height: 20),
                 _buildSectionHeader(),
                 const SizedBox(height: 12),
-                if (_isLoading && _userCollections.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 48),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else
-                  ..._buildCollectionRows(),
+                ..._buildCollectionRows(),
               ],
             ),
           ),
@@ -471,9 +500,13 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   }
 
   List<Widget> _buildCollectionRows() {
+    if (_collectionsLoading && _userCollections.isEmpty) {
+      return List.generate(4, (_) => const _ImportCollectionRowSkeleton());
+    }
+
     final collections = _filteredCollections;
 
-    if (!_isLoading && _userCollections.isEmpty) {
+    if (!_collectionsLoading && _userCollections.isEmpty) {
       return [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 32),
@@ -592,6 +625,8 @@ class _ImportCollectionRow extends StatelessWidget {
       return CachedNetworkImage(
         imageUrl: candidate,
         fit: BoxFit.cover,
+        memCacheWidth: 156,
+        placeholder: (_, __) => _gradientThumb(gradientColors),
         errorWidget: (_, __, ___) => _gradientThumb(gradientColors),
       );
     }
@@ -690,6 +725,72 @@ class _ImportCollectionRow extends StatelessWidget {
           colors: colors,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportCollectionRowSkeleton extends StatelessWidget {
+  const _ImportCollectionRowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.divider),
+          boxShadow: AppColors.cardShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 14,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 12,
+                    width: 72,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ],
         ),
       ),
     );
