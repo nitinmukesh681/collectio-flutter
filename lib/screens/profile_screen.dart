@@ -23,7 +23,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
-  static const Color _listBackground = Color(0xFFF7F6FC);
   static const Color _editButtonBg = Color(0xFFEEF2FF);
 
   late TabController _tabController;
@@ -186,20 +185,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
         if (user == null) {
           return const Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: AppColors.backgroundSurface,
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
         return Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: Colors.transparent,
           body: NestedScrollView(
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
                   expandedHeight: 248,
                   pinned: true,
-                  backgroundColor: Colors.white,
+                  backgroundColor: AppColors.backgroundSurface,
                   surfaceTintColor: Colors.transparent,
                   elevation: 0,
                   automaticallyImplyLeading: false,
@@ -258,7 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ];
             },
             body: ColoredBox(
-              color: _listBackground,
+              color: AppColors.backgroundSurface,
               child: TabBarView(
                 controller: _tabController,
                 children: [
@@ -518,7 +517,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: Colors.white,
+      color: AppColors.backgroundSurface,
       child: tabBar,
     );
   }

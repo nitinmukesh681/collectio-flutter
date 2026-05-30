@@ -26,8 +26,6 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
-  static const Color _listBackground = Color(0xFFF7F6FC);
-
   final FirestoreService _firestoreService = FirestoreService();
 
   StreamSubscription<UserEntity?>? _userSubscription;
@@ -177,7 +175,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.backgroundSurface,
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -193,14 +191,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final isOwnProfile = widget.userId == widget.currentUserId;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.backgroundSurface,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             SliverAppBar(
               expandedHeight: 248,
               pinned: true,
-              backgroundColor: Colors.white,
+              backgroundColor: AppColors.backgroundSurface,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               leading: IconButton(
@@ -228,7 +226,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ];
         },
         body: ColoredBox(
-          color: _listBackground,
+          color: AppColors.backgroundSurface,
           child: _buildCollectionsList(),
         ),
       ),
