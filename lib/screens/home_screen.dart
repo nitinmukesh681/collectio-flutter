@@ -170,6 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _setupRealtimeStreams();
               },
               child: CustomScrollView(
+                primary: _selectedIndex == 0,
                 slivers: [
                   // App bar
                   SliverToBoxAdapter(
@@ -401,7 +402,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             
             // Other Tabs
-            ExploreScreen(currentUserId: auth.userId),
+            ExploreScreen(
+              currentUserId: auth.userId,
+              isActive: _selectedIndex == 1,
+            ),
             _buildCreateTab(auth),
             NotificationsScreen(userId: auth.userId),
             const ProfileScreen(),
