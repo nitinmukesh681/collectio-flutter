@@ -170,7 +170,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 _setupRealtimeStreams();
               },
               child: CustomScrollView(
-                primary: _selectedIndex == 0,
                 slivers: [
                   // App bar
                   SliverToBoxAdapter(
@@ -214,14 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => OpenCollaborationsScreen(
-                                      initialCollections: _collabCollections,
-                                    ),
-                                  ),
-                                );
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => const OpenCollaborationsScreen()));
                               },
                               child: Text('View All', 
                                 style: GoogleFonts.plusJakartaSans(
@@ -409,17 +401,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             
             // Other Tabs
-            ExploreScreen(
-              currentUserId: auth.userId,
-              isActive: _selectedIndex == 1,
-            ),
+            ExploreScreen(currentUserId: auth.userId),
             _buildCreateTab(auth),
             NotificationsScreen(userId: auth.userId),
             const ProfileScreen(),
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: Material(
+        color: Colors.transparent,
+        elevation: 0,
+        child: SafeArea(
         child: Container(
           margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -444,6 +436,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildNavItem(4, Icons.person_outline_rounded, Icons.person_rounded),
             ],
           ),
+        ),
         ),
       ),
     );

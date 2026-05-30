@@ -99,13 +99,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  static const double _bottomNavClearance = 120;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
+    return SafeArea(
+      bottom: false,
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
@@ -205,7 +205,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, _bottomNavClearance),
             children: [
               if (today.isNotEmpty) ...[
                 Padding(
@@ -242,7 +242,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         },
       )),
           ],
-        ),
       ),
     );
   }
@@ -393,6 +392,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   RichText(
                     text: TextSpan(
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                       children: [
                         TextSpan(
                           text: fromUsername,
@@ -403,26 +408,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        TextSpan(
-                          text: actionText,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            height: 1.45,
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        TextSpan(text: actionText),
                         if (subtitle != null) ...[
                           const TextSpan(text: '\n'),
-                          TextSpan(
-                            text: subtitle,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14,
-                              height: 1.45,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
-                            ),
-                          ),
+                          TextSpan(text: subtitle, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
                         ],
                       ],
                     ),

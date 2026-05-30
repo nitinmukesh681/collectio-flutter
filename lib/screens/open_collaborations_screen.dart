@@ -8,12 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/collection_list_card.dart';
 
 class OpenCollaborationsScreen extends StatefulWidget {
-  final List<CollectionEntity> initialCollections;
-
-  const OpenCollaborationsScreen({
-    super.key,
-    this.initialCollections = const [],
-  });
+  const OpenCollaborationsScreen({super.key});
 
   @override
   State<OpenCollaborationsScreen> createState() => _OpenCollaborationsScreenState();
@@ -21,58 +16,35 @@ class OpenCollaborationsScreen extends StatefulWidget {
 
 class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
-  late List<CollectionEntity> _collections;
+  List<CollectionEntity> _collections = [];
   bool _isLoading = true;
-  String? _loadError;
 
   @override
   void initState() {
     super.initState();
-    _collections = List<CollectionEntity>.from(widget.initialCollections);
-    _isLoading = _collections.isEmpty;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadCollections();
-    });
+    _loadCollections();
   }
 
   Future<void> _loadCollections() async {
-    if (!mounted) return;
-
-    final showFullScreenLoader = _collections.isEmpty;
-    if (showFullScreenLoader) {
-      setState(() {
-        _isLoading = true;
-        _loadError = null;
-      });
-    }
-
+    setState(() => _isLoading = true);
     try {
-      final collections =
-          await _firestoreService.getOpenCollaborationCollections(limit: 50);
-      if (!mounted) return;
-      setState(() {
-        _collections = collections;
-        _loadError = null;
-      });
+      // Fetch more items for the "See All" screen
+      final collections = await _firestoreService.getOpenCollaborationCollections(limit: 50);
+      if (mounted) {
+        setState(() {
+          _collections = collections;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading open collaborations: $e');
-      if (!mounted) return;
-      setState(() {
-        _loadError = 'Could not load collaborations';
-        if (_collections.isEmpty) {
-          _collections = [];
-        }
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.read<AuthProvider>();
+    final auth = context.watch<AuthProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.backgroundSurface,
@@ -95,65 +67,31 @@ class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _loadError != null && _collections.isEmpty
+          : _collections.isEmpty
               ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, size: 56, color: AppColors.textMuted),
-                        const SizedBox(height: 16),
-                        Text(
-                          _loadError!,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _loadCollections,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.group_off_outlined, size: 64, color: AppColors.textMuted),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No open collaborations found',
+                        style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ),
                 )
-              : _collections.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.group_off_outlined, size: 64, color: AppColors.textMuted),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No open collaborations found',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadCollections,
-                      color: AppColors.primary,
-                      child: ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-                        itemCount: _collections.length,
-                        itemBuilder: (context, index) {
-                          final c = _collections[index];
-                          return CollectionListCard(
-                            collection: c,
-                            currentUserId: auth.userId,
-                          );
-                        },
-                      ),
-                    ),
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                  itemCount: _collections.length,
+                  itemBuilder: (context, index) {
+                    final c = _collections[index];
+                    return CollectionListCard(
+                      collection: c,
+                      currentUserId: auth.userId,
+                    );
+                  },
+                ),
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:async/async.dart';
 import 'dart:io';
-import '../models/category_type.dart';
 import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
 import '../models/user_entity.dart';
@@ -19,6 +18,11 @@ class FirestoreService {
   CollectionReference get _usersRef => _firestore.collection('users');
   CollectionReference get _collectionsRef => _firestore.collection('collections');
   CollectionReference get _collectionItemsRef => _firestore.collection('collectionItems');
+
+  /// Sorts user collections by most recent activity (updatedAt, then createdAt).
+  void _sortCollectionsByLastActivity(List<CollectionEntity> collections) {
+    collections.sort((a, b) => b.lastActivityAt.compareTo(a.lastActivityAt));
+  }
 
   /// Bumps collection `updatedAt` when items or other collection content changes.
   Future<void> _touchCollectionUpdatedAt(String collectionId) async {
@@ -360,37 +364,34 @@ class FirestoreService {
 
   // ==================== COLLECTION OPERATIONS ====================
 
-  /// Get collections for a user (Stream), ordered by most recently updated.
+  /// Get collections for a user (Stream)
   Stream<List<CollectionEntity>> getUserCollectionsStream(String userId) {
+    debugPrint('FirestoreService: Creating collections stream for userId: $userId');
     return _collectionsRef
         .where('userId', isEqualTo: userId)
         .snapshots()
         .map((snapshot) {
-          final collections = _mapCollectionDocs(snapshot.docs);
-          _sortCollectionsByRecentActivity(collections);
+          debugPrint('FirestoreService: Collections snapshot updated - ${snapshot.docs.length} documents');
+          final collections = snapshot.docs
+              .map((doc) => CollectionEntity.fromMap(
+                  doc.data() as Map<String, dynamic>, doc.id))
+              .toList();
+          _sortCollectionsByLastActivity(collections);
           return collections;
         });
   }
 
-  /// Get collections for a user (Future), ordered by most recently updated.
+  /// Get collections for a user (Future)
   Future<List<CollectionEntity>> getUserCollections(String userId) async {
-    try {
-      final snapshot = await _collectionsRef
-          .where('userId', isEqualTo: userId)
-          .orderBy('updatedAt', descending: true)
-          .get();
-      final collections = _mapCollectionDocs(snapshot.docs);
-      _sortCollectionsByRecentActivity(collections);
-      return collections;
-    } catch (e) {
-      debugPrint('getUserCollections updatedAt orderBy failed, using fallback: $e');
-      final snapshot = await _collectionsRef
-          .where('userId', isEqualTo: userId)
-          .get();
-      final collections = _mapCollectionDocs(snapshot.docs);
-      _sortCollectionsByRecentActivity(collections);
-      return collections;
-    }
+    final snapshot = await _collectionsRef
+        .where('userId', isEqualTo: userId)
+        .get();
+    final collections = snapshot.docs
+        .map((doc) => CollectionEntity.fromMap(
+            doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+    _sortCollectionsByLastActivity(collections);
+    return collections;
   }
 
   /// Get saved collections for a user
@@ -453,43 +454,17 @@ class FirestoreService {
             .toList());
   }
 
-  void _sortCollectionsByRecentActivity(List<CollectionEntity> collections) {
-    collections.sort((a, b) => b.lastActivityAt.compareTo(a.lastActivityAt));
-  }
-
-  List<CollectionEntity> _mapCollectionDocs(Iterable<QueryDocumentSnapshot> docs) {
-    final results = <CollectionEntity>[];
-    for (final doc in docs) {
-      try {
-        final data = doc.data();
-        if (data is! Map<String, dynamic>) continue;
-        results.add(CollectionEntity.fromMap(data, doc.id));
-      } catch (e) {
-        debugPrint('Failed to parse collection ${doc.id}: $e');
-      }
-    }
-    return results;
-  }
-
   /// Get public collections as a list (Future)
   Future<List<CollectionEntity>> getPublicCollectionsList({int limit = 20}) async {
-    try {
-      final snapshot = await _collectionsRef
-          .where('isPublic', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
-          .limit(limit)
-          .get();
-      return _mapCollectionDocs(snapshot.docs);
-    } catch (e) {
-      debugPrint('getPublicCollectionsList orderBy failed, using fallback: $e');
-      final snapshot = await _collectionsRef
-          .where('isPublic', isEqualTo: true)
-          .limit(limit)
-          .get();
-      final results = _mapCollectionDocs(snapshot.docs);
-      results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return results;
-    }
+    final snapshot = await _collectionsRef
+        .where('isPublic', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snapshot.docs
+        .map((doc) => CollectionEntity.fromMap(
+            doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
   }
 
   /// Get public collections as a real-time stream
@@ -499,30 +474,23 @@ class FirestoreService {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) => _mapCollectionDocs(snapshot.docs));
+        .map((snapshot) => snapshot.docs
+            .map((doc) => CollectionEntity.fromMap(
+                doc.data() as Map<String, dynamic>, doc.id))
+            .toList());
   }
 
   /// Get collections for a specific user (for ImportLinkScreen)
   Future<List<CollectionEntity>> getUserCollectionsList(String userId) async {
-    try {
-      final snapshot = await _collectionsRef
-          .where('userId', isEqualTo: userId)
-          .orderBy('updatedAt', descending: true)
-          .limit(50)
-          .get();
-      final collections = _mapCollectionDocs(snapshot.docs);
-      _sortCollectionsByRecentActivity(collections);
-      return collections;
-    } catch (e) {
-      debugPrint('getUserCollectionsList updatedAt orderBy failed, using fallback: $e');
-      final snapshot = await _collectionsRef
-          .where('userId', isEqualTo: userId)
-          .limit(50)
-          .get();
-      final collections = _mapCollectionDocs(snapshot.docs);
-      _sortCollectionsByRecentActivity(collections);
-      return collections;
-    }
+    final snapshot = await _collectionsRef
+        .where('userId', isEqualTo: userId)
+        .get();
+    final collections = snapshot.docs
+        .map((doc) => CollectionEntity.fromMap(
+            doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+    _sortCollectionsByLastActivity(collections);
+    return collections.take(50).toList();
   }
 
   /// Add a link-only item to a collection
@@ -1355,48 +1323,16 @@ class FirestoreService {
 
   Future<List<CollectionEntity>> getCollectionsByCategory(
       String category, {int limit = 20}) async {
-    final normalized = category.trim().toLowerCase();
-    final categoryKeys = <String>{
-      normalized.toUpperCase(),
-      normalized,
-      CategoryType.fromString(normalized).name.toUpperCase(),
-    };
+    final snapshot = await _collectionsRef
+        .where('isPublic', isEqualTo: true)
+        .where('category', isEqualTo: category.toUpperCase())
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
 
-    for (final key in categoryKeys) {
-      try {
-        final snapshot = await _collectionsRef
-            .where('isPublic', isEqualTo: true)
-            .where('category', isEqualTo: key)
-            .orderBy('createdAt', descending: true)
-            .limit(limit)
-            .get();
-        final results = _mapCollectionDocs(snapshot.docs);
-        if (results.isNotEmpty) return results;
-      } catch (e) {
-        debugPrint('getCollectionsByCategory($key) failed: $e');
-      }
-    }
-
-    try {
-      final snapshot = await _collectionsRef
-          .where('isPublic', isEqualTo: true)
-          .where('category', isEqualTo: normalized.toUpperCase())
-          .limit(limit)
-          .get();
-      final results = _mapCollectionDocs(snapshot.docs);
-      if (results.isNotEmpty) {
-        results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return results;
-      }
-    } catch (e) {
-      debugPrint('getCollectionsByCategory simple query failed: $e');
-    }
-
-    final all = await getPublicCollectionsList(limit: 200);
-    final target = CategoryType.fromString(normalized);
-    return all
-        .where((c) => c.category == target)
-        .take(limit)
+    return snapshot.docs
+        .map((doc) =>
+            CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
   }
 
@@ -1522,26 +1458,17 @@ class FirestoreService {
 
   /// Get open collaboration collections
   Future<List<CollectionEntity>> getOpenCollaborationCollections({int limit = 20}) async {
-    try {
-      final snapshot = await _collectionsRef
-          .where('isPublic', isEqualTo: true)
-          .where('isOpenForContribution', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
-          .limit(limit)
-          .get();
-      return _mapCollectionDocs(snapshot.docs);
-    } catch (e) {
-      debugPrint('getOpenCollaborationCollections orderBy failed, using fallback: $e');
-      final snapshot = await _collectionsRef
-          .where('isOpenForContribution', isEqualTo: true)
-          .limit(limit * 3)
-          .get();
-      final results = _mapCollectionDocs(snapshot.docs)
-          .where((c) => c.isPublic)
-          .toList();
-      results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return results.take(limit).toList();
-    }
+    final snapshot = await _collectionsRef
+        .where('isPublic', isEqualTo: true)
+        .where('isOpenForContribution', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+
+    return snapshot.docs
+        .map((doc) =>
+            CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
   }
 
   /// Get open collaboration collections as a real-time stream
@@ -1552,10 +1479,9 @@ class FirestoreService {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) => _mapCollectionDocs(snapshot.docs))
-        .handleError((error) {
-          debugPrint('Open collaborations stream error: $error');
-        });
+        .map((snapshot) => snapshot.docs
+            .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+            .toList());
   }
 
   Future<List<CollectionEntity>> getUserCollaborations(String userId) async {
@@ -1583,7 +1509,16 @@ class FirestoreService {
       }
 
       final list = results.values.toList();
-      _sortCollectionsByRecentActivity(list);
+      // Defensive sort to ensure proper chronological ordering
+      list.sort((a, b) {
+        final aTime = a.createdAt;
+        final bTime = b.createdAt;
+        // Handle null/missing timestamps by treating them as oldest
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;  // a is older
+        if (bTime == null) return -1; // b is older
+        return bTime.compareTo(aTime); // descending (newest first)
+      });
       return list;
     } catch (e) {
       debugPrint('Error loading collaborations for user $userId: $e');
@@ -1619,7 +1554,16 @@ class FirestoreService {
         }
         
         final list = results.values.toList();
-        _sortCollectionsByRecentActivity(list);
+        // Defensive sort to ensure proper chronological ordering
+        list.sort((a, b) {
+          final aTime = a.createdAt;
+          final bTime = b.createdAt;
+          // Handle null/missing timestamps by treating them as oldest
+          if (aTime == null && bTime == null) return 0;
+          if (aTime == null) return 1;  // a is older
+          if (bTime == null) return -1; // b is older
+          return bTime.compareTo(aTime); // descending (newest first)
+        });
         return list;
       },
     );

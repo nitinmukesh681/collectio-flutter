@@ -24,13 +24,8 @@ enum _TopLikedRange { week, month, allTime }
 
 class ExploreScreen extends StatefulWidget {
   final String currentUserId;
-  final bool isActive;
 
-  const ExploreScreen({
-    super.key,
-    required this.currentUserId,
-    this.isActive = true,
-  });
+  const ExploreScreen({super.key, required this.currentUserId});
 
   @override
   State<ExploreScreen> createState() => _ExploreScreenState();
@@ -55,8 +50,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   List<CollectionEntity> _trendingCollections = [];
   List<CollectionEntity> _topLikedCollections = [];
   bool _isLoading = true;
-  String? _loadError;
-  StreamSubscription<List<CollectionEntity>>? _publicCollectionsSub;
 
   Map<CategoryType, int> _categoryCounts = {};
   bool _isSearchLoading = false;
@@ -69,100 +62,66 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   void initState() {
     super.initState();
-    _startPublicCollectionsStream();
-  }
-
-  void _pushRoute(Widget page) {
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(builder: (_) => page),
-    );
+    _loadData();
   }
 
   void _navigateToUserProfile(String userId) {
-    _pushRoute(
-      UserProfileScreen(
-        userId: userId,
-        currentUserId: widget.currentUserId,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileScreen(
+          userId: userId,
+          currentUserId: widget.currentUserId,
+        ),
       ),
     );
   }
 
   @override
   void dispose() {
-    _publicCollectionsSub?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
-  void _startPublicCollectionsStream() {
-    _publicCollectionsSub?.cancel();
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _loadError = null;
-    });
-
-    _publicCollectionsSub =
-        _firestoreService.getPublicCollectionsStream(limit: 200).listen(
-      (collections) {
-        if (!mounted) return;
-        _applyExploreData(collections);
-      },
-      onError: (error) {
-        debugPrint('Explore public collections stream error: $error');
-        if (!mounted) return;
-        setState(() {
-          _loadError = 'Could not load collections';
-          _isLoading = false;
-        });
-        unawaited(_loadExploreFallback());
-      },
-    );
-  }
-
-  Future<void> _loadExploreFallback() async {
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
     try {
-      final collections =
-          await _firestoreService.getPublicCollectionsList(limit: 200);
-      if (!mounted) return;
-      _applyExploreData(collections);
+      final since = _sinceForTopLikedRange(_topLikedRange);
+
+      final allCollections = await _firestoreService.getPublicCollectionsList(limit: 200);
+
+      final allPublic = await _firestoreService.getPublicCollectionsList(limit: 50);
+
+      final trending = _computeTrending(allPublic, limit: 5);
+
+      List<CollectionEntity> topLiked = [];
+      try {
+        topLiked = await _firestoreService.getTopLikedCollections(since: since, limit: 10);
+      } catch (e) {
+        debugPrint('Top liked query failed: $e');
+      }
+
+      if (topLiked.isEmpty) {
+        topLiked = _filterBySince(allPublic, since)
+          ..sort((a, b) => b.likes.compareTo(a.likes));
+        if (topLiked.length > 10) topLiked = topLiked.take(10).toList();
+      }
+      
+      if (mounted) {
+        setState(() {
+          _allPublicCollections = allCollections;
+          _categoryCounts = _computeCategoryCounts(allCollections);
+          _trendingCollections = trending;
+          _topLikedCollections = topLiked;
+        });
+      }
     } catch (e) {
-      debugPrint('Explore fallback load failed: $e');
-      if (!mounted) return;
-      setState(() {
-        _loadError = 'Could not load collections. Pull down to retry.';
-        _isLoading = false;
-      });
+      debugPrint('Error loading explore data: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _applyExploreData(List<CollectionEntity> collections) {
-    final pool = collections.length > 50 ? collections.take(50).toList() : collections;
-    final trending = _computeTrending(pool, limit: 5);
-    final topLiked = _topLikedFrom(collections);
-
-    setState(() {
-      _allPublicCollections = collections;
-      _categoryCounts = _computeCategoryCounts(collections);
-      _trendingCollections = trending;
-      _topLikedCollections = topLiked;
-      _isLoading = false;
-      _loadError = null;
-    });
-  }
-
-  List<CollectionEntity> _topLikedFrom(List<CollectionEntity> collections) {
-    final since = _sinceForTopLikedRange(_topLikedRange);
-    final filtered = _filterBySince(collections, since)
-      ..sort((a, b) => b.likes.compareTo(a.likes));
-    return filtered.length > 10 ? filtered.take(10).toList() : filtered;
-  }
-
-  void _applyTopLikedFilter() {
-    if (!mounted) return;
-    setState(() => _topLikedCollections = _topLikedFrom(_allPublicCollections));
+    setState(() => _isLoading = false);
   }
 
   Map<CategoryType, int> _computeCategoryCounts(List<CollectionEntity> collections) {
@@ -220,28 +179,31 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   void _navigateToBrowseCategories() {
-    _pushRoute(
-      _BrowseCategoriesScreen(
-        currentUserId: widget.currentUserId,
-        onCategoryTap: _navigateToCategory,
-        categoryCounts: _categoryCounts,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _BrowseCategoriesScreen(
+          currentUserId: widget.currentUserId,
+          onCategoryTap: _navigateToCategory,
+          categoryCounts: _categoryCounts,
+        ),
       ),
     );
   }
 
   void _navigateToTrendingViewAll() {
-    _pushRoute(
-      _CollectionsListScreen(
-        title: 'Trending now',
-        icon: Icons.local_fire_department,
-        loader: () async {
-          if (_allPublicCollections.isNotEmpty) {
-            return _computeTrending(_allPublicCollections, limit: 50);
-          }
-          final all = await _firestoreService.getPublicCollectionsList(limit: 50);
-          return _computeTrending(all, limit: 50);
-        },
-        currentUserId: widget.currentUserId,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _CollectionsListScreen(
+          title: 'Trending now',
+          icon: Icons.local_fire_department,
+          loader: () async {
+            final all = await _firestoreService.getPublicCollectionsList(limit: 50);
+            return _computeTrending(all, limit: 50);
+          },
+          currentUserId: widget.currentUserId,
+        ),
       ),
     );
   }
@@ -331,48 +293,44 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   void _navigateToCollection(String collectionId) {
-    _pushRoute(
-      CollectionDetailScreen(
-        collectionId: collectionId,
-        currentUserId: widget.currentUserId,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CollectionDetailScreen(
+          collectionId: collectionId,
+          currentUserId: widget.currentUserId,
+        ),
       ),
     );
   }
 
   void _navigateToCategory(CategoryType category) {
-    _pushRoute(
-      _CollectionsListScreen(
-        title: category.displayName,
-        icon: _categoryIcon(category),
-        accentColor: AppColors.categoryLabelColor(category.name),
-        currentUserId: widget.currentUserId,
-        emptyMessage: 'No collections in ${category.displayName} yet',
-        loader: () async {
-          final remote = await _firestoreService.getCollectionsByCategory(
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _CollectionsListScreen(
+          title: category.displayName,
+          icon: _categoryIcon(category),
+          accentColor: AppColors.categoryLabelColor(category.name),
+          currentUserId: widget.currentUserId,
+          emptyMessage: 'No collections in ${category.displayName} yet',
+          loader: () => _firestoreService.getCollectionsByCategory(
             category.name,
             limit: 50,
-          );
-          if (remote.isNotEmpty) return remote;
-          return _allPublicCollections
-              .where((c) => c.category == category)
-              .toList();
-        },
+          ),
+        ),
       ),
     );
   }
 
+  static const double _bottomNavClearance = 120;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: RefreshIndicator(
-          onRefresh: _loadExploreFallback,
-          child: CustomScrollView(
-            primary: false,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
+    return SafeArea(
+      bottom: false,
+      child: CustomScrollView(
+        slivers: [
             // Search bar
             SliverToBoxAdapter(
               child: Padding(
@@ -461,9 +419,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ),
                       const Spacer(),
                       PopupMenuButton<_TopLikedRange>(
-                        onSelected: (value) {
-                          setState(() => _topLikedRange = value);
-                          _applyTopLikedFilter();
+                        onSelected: (value) async {
+                          setState(() {
+                            _topLikedRange = value;
+                          });
+                          await _loadData();
                         },
                         itemBuilder: (context) => [
                           PopupMenuItem(
@@ -507,40 +467,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   ),
                 ),
               ),
-              if (_loadError != null) _buildLoadErrorBanner(),
               _buildTopLikedList(),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 120)),
             ],
-          ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildLoadErrorBanner() {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF7ED),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFDBA74)),
-          ),
-          child: Text(
-            _loadError!,
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF9A3412),
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
+            const SliverToBoxAdapter(child: SizedBox(height: _bottomNavClearance)),
+          ],
         ),
-      ),
     );
   }
 
@@ -633,21 +565,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
         child: SizedBox(
           height: 240,
           child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
-
-    if (_trendingCollections.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Text(
-            'No trending collections right now',
-            style: GoogleFonts.plusJakartaSans(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ),
       );
     }
@@ -780,20 +697,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     final count = _topLikedCollections.length > 4 ? 4 : _topLikedCollections.length;
-    if (count == 0) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          child: Text(
-            'No top liked collections for this period',
-            style: GoogleFonts.plusJakartaSans(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
-    }
+    if (count == 0) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     return SliverToBoxAdapter(
       child: Container(
@@ -814,9 +718,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   void didUpdateWidget(covariant ExploreScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentUserId != widget.currentUserId) {
-      _startPublicCollectionsStream();
-    } else if (widget.isActive && !oldWidget.isActive && _allPublicCollections.isEmpty) {
-      _startPublicCollectionsStream();
+      _loadData();
     }
   }
 
@@ -931,7 +833,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
             final user = _userResults[index];
             return ListTile(
               onTap: () {
-                Navigator.of(context, rootNavigator: true).push(
+                Navigator.push(
+                  context,
                   MaterialPageRoute(
                     builder: (context) => UserProfileScreen(
                       userId: user.id,
@@ -1045,7 +948,6 @@ class _CollectionsListScreen extends StatefulWidget {
 class _CollectionsListScreenState extends State<_CollectionsListScreen> {
   bool _loading = true;
   List<CollectionEntity> _collections = const [];
-  String? _loadError;
 
   @override
   void initState() {
@@ -1054,22 +956,13 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
   }
 
   Future<void> _load() async {
-    if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
+    setState(() => _loading = true);
     try {
       final result = await widget.loader();
       if (!mounted) return;
-      setState(() {
-        _collections = result;
-        _loadError = null;
-      });
+      setState(() => _collections = result);
     } catch (e) {
       debugPrint('CollectionsListScreen load failed: $e');
-      if (!mounted) return;
-      setState(() => _loadError = 'Could not load collections');
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -1113,32 +1006,6 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _loadError != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, size: 56, color: AppColors.textMuted),
-                        const SizedBox(height: 16),
-                        Text(
-                          _loadError!,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _load,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
           : _collections.isEmpty
               ? Center(
                   child: Column(

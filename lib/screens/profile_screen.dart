@@ -185,20 +185,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
         if (user == null) {
           return const Scaffold(
-            backgroundColor: AppColors.backgroundSurface,
+            backgroundColor: Colors.white,
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
         return Scaffold(
-          backgroundColor: Colors.transparent,
+          backgroundColor: Colors.white,
           body: NestedScrollView(
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
                   expandedHeight: 248,
                   pinned: true,
-                  backgroundColor: AppColors.backgroundSurface,
+                  backgroundColor: Colors.white,
                   surfaceTintColor: Colors.transparent,
                   elevation: 0,
                   automaticallyImplyLeading: false,
@@ -517,7 +517,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: AppColors.backgroundSurface,
+      color: Colors.white,
       child: tabBar,
     );
   }
