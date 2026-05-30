@@ -1522,17 +1522,26 @@ class FirestoreService {
 
   /// Get open collaboration collections
   Future<List<CollectionEntity>> getOpenCollaborationCollections({int limit = 20}) async {
-    final snapshot = await _collectionsRef
-        .where('isPublic', isEqualTo: true)
-        .where('isOpenForContribution', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
-
-    return snapshot.docs
-        .map((doc) =>
-            CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-        .toList();
+    try {
+      final snapshot = await _collectionsRef
+          .where('isPublic', isEqualTo: true)
+          .where('isOpenForContribution', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+      return _mapCollectionDocs(snapshot.docs);
+    } catch (e) {
+      debugPrint('getOpenCollaborationCollections orderBy failed, using fallback: $e');
+      final snapshot = await _collectionsRef
+          .where('isOpenForContribution', isEqualTo: true)
+          .limit(limit * 3)
+          .get();
+      final results = _mapCollectionDocs(snapshot.docs)
+          .where((c) => c.isPublic)
+          .toList();
+      results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return results.take(limit).toList();
+    }
   }
 
   /// Get open collaboration collections as a real-time stream
@@ -1543,9 +1552,10 @@ class FirestoreService {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-            .toList());
+        .map((snapshot) => _mapCollectionDocs(snapshot.docs))
+        .handleError((error) {
+          debugPrint('Open collaborations stream error: $error');
+        });
   }
 
   Future<List<CollectionEntity>> getUserCollaborations(String userId) async {

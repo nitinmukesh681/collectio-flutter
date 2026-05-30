@@ -214,7 +214,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const OpenCollaborationsScreen()));
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => OpenCollaborationsScreen(
+                                      initialCollections: _collabCollections,
+                                    ),
+                                  ),
+                                );
                               },
                               child: Text('View All', 
                                 style: GoogleFonts.plusJakartaSans(
