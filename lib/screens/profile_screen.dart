@@ -209,7 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   automaticallyImplyLeading: false,
                   actions: [
                     IconButton(
-                      icon: const Icon(Icons.settings_outlined, color: AppColors.textMuted),
+                      icon: const Icon(Icons.settings_outlined, color: AppColors.collectionDescription),
                       onPressed: _navigateToSettings,
                     ),
                   ],
