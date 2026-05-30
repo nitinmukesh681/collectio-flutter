@@ -334,7 +334,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             // Search bar
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
                 child: TextField(
                   controller: _searchController,
                   focusNode: _searchFocus,
@@ -659,9 +659,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     maxLines: 2, overflow: TextOverflow.ellipsis),
                   if (collection.description != null && collection.description!.trim().isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(collection.description!.trim(),
-                      style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, height: 1.3),
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(
+                      collection.description!.trim(),
+                      style: AppTextStyles.collectionDescription(fontSize: 13, height: 1.3),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                   const SizedBox(height: 8),
                   Row(
@@ -729,6 +732,32 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return AppColors.divider;
   }
 
+  Widget _buildTopLikedLikes(int likes) {
+    return Transform.translate(
+      offset: const Offset(0, 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.favorite, size: 15, color: AppColors.heartSalmon),
+          const SizedBox(width: 4),
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Text(
+              _formatCount(likes),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.collectionDescription,
+                height: 1.0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTopLikedRow(int rank, CollectionEntity collection, {required bool isLast}) {
     return GestureDetector(
       onTap: () => _navigateToCollection(collection.id),
@@ -738,7 +767,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           border: isLast ? null : const Border(bottom: BorderSide(color: AppColors.divider)),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: 40,
@@ -752,24 +781,33 @@ class _ExploreScreenState extends State<ExploreScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(collection.title,
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.textPrimary),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          collection.title,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: AppColors.textPrimary,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _buildTopLikedLikes(collection.likes),
+                    ],
+                  ),
                   const SizedBox(height: 3),
-                  Text('by ${collection.userName}',
-                    style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 13)),
+                  Text(
+                    'by ${collection.userName}',
+                    style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 13),
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(width: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.favorite, size: 16, color: AppColors.textPrimary.withOpacity(0.4)),
-                const SizedBox(width: 4),
-                Text(_formatCount(collection.likes),
-                  style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary.withOpacity(0.4))),
-              ],
             ),
           ],
         ),

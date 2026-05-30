@@ -44,7 +44,6 @@ class FeedCollectionCard extends StatelessWidget {
       stream: FirebaseFirestore.instance.collection('collections').doc(collection.id).snapshots(),
       builder: (context, snap) {
         final remoteCount = snap.data?.data()?['itemCount'];
-        // ignore: unused_local_variable
         final itemCount = (remoteCount is int) ? remoteCount : collection.itemCount;
 
         return GestureDetector(
@@ -66,8 +65,9 @@ class FeedCollectionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Avatar + name
+                // Avatar + name + save
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
                       onTap: onUserTap,
@@ -100,6 +100,22 @@ class FeedCollectionCard extends StatelessWidget {
                             Text('Published ${timeago.format(DateTime.fromMillisecondsSinceEpoch(collection.createdAt))}',
                               style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
                           ],
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: onSave,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8, top: 2),
+                        child: Icon(
+                          collection.isSaved
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          size: 24,
+                          color: collection.isSaved
+                              ? AppColors.primary
+                              : AppColors.textPrimary,
                         ),
                       ),
                     ),
@@ -139,11 +155,24 @@ class FeedCollectionCard extends StatelessWidget {
                     GestureDetector(
                       onTap: onLike,
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          size: 22, color: collection.isLiked ? AppColors.heartSalmon : AppColors.textMuted),
+                        Icon(
+                          collection.isLiked
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          size: 22,
+                          color: collection.isLiked
+                              ? AppColors.heartSalmon
+                              : AppColors.textPrimary,
+                        ),
                         const SizedBox(width: 5),
-                        Text('${collection.likes}',
-                          style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                        Text(
+                          '${collection.likes}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
                       ]),
                     ),
                     const SizedBox(width: 20),
@@ -154,17 +183,53 @@ class FeedCollectionCard extends StatelessWidget {
                       builder: (context, commentSnap) {
                         final commentCount = commentSnap.data?.docs.length ?? 0;
                         return Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.chat_bubble_outline_rounded, size: 20, color: AppColors.textMuted),
+                          const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 22,
+                            color: AppColors.textPrimary,
+                          ),
                           const SizedBox(width: 5),
-                          Text('$commentCount',
-                            style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                          Text(
+                            '$commentCount',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
                         ]);
                       },
                     ),
+                    const SizedBox(width: 20),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.inventory_2_outlined,
+                          size: 22,
+                          color: AppColors.textPrimary,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '$itemCount',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
                     const Spacer(),
                     GestureDetector(
-                      onTap: () => Share.share('Check out ${collection.title} on Finds: https://collectio-b6b15.web.app/collection/${collection.id}'),
-                      child: const Icon(Icons.share_outlined, size: 22, color: AppColors.textMuted),
+                      onTap: () => Share.share(
+                        'Check out ${collection.title} on Finds: https://collectio-b6b15.web.app/collection/${collection.id}',
+                      ),
+                      child: const Icon(
+                        Icons.share_outlined,
+                        size: 22,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   ],
                 ),

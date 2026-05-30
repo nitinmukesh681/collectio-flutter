@@ -1081,10 +1081,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         const SizedBox(height: 12),
                         Text(
                           collection.description!,
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppTextStyles.collectionDescription(
                             fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF334155),
                             height: 1.5,
                           ),
                         ),
@@ -1699,8 +1697,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.only(left: 28),
-              child: Text(item.description!,
-                style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textPrimary, height: 1.5)),
+              child: Text(
+                item.description!,
+                style: AppTextStyles.collectionDescription(fontSize: 14, height: 1.5),
+              ),
             ),
           ],
 

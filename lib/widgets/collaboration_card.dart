@@ -123,8 +123,9 @@ class _CollaborationCardState extends State<CollaborationCard> {
                     const SizedBox(height: 4),
                     Text(
                       collection.description!,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, height: 1.3, fontWeight: FontWeight.w500),
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.collectionDescription(fontSize: 13, height: 1.3),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                   const SizedBox(height: 10), // Reduced from 12

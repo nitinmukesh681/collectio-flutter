@@ -462,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Icon(selectedIcon, color: Colors.white, size: 22),
                 )
-              : Icon(icon, color: AppColors.textSecondary, size: 26),
+              : Icon(icon, color: AppColors.collectionDescription, size: 26),
         ),
       ),
     );
@@ -492,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 22),
                     )
-                  : const Icon(Icons.notifications_none_rounded, color: AppColors.textSecondary, size: 26);
+                  : const Icon(Icons.notifications_none_rounded, color: AppColors.collectionDescription, size: 26);
               return Badge(
                 isLabelVisible: count > 0,
                 label: Text(count > 9 ? '9+' : '$count', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700)),

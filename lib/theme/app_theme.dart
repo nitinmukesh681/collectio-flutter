@@ -29,6 +29,8 @@ class AppColors {
   static const Color textPrimary = Color(0xFF0F172A);
   static const Color textSecondary = Color(0xFF64748B);
   static const Color textMuted = Color(0xFF94A3B8);
+  /// Collection / item description body copy (darker than textSecondary).
+  static const Color collectionDescription = Color(0xFF334155);
 
   // Gradients — only for collaboration cards / category fallbacks
   static const LinearGradient primaryGradient = LinearGradient(
@@ -114,6 +116,22 @@ class AppColors {
       shaderCallback: (bounds) => primaryGradient.createShader(bounds),
       blendMode: BlendMode.srcIn,
       child: Text(text, style: style.copyWith(color: Colors.white)),
+    );
+  }
+}
+
+class AppTextStyles {
+  AppTextStyles._();
+
+  static TextStyle collectionDescription({
+    double fontSize = 14,
+    double height = 1.4,
+  }) {
+    return GoogleFonts.plusJakartaSans(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w500,
+      color: AppColors.collectionDescription,
+      height: height,
     );
   }
 }

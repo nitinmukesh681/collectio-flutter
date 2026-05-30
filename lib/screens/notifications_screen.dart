@@ -353,36 +353,50 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avatar with small badge
-            SizedBox(
-              width: 48, height: 48,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  ClipOval(
-                    child: SizedBox(
-                      width: 48, height: 48,
-                      child: hasAvatar
-                          ? CachedNetworkImage(
-                              imageUrl: data['fromUserAvatarUrl'], fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => _avatarFallback(fromUsername),
-                            )
-                          : _avatarFallback(fromUsername),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: -2, left: -2,
-                    child: Container(
-                      width: 20, height: 20,
-                      decoration: BoxDecoration(
-                        color: iconColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
+            // Avatar with small badge — tap opens user profile
+            GestureDetector(
+              onTap: fromUserId != null && fromUserId.isNotEmpty
+                  ? () {
+                      _markAsRead(id);
+                      _navigateToUser(fromUserId);
+                    }
+                  : null,
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ClipOval(
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: hasAvatar
+                            ? CachedNetworkImage(
+                                imageUrl: data['fromUserAvatarUrl'],
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _avatarFallback(fromUsername),
+                              )
+                            : _avatarFallback(fromUsername),
                       ),
-                      child: Icon(icon, color: Colors.white, size: 10),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      bottom: -2,
+                      left: -2,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: iconColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: Icon(icon, color: Colors.white, size: 10),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 14),
@@ -399,19 +413,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                       children: [
-                        TextSpan(
-                          text: fromUsername,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            height: 1.45,
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w800,
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.baseline,
+                          baseline: TextBaseline.alphabetic,
+                          child: GestureDetector(
+                            onTap: fromUserId != null && fromUserId.isNotEmpty
+                                ? () {
+                                    _markAsRead(id);
+                                    _navigateToUser(fromUserId);
+                                  }
+                                : null,
+                            child: Text(
+                              fromUsername,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14,
+                                height: 1.45,
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ),
                         TextSpan(text: actionText),
                         if (subtitle != null) ...[
                           const TextSpan(text: '\n'),
-                          TextSpan(text: subtitle, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+                          TextSpan(
+                            text: subtitle,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                          ),
                         ],
                       ],
                     ),
@@ -435,7 +467,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return AvatarFallback(name: name, size: 48);
   }
 
-  // ignore: unused_element
   void _navigateToUser(String userId) {
     Navigator.push(
       context,
