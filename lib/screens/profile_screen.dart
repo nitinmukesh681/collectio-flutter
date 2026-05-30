@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../models/collection_entity.dart';
-import '../models/user_entity.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/collection_list_card.dart';
-import '../widgets/avatar_fallback.dart';
+import '../widgets/profile_header_layout.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
 import 'followers_following_screen.dart';
@@ -23,7 +20,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
-  static const Color _editButtonBg = Color(0xFFEEF2FF);
+  static const double _headerExpandedHeight = 420;
+  static const double _bottomNavClearance = 120;
 
   late TabController _tabController;
   final FirestoreService _firestoreService = FirestoreService();
@@ -177,6 +175,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     return '$count';
   }
 
+  Widget _buildEditProfileButton() {
+    return ProfileHeaderLayout.buildOutlinedActionButton(
+      label: 'Edit Profile',
+      onPressed: _navigateToEditProfile,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
@@ -196,7 +201,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
-                  expandedHeight: 248,
+                  expandedHeight: _headerExpandedHeight,
                   pinned: true,
                   backgroundColor: Colors.white,
                   surfaceTintColor: Colors.transparent,
@@ -204,7 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   automaticallyImplyLeading: false,
                   actions: [
                     IconButton(
-                      icon: const Icon(Icons.settings_outlined, color: AppColors.textPrimary),
+                      icon: const Icon(Icons.settings_outlined, color: AppColors.textMuted),
                       onPressed: _navigateToSettings,
                     ),
                   ],
@@ -214,12 +219,22 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            const SizedBox(height: 40),
-                            _buildProfileHeader(user),
                             const SizedBox(height: 20),
-                            _buildStatsRow(user, auth.userId),
+                            ProfileHeaderLayout(
+                              user: user,
+                              showAvatarEditBadge: true,
+                              onAvatarTap: _navigateToEditProfile,
+                              actionButton: _buildEditProfileButton(),
+                              statsRow: ProfileHeaderLayout.buildStatsRow(
+                                collectionsCount: _formatCount(_myCollections.length),
+                                followersCount: _formatCount(user.followers.length),
+                                followingCount: _formatCount(user.following.length),
+                                onFollowersTap: () => _navigateToFollowers(auth.userId, showFollowers: true),
+                                onFollowingTap: () => _navigateToFollowers(auth.userId, showFollowers: false),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -236,7 +251,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       indicatorColor: AppColors.primary,
                       indicatorWeight: 3,
                       indicatorSize: TabBarIndicatorSize.tab,
-                      dividerColor: AppColors.divider,
+                      dividerColor: Colors.transparent,
                       labelStyle: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -280,187 +295,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildProfileHeader(UserEntity user) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: _navigateToEditProfile,
-          child: SizedBox(
-            width: 88,
-            height: 88,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  child: ClipOval(
-                    child: SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: _buildAvatar(user),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 4,
-                  bottom: 4,
-                  child: Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: const Icon(Icons.add, size: 16, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                user.displayName.isNotEmpty ? user.displayName : user.userName,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                  height: 1.1,
-                  letterSpacing: -0.3,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '@${user.userName}',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: _navigateToEditProfile,
-                  style: TextButton.styleFrom(
-                    backgroundColor: _editButtonBg,
-                    foregroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppColors.radiusSmall),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    'Edit Profile',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAvatar(UserEntity user) {
-    Widget fallback() => AvatarFallback(name: user.userName, size: 80);
-
-    if (user.avatarUrl == null || user.avatarUrl!.isEmpty) {
-      return fallback();
-    }
-
-    if (user.avatarUrl!.trim().startsWith('gs://')) {
-      return FutureBuilder<String>(
-        future: FirebaseStorage.instance.refFromURL(user.avatarUrl!.trim()).getDownloadURL(),
-        builder: (context, snap) {
-          final url = snap.data;
-          if (url == null || url.isEmpty) return fallback();
-          return CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            errorWidget: (_, __, ___) => fallback(),
-          );
-        },
-      );
-    }
-
-    return CachedNetworkImage(
-      imageUrl: user.avatarUrl!.trim(),
-      fit: BoxFit.cover,
-      errorWidget: (_, __, ___) => fallback(),
-    );
-  }
-
-  Widget _buildStatsRow(UserEntity user, String userId) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStat(_formatCount(_myCollections.length), 'COLLECTIONS'),
-        ),
-        Container(width: 1, height: 36, color: AppColors.divider),
-        Expanded(
-          child: _buildStat(
-            _formatCount(user.followers.length),
-            'FOLLOWERS',
-            onTap: () => _navigateToFollowers(userId, showFollowers: true),
-          ),
-        ),
-        Container(width: 1, height: 36, color: AppColors.divider),
-        Expanded(
-          child: _buildStat(
-            _formatCount(user.following.length),
-            'FOLLOWING',
-            onTap: () => _navigateToFollowers(userId, showFollowers: false),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStat(String count, String label, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        children: [
-          Text(
-            count,
-            style: GoogleFonts.plusJakartaSans(
-              color: AppColors.primary,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.plusJakartaSans(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCollectionsList(List<CollectionEntity> collections, String userId, {required String isEmpty}) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -489,7 +323,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       onRefresh: _refreshStreams,
       color: AppColors.primary,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, _bottomNavClearance),
         itemCount: collections.length,
         itemBuilder: (context, index) {
           return CollectionListCard(
@@ -516,7 +350,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
+    return ColoredBox(
       color: Colors.white,
       child: tabBar,
     );

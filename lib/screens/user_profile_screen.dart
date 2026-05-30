@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import '../models/collection_entity.dart';
@@ -8,7 +6,7 @@ import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/collection_list_card.dart';
-import '../widgets/avatar_fallback.dart';
+import '../widgets/profile_header_layout.dart';
 import 'followers_following_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -26,6 +24,7 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
+  static const double _bottomNavClearance = 24;
 
   final FirestoreService _firestoreService = FirestoreService();
 
@@ -172,6 +171,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return '$count';
   }
 
+  Widget? _buildFollowButton(bool isOwnProfile) {
+    if (isOwnProfile) return null;
+
+    return ProfileHeaderLayout.buildOutlinedActionButton(
+      label: _isFollowing ? 'Following' : 'Follow',
+      onPressed: _toggleFollow,
+      isLoading: _isFollowLoading,
+      filled: !_isFollowing,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -183,13 +193,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     if (_user == null) {
       return Scaffold(
-        appBar: AppBar(),
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+        ),
         body: Center(child: Text('User not found', style: GoogleFonts.plusJakartaSans())),
       );
     }
 
     final user = _user!;
     final isOwnProfile = widget.userId == widget.currentUserId;
+    final followButton = _buildFollowButton(isOwnProfile);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -197,7 +213,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             SliverAppBar(
-              expandedHeight: 248,
               pinned: true,
               backgroundColor: Colors.white,
               surfaceTintColor: Colors.transparent,
@@ -206,20 +221,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
                 onPressed: () => Navigator.pop(context),
               ),
-              flexibleSpace: FlexibleSpaceBar(
-                background: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 40),
-                        _buildProfileHeader(user, isOwnProfile: isOwnProfile),
-                        const SizedBox(height: 20),
-                        _buildStatsRow(user),
-                      ],
-                    ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: ProfileHeaderLayout(
+                  user: user,
+                  actionButton: followButton,
+                  statsRow: ProfileHeaderLayout.buildStatsRow(
+                    collectionsCount: _formatCount(_collections.length),
+                    followersCount: _formatCount(user.followers.length),
+                    followingCount: _formatCount(user.following.length),
+                    onFollowersTap: () => _navigateToFollowers(showFollowers: true),
+                    onFollowingTap: () => _navigateToFollowers(showFollowers: false),
                   ),
                 ),
               ),
@@ -230,168 +244,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           color: AppColors.backgroundSurface,
           child: _buildCollectionsList(),
         ),
-      ),
-    );
-  }
-
-  Widget _buildProfileHeader(UserEntity user, {required bool isOwnProfile}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipOval(
-          child: SizedBox(
-            width: 80,
-            height: 80,
-            child: _buildAvatar(user),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                user.displayName.isNotEmpty ? user.displayName : user.userName,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                  height: 1.1,
-                  letterSpacing: -0.3,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '@${user.userName}',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              if (!isOwnProfile) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: _isFollowLoading ? null : _toggleFollow,
-                    style: TextButton.styleFrom(
-                      backgroundColor: _isFollowing ? Colors.white : const Color(0xFFEEF2FF),
-                      foregroundColor: AppColors.primary,
-                      side: _isFollowing
-                          ? BorderSide(color: AppColors.primary.withOpacity(0.25))
-                          : null,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppColors.radiusSmall),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _isFollowLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            _isFollowing ? 'Following' : 'Follow',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAvatar(UserEntity user) {
-    Widget fallback() => AvatarFallback(name: user.userName, size: 80);
-
-    if (user.avatarUrl == null || user.avatarUrl!.isEmpty) {
-      return fallback();
-    }
-
-    if (user.avatarUrl!.trim().startsWith('gs://')) {
-      return FutureBuilder<String>(
-        future: FirebaseStorage.instance.refFromURL(user.avatarUrl!.trim()).getDownloadURL(),
-        builder: (context, snap) {
-          final url = snap.data;
-          if (url == null || url.isEmpty) return fallback();
-          return CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            errorWidget: (_, __, ___) => fallback(),
-          );
-        },
-      );
-    }
-
-    return CachedNetworkImage(
-      imageUrl: user.avatarUrl!.trim(),
-      fit: BoxFit.cover,
-      errorWidget: (_, __, ___) => fallback(),
-    );
-  }
-
-  Widget _buildStatsRow(UserEntity user) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStat(_formatCount(_collections.length), 'COLLECTIONS'),
-        ),
-        Container(width: 1, height: 36, color: AppColors.divider),
-        Expanded(
-          child: _buildStat(
-            _formatCount(user.followers.length),
-            'FOLLOWERS',
-            onTap: () => _navigateToFollowers(showFollowers: true),
-          ),
-        ),
-        Container(width: 1, height: 36, color: AppColors.divider),
-        Expanded(
-          child: _buildStat(
-            _formatCount(user.following.length),
-            'FOLLOWING',
-            onTap: () => _navigateToFollowers(showFollowers: false),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStat(String count, String label, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        children: [
-          Text(
-            count,
-            style: GoogleFonts.plusJakartaSans(
-              color: AppColors.primary,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.plusJakartaSans(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -417,7 +269,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, _bottomNavClearance),
       itemCount: _collections.length,
       itemBuilder: (context, index) {
         return CollectionListCard(
