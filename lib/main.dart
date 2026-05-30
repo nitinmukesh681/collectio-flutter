@@ -150,7 +150,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       if (call.arguments is String) {
         final url = call.arguments as String;
         if (url.isEmpty) return;
-        await _clearNativeShare();
         setState(() {
           _pendingSharedUrl = url;
           _pendingSharedTitle = null;
@@ -380,7 +379,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         
         final sharedUrl = await _shareExtensionChannel.invokeMethod<String>('getSharedUrl');
         if (sharedUrl != null && sharedUrl.isNotEmpty) {
-          await _clearNativeShare();
           if (mounted) {
             setState(() {
               _pendingSharedUrl = sharedUrl;
@@ -450,100 +448,105 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       debugPrint('[Share] blocked — email not verified');
       return;
     }
+    if (!auth.userProfileLoaded) {
+      debugPrint('[Share] waiting — user profile loading');
+      return;
+    }
     if (auth.needsUsername) {
       debugPrint('[Share] blocked — username required');
       return;
     }
 
     final userName = auth.resolvedUserName;
-
-    _isOpeningImport = true;
     final url = _pendingSharedUrl!;
     final title = _pendingSharedTitle;
 
-    _pushImportScreenWhenViewportReady(
-      url: url,
-      title: title,
-      userId: auth.userId,
-      userName: userName,
-    );
+    _isOpeningImport = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_pushImportRoute(
+        url: url,
+        title: title,
+        userId: auth.userId,
+        userName: userName,
+      ));
+    });
   }
 
-  void _pushImportScreenWhenViewportReady({
+  Future<void> _pushImportRoute({
     required String url,
     required String? title,
     required String userId,
     required String userName,
-    int attempt = 0,
-  }) {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+  }) async {
+    if (!mounted) {
+      _isOpeningImport = false;
+      return;
+    }
+
+    NavigatorState? navigator = CollectioApp.navigatorKey.currentState;
+    for (var attempt = 0; attempt < 40 && navigator == null; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       if (!mounted) {
         _isOpeningImport = false;
         return;
       }
+      navigator = CollectioApp.navigatorKey.currentState;
+    }
 
-      final navigator = CollectioApp.navigatorKey.currentState;
-      if (navigator == null) {
-        if (attempt < 40) {
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-          if (mounted) {
-            _pushImportScreenWhenViewportReady(
-              url: url,
-              title: title,
-              userId: userId,
-              userName: userName,
-              attempt: attempt + 1,
-            );
-          }
-        } else {
-          debugPrint('[Share] aborted — root navigator not ready');
+    if (navigator == null) {
+      debugPrint('[Share] aborted — root navigator not ready');
+      if (mounted) {
+        setState(() {
           _isOpeningImport = false;
-        }
-        return;
+          _didHandlePendingShare = false;
+        });
       }
+      return;
+    }
 
-      debugPrint('[Share] opening ImportLinkScreen for $url (attempt $attempt)');
-      if (Platform.isAndroid) {
-        ReceiveSharingIntent.instance.reset();
+    debugPrint('[Share] opening ImportLinkScreen for $url');
+
+    if (mounted) {
+      setState(() {
+        _pendingSharedUrl = null;
+        _pendingSharedTitle = null;
+        _didHandlePendingShare = true;
+      });
+    }
+
+    try {
+      await navigator.push<void>(
+        MaterialPageRoute(
+          builder: (context) => ImportLinkScreen(
+            sharedUrl: url,
+            sharedTitle: title,
+            userId: userId,
+            userName: userName,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[Share] navigation error: $e');
+      if (mounted) {
+        setState(() {
+          _pendingSharedUrl = url;
+          _pendingSharedTitle = title;
+          _didHandlePendingShare = false;
+        });
       }
-
-      navigator
-          .push(
-            MaterialPageRoute(
-              builder: (context) => ImportLinkScreen(
-                sharedUrl: url,
-                sharedTitle: title,
-                userId: userId,
-                userName: userName,
-              ),
-            ),
-          )
-          .then((_) => _consumeShare())
-          .catchError((Object e) {
-            debugPrint('[Share] navigation error: $e');
-            if (mounted) {
-              setState(() {
-                _didHandlePendingShare = false;
-                _isOpeningImport = false;
-              });
-            }
-          })
-          .whenComplete(() {
-            if (mounted) {
-              setState(() => _isOpeningImport = false);
-            }
-          });
-    });
+    } finally {
+      _clearNativeSharePayload();
+      if (mounted) {
+        setState(() => _isOpeningImport = false);
+      }
+    }
   }
 
-  void _consumeShare() {
-    ReceiveSharingIntent.instance.reset();
-    _clearNativeShare();
-    setState(() {
-      _pendingSharedUrl = null;
-      _pendingSharedTitle = null;
-      _didHandlePendingShare = true;
-    });
+  void _clearNativeSharePayload() {
+    if (Platform.isAndroid) {
+      ReceiveSharingIntent.instance.reset();
+    }
+    unawaited(_clearNativeShare());
   }
 
   @override
@@ -578,6 +581,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         if (!auth.isEmailVerified) return const EmailVerificationScreen();
         if (auth.needsUsername) return const UsernameScreen();
 
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _openPendingShareIfReady();
+        });
         return const HomeScreen();
       },
     );

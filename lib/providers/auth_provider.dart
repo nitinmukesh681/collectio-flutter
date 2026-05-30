@@ -20,6 +20,7 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   bool _needsUsername = false;
   bool _firebaseReady = false;
+  bool _userProfileLoaded = false;
 
   // Getters
   User? get firebaseUser => _firebaseUser;
@@ -29,6 +30,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _firebaseReady && _firebaseUser != null;
   bool get isEmailVerified => _firebaseUser?.emailVerified ?? false;
   bool get needsUsername => _needsUsername;
+  bool get userProfileLoaded => _userProfileLoaded;
   String get userId => _firebaseUser?.uid ?? '';
   bool get firebaseReady => _firebaseReady;
 
@@ -74,6 +76,7 @@ class AuthProvider extends ChangeNotifier {
           _userSubscription = null;
           _userEntity = null;
           _needsUsername = false;
+          _userProfileLoaded = false;
         }
         notifyListeners();
       });
@@ -86,6 +89,8 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _loadUserEntity() async {
     if (_firebaseUser == null || _firestoreService == null) return;
+    _userProfileLoaded = false;
+    notifyListeners();
     try {
       debugPrint('Loading user entity for uid: ${_firebaseUser!.uid}');
       // Initial one-time fetch for immediate state
@@ -98,6 +103,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       _needsUsername = _userEntity == null || (_userEntity!.userName.isEmpty);
+      _userProfileLoaded = true;
       notifyListeners();
 
       // Set up real-time stream for seamless updates across the app
@@ -118,6 +124,7 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('Error loading user entity: $e');
       _userEntity = null;
       _needsUsername = true;
+      _userProfileLoaded = true;
       notifyListeners();
     }
   }

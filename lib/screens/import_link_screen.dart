@@ -82,9 +82,11 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   String? _extractCollectionId(String url) {
     try {
       final uri = Uri.parse(url);
-      if (uri.host.contains('collectio-b6b15.web.app') ||
-          uri.host.contains('collectio') ||
-          uri.host == 'localhost') {
+      final host = uri.host.toLowerCase();
+      if (host == 'collectio-b6b15.web.app' ||
+          host.endsWith('.collectio.app') ||
+          host == 'collectio.app' ||
+          host == 'localhost') {
         final pathSegments = uri.pathSegments;
         if (pathSegments.length >= 2 && pathSegments[0] == 'collection') {
           return pathSegments[1];
