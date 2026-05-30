@@ -393,13 +393,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   RichText(
                     text: TextSpan(
-                      style: GoogleFonts.plusJakartaSans(fontSize: 14, height: 1.45, color: AppColors.textPrimary),
                       children: [
-                        TextSpan(text: fromUsername, style: const TextStyle(fontWeight: FontWeight.w800)),
-                        TextSpan(text: actionText, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        TextSpan(
+                          text: fromUsername,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            height: 1.45,
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        TextSpan(
+                          text: actionText,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            height: 1.45,
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                         if (subtitle != null) ...[
                           const TextSpan(text: '\n'),
-                          TextSpan(text: subtitle, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+                          TextSpan(
+                            text: subtitle,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              height: 1.45,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
                         ],
                       ],
                     ),
