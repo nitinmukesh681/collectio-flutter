@@ -158,7 +158,7 @@ class _MentionTextFieldState extends State<MentionTextField> {
 
     if (query == null || startIndex == null) {
       _hideSuggestions();
-      setState(() {});
+      if (mounted) setState(() {});
       return;
     }
 
@@ -182,6 +182,7 @@ class _MentionTextFieldState extends State<MentionTextField> {
 
       if (!stillActive) {
         _hideSuggestions();
+        if (mounted) setState(() {});
         return;
       }
 
@@ -200,6 +201,8 @@ class _MentionTextFieldState extends State<MentionTextField> {
         if (mounted) _syncOverlay();
       });
     });
+
+    if (mounted) setState(() {});
   }
 
   void _insertMention(UserEntity user) {
@@ -324,51 +327,76 @@ class _MentionTextFieldState extends State<MentionTextField> {
     );
   }
 
+  InputDecoration _fieldDecoration() {
+    return InputDecoration(
+      isDense: widget.dense,
+      isCollapsed: widget.dense && widget.maxLines == 1,
+      hintText: widget.hintText,
+      hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 14),
+      border: widget.filled ? null : InputBorder.none,
+      enabledBorder: widget.filled ? null : InputBorder.none,
+      focusedBorder: widget.filled
+          ? const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+            )
+          : InputBorder.none,
+      filled: widget.filled,
+      fillColor: widget.filled ? AppColors.surfaceMuted : null,
+      contentPadding: _contentPadding,
+    );
+  }
+
+  Widget _buildPlainTextField({Color? textColor}) {
+    final isMultiline = widget.maxLines > 1;
+
+    return TextField(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      style: _baseTextStyle.copyWith(color: textColor ?? AppColors.textPrimary),
+      cursorColor: AppColors.primary,
+      keyboardType: isMultiline ? TextInputType.multiline : TextInputType.text,
+      textInputAction: isMultiline ? TextInputAction.newline : TextInputAction.done,
+      textAlignVertical:
+          widget.dense && widget.maxLines == 1 ? TextAlignVertical.center : TextAlignVertical.top,
+      minLines: widget.minLines,
+      maxLines: widget.maxLines,
+      decoration: _fieldDecoration(),
+    );
+  }
+
   Widget _buildStyledTextField() {
+    if (widget.maxLines > 1) {
+      return _buildPlainTextField();
+    }
+
     final padding = _contentPadding.resolve(Directionality.of(context));
 
-    return Stack(
-      alignment: Alignment.topLeft,
-      children: [
-        IgnorePointer(
-          child: Padding(
-            padding: padding,
-            child: RichText(
-              text: CommentMentions.buildComposerTextSpan(
-                text: widget.controller.text,
-                mentions: List.unmodifiable(_confirmedMentions),
-                baseStyle: _baseTextStyle,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          alignment: Alignment.topLeft,
+          children: [
+            IgnorePointer(
+              child: Padding(
+                padding: padding,
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  child: Text.rich(
+                    CommentMentions.buildComposerTextSpan(
+                      text: widget.controller.text,
+                      mentions: List.unmodifiable(_confirmedMentions),
+                      baseStyle: _baseTextStyle,
+                    ),
+                    softWrap: true,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        TextField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          style: _baseTextStyle.copyWith(color: Colors.transparent),
-          cursorColor: AppColors.primary,
-          textAlignVertical: widget.dense && widget.maxLines == 1 ? TextAlignVertical.center : null,
-          minLines: widget.minLines,
-          maxLines: widget.maxLines,
-          decoration: InputDecoration(
-            isDense: widget.dense,
-            isCollapsed: widget.dense && widget.maxLines == 1,
-            hintText: widget.hintText,
-            hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 14),
-            border: widget.filled ? null : InputBorder.none,
-            enabledBorder: widget.filled ? null : InputBorder.none,
-            focusedBorder: widget.filled
-                ? const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(10)),
-                    borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-                  )
-                : InputBorder.none,
-            filled: widget.filled,
-            fillColor: widget.filled ? AppColors.surfaceMuted : null,
-            contentPadding: _contentPadding,
-          ),
-        ),
-      ],
+            _buildPlainTextField(textColor: Colors.transparent),
+          ],
+        );
+      },
     );
   }
 

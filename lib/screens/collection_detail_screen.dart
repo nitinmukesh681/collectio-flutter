@@ -74,7 +74,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (mounted) setState(() {});
+      if (mounted) {
+        if (_tabController.index != 1) {
+          _dismissDiscussionComposer();
+        }
+        setState(() {});
+      }
     });
     _itemsStream = _firestoreService.getCollectionItems(widget.collectionId);
     _setupCollectionStream();
@@ -227,6 +232,15 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     _replyFocusNode.dispose();
     super.dispose();
   }
+
+  void _dismissDiscussionComposer() {
+    _commentController.clear();
+    _commentFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  bool get _isCommentComposerActive =>
+      _commentFocusNode.hasFocus || _commentController.text.trim().isNotEmpty;
 
   Future<void> _loadContributors(CollectionEntity collection) async {
     final rawIds = collection.contributorIds;
@@ -1046,6 +1060,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       ),
       child: Scaffold(
         extendBody: true,
+        resizeToAvoidBottomInset: true,
         backgroundColor: AppColors.backgroundSurface,
         body: StreamBuilder<List<CollectionItemEntity>>(
         stream: _itemsStream,
@@ -1055,7 +1070,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           }
           final itemsCount = snapshot.hasData ? snapshot.data!.length : collection.itemCount;
 
-          return CustomScrollView(
+          final scrollView = CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             slivers: [
               SliverToBoxAdapter(
                 child: _buildHeroHeader(
@@ -1122,6 +1138,25 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
               const SliverToBoxAdapter(child: SizedBox(height: 110)),
             ],
+          );
+
+          if (_tabController.index != 1) {
+            return scrollView;
+          }
+
+          return GestureDetector(
+            onTap: () {
+              if (_replyingToCommentId != null) {
+                _cancelReply();
+              }
+              if (_isCommentComposerActive) {
+                _dismissDiscussionComposer();
+              } else {
+                FocusManager.instance.primaryFocus?.unfocus();
+              }
+            },
+            behavior: HitTestBehavior.translucent,
+            child: scrollView,
           );
         },
       ),
@@ -1844,7 +1879,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       focusNode: _commentFocusNode,
       firestoreService: _firestoreService,
       hintText: 'Add a comment... (@ to tag)',
-      dense: true,
+      minLines: 1,
+      maxLines: 6,
+      contentPadding: const EdgeInsets.symmetric(vertical: 8),
       surroundBuilder: (textField) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1854,71 +1891,53 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             border: Border.all(color: AppColors.divider),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 36,
-                height: 36,
-                child: ClipOval(
-                  child: FutureBuilder<UserEntity?>(
-                    future: _firestoreService.getUser(widget.currentUserId),
-                    builder: (context, snap) {
-                      final user = snap.data;
-                      final userName = user?.userName ?? '';
-                      if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty) {
-                        return CachedNetworkImage(
-                          imageUrl: user.avatarUrl!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => AvatarFallback(name: userName, size: 36),
-                        );
-                      }
-                      return AvatarFallback(name: userName, size: 36);
-                    },
-                  ),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: UserAvatar(
+                  name: _currentUserName.isNotEmpty ? _currentUserName : 'You',
+                  size: 36,
+                  userId: widget.currentUserId,
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: textField,
-                  ),
-                ),
-              ),
+              Expanded(child: textField),
               const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: () async {
-                  final text = _commentController.text.trim();
-                  if (text.isEmpty) return;
-                  _commentController.clear();
-                  _commentFocusNode.unfocus();
-                  final auth = await _firestoreService.getUser(widget.currentUserId);
-                  await _firestoreService.addComment(
-                    collectionId: widget.collectionId,
-                    userId: widget.currentUserId,
-                    userName: auth?.userName ?? '',
-                    userAvatarUrl: auth?.avatarUrl,
-                    text: text,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  minimumSize: const Size(0, 36),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-                child: Text(
-                  'Post',
-                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final text = _commentController.text.trim();
+                    if (text.isEmpty) return;
+                    _commentController.clear();
+                    _commentFocusNode.unfocus();
+                    final auth = await _firestoreService.getUser(widget.currentUserId);
+                    await _firestoreService.addComment(
+                      collectionId: widget.collectionId,
+                      userId: widget.currentUserId,
+                      userName: auth?.userName ?? '',
+                      userAvatarUrl: auth?.avatarUrl,
+                      text: text,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: Text(
+                    'Post',
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
                 ),
               ),
             ],
@@ -1934,7 +1953,35 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       builder: (context, snapshot) {
         final comments = snapshot.data ?? [];
         if (comments.isEmpty) {
-          return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+            child: Center(
+              child: Column(
+                children: [
+                  const Icon(Icons.chat_bubble_outline_rounded, size: 56, color: AppColors.textMuted),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No comments yet',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Start the conversation below',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
 
         final commentsById = {for (final c in comments) c.id: c};
@@ -1950,39 +1997,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
         return Container(
           color: AppColors.backgroundSurface,
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    'Community Discussion',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${comments.length} comments',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               for (final comment in topLevel)
                 _buildCommentThread(
                   comment,
@@ -2147,6 +2165,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       _replyController.clear();
     });
     _replyFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Future<void> _postReply(CommentEntity targetComment, Map<String, CommentEntity> commentsById) async {
@@ -2185,8 +2204,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         const SizedBox(height: 8),
         Row(
           children: [
-            GestureDetector(
-              onTap: _cancelReply,
+            TextButton(
+              onPressed: _cancelReply,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               child: Text(
                 'Cancel',
                 style: GoogleFonts.plusJakartaSans(
@@ -2268,19 +2292,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       children: [
         GestureDetector(
           onTap: () => _navigateToUserProfile(comment.userId),
-          child: SizedBox(
-            width: avatarSize,
-            height: avatarSize,
-            child: ClipOval(
-              child: (comment.userAvatarUrl != null && comment.userAvatarUrl!.isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: comment.userAvatarUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) =>
-                          AvatarFallback(name: comment.userName, size: avatarSize),
-                    )
-                  : AvatarFallback(name: comment.userName, size: avatarSize),
-            ),
+          child: UserAvatar(
+            name: comment.userName,
+            size: avatarSize,
+            avatarUrl: comment.userAvatarUrl,
+            userId: comment.userId,
           ),
         ),
         const SizedBox(width: 10),
