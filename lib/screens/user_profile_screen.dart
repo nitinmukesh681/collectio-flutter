@@ -5,7 +5,8 @@ import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_list_card.dart';
+import '../widgets/collection_grid_card.dart';
+import 'collection_detail_screen.dart';
 import '../widgets/profile_header_layout.dart';
 import 'followers_following_screen.dart';
 
@@ -268,14 +269,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       );
     }
 
-    return ListView.builder(
+    return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, _bottomNavClearance),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.72,
+      ),
       itemCount: _collections.length,
       itemBuilder: (context, index) {
-        return CollectionListCard(
-          collection: _collections[index],
-          currentUserId: widget.currentUserId,
-          profileStyle: true,
+        final collection = _collections[index];
+        return CollectionGridCard(
+          collection: collection,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CollectionDetailScreen(
+                  collectionId: collection.id,
+                  currentUserId: widget.currentUserId,
+                ),
+              ),
+            );
+          },
         );
       },
     );

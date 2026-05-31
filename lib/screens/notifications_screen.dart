@@ -276,7 +276,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final fromUsername = data['fromUsername'] as String? ?? 'Someone';
     final collectionTitle = data['collectionTitle'] as String?;
     final fromUserId = data['fromUserId'] as String?;
-    // ignore: unused_local_variable
     final collectionId = data['collectionId'] as String?;
 
     switch (type) {
@@ -437,11 +436,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         TextSpan(text: actionText),
                         if (subtitle != null) ...[
                           const TextSpan(text: '\n'),
-                          TextSpan(
-                            text: subtitle,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.baseline,
+                            baseline: TextBaseline.alphabetic,
+                            child: GestureDetector(
+                              onTap: collectionId != null && collectionId.isNotEmpty
+                                  ? () {
+                                      _markAsRead(id);
+                                      _navigateToCollection(collectionId);
+                                    }
+                                  : null,
+                              behavior: HitTestBehavior.opaque,
+                              child: Text(
+                                subtitle,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 14,
+                                  height: 1.45,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -479,7 +493,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  // ignore: unused_element
   void _navigateToCollection(String collectionId) {
     Navigator.push(
       context,
@@ -538,6 +551,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'save':
       case 'save_collection':
       case 'new_item':
+      case 'new_collection':
+      case 'comment':
+      case 'comment_reply':
       case 'collaborate':
       case 'collaboration_invite':
       case 'collaborator_added':

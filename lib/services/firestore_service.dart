@@ -102,40 +102,47 @@ class FirestoreService {
   }
 
   Future<void> toggleCommentLike(String commentId, String userId) async {
-    final ref = _commentsRef.doc(commentId);
-    final snap = await ref.get();
-    if (!snap.exists) return;
-    final data = snap.data() as Map<String, dynamic>;
-    final likedBy = List<String>.from(data['likedBy'] ?? []);
+    try {
+      final ref = _commentsRef.doc(commentId);
+      final snap = await ref.get();
+      if (!snap.exists) {
+        throw StateError('Comment not found');
+      }
+      final data = snap.data() as Map<String, dynamic>;
+      final likedBy = List<String>.from(data['likedBy'] ?? []);
 
-    if (likedBy.contains(userId)) {
-      await ref.update({
-        'likedBy': FieldValue.arrayRemove([userId]),
-        'likes': FieldValue.increment(-1),
-      });
-    } else {
-      await ref.update({
-        'likedBy': FieldValue.arrayUnion([userId]),
-        'likes': FieldValue.increment(1),
-      });
+      if (likedBy.contains(userId)) {
+        await ref.update({
+          'likedBy': FieldValue.arrayRemove([userId]),
+          'likes': FieldValue.increment(-1),
+        });
+      } else {
+        await ref.update({
+          'likedBy': FieldValue.arrayUnion([userId]),
+          'likes': FieldValue.increment(1),
+        });
 
-      // Notify comment author
-      try {
-        final commentUserId = data['userId'] as String? ?? '';
-        if (commentUserId.isNotEmpty && commentUserId != userId) {
-          final fromUsername = await _getUsername(userId);
-          await _firestore.collection('notifications').add({
-            'toUserId': commentUserId,
-            'type': 'COMMENT_LIKE',
-            'fromUserId': userId,
-            'fromUsername': fromUsername,
-            'collectionId': data['collectionId'] ?? '',
-            'message': data['text'] ?? '',
-            'isRead': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-      } catch (_) {}
+        // Notify comment author
+        try {
+          final commentUserId = data['userId'] as String? ?? '';
+          if (commentUserId.isNotEmpty && commentUserId != userId) {
+            final fromUsername = await _getUsername(userId);
+            await _firestore.collection('notifications').add({
+              'toUserId': commentUserId,
+              'type': 'COMMENT_LIKE',
+              'fromUserId': userId,
+              'fromUsername': fromUsername,
+              'collectionId': data['collectionId'] ?? '',
+              'message': data['text'] ?? '',
+              'isRead': false,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('FirestoreService: toggleCommentLike ERROR: $e');
+      rethrow;
     }
   }
 

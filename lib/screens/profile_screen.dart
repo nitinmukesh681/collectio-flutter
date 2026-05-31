@@ -6,7 +6,8 @@ import '../models/collection_entity.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/collection_list_card.dart';
+import '../widgets/collection_grid_card.dart';
+import '../screens/collection_detail_screen.dart';
 import '../widgets/profile_header_layout.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
@@ -323,14 +324,31 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     return RefreshIndicator(
       onRefresh: _refreshStreams,
       color: AppColors.primary,
-      child: ListView.builder(
+      child: GridView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, _bottomNavClearance),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.72,
+        ),
         itemCount: collections.length,
         itemBuilder: (context, index) {
-          return CollectionListCard(
-            collection: collections[index],
-            currentUserId: userId,
-            profileStyle: true,
+          final collection = collections[index];
+          return CollectionGridCard(
+            collection: collection,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CollectionDetailScreen(
+                    collectionId: collection.id,
+                    currentUserId: userId,
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
