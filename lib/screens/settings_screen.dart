@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
+import '../widgets/brand_logo.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 
@@ -21,149 +23,227 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final email = auth.firebaseUser?.email ?? '';
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
-        title: const Text('Settings'),
+        backgroundColor: AppColors.backgroundSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Settings',
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            fontSize: 18,
+          ),
+        ),
       ),
       body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          // Account Section
-          _buildSectionHeader('Account'),
-          ListTile(
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('Change Password'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showChangePasswordDialog(context),
+          Text(
+            'Manage your account, preferences, and privacy.',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.email_outlined),
-            title: const Text('Email'),
-            subtitle: Text(auth.firebaseUser?.email ?? ''),
-            trailing: auth.isEmailVerified
-                ? const Icon(Icons.verified, color: Colors.green)
-                : TextButton(
-                    onPressed: () => auth.resendEmailVerification(),
-                    child: const Text('Verify'),
-                  ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            label: 'ACCOUNT',
+            children: [
+              _SettingsNavRow(
+                icon: Icons.lock_outline_rounded,
+                title: 'Change Password',
+                subtitle: 'Send a reset link to your email',
+                onTap: () => _showChangePasswordDialog(context),
+              ),
+              _SettingsDivider(),
+              _SettingsInfoRow(
+                icon: Icons.mail_outline_rounded,
+                title: 'Email',
+                subtitle: email,
+                trailing: auth.isEmailVerified
+                    ? _VerifiedBadge()
+                    : TextButton(
+                        onPressed: () {
+                          auth.resendEmailVerification();
+                          SnackBarUtils.showSuccessSnackBar(
+                            context,
+                            'Verification email sent',
+                          );
+                        },
+                        child: Text(
+                          'Verify',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+              ),
+            ],
           ),
-          const Divider(),
-
-          // Appearance Section
-          _buildSectionHeader('Appearance'),
-          SwitchListTile(
-            secondary: const Icon(Icons.dark_mode_outlined),
-            title: const Text('Dark Mode'),
-            subtitle: const Text('Use dark theme'),
-            value: _darkMode,
-            onChanged: (value) {
-              setState(() => _darkMode = value);
-              // TODO: Implement theme switching
-            },
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            label: 'APPEARANCE',
+            children: [
+              _SettingsSwitchRow(
+                icon: Icons.dark_mode_outlined,
+                title: 'Dark Mode',
+                subtitle: 'Use dark theme',
+                value: _darkMode,
+                onChanged: (value) {
+                  setState(() => _darkMode = value);
+                  // TODO: Implement theme switching
+                },
+              ),
+            ],
           ),
-          const Divider(),
-
-          // Notifications Section
-          _buildSectionHeader('Notifications'),
-          SwitchListTile(
-            secondary: const Icon(Icons.notifications_outlined),
-            title: const Text('Push Notifications'),
-            subtitle: const Text('Receive push notifications'),
-            value: _notificationsEnabled,
-            onChanged: (value) {
-              setState(() => _notificationsEnabled = value);
-            },
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            label: 'NOTIFICATIONS',
+            children: [
+              _SettingsSwitchRow(
+                icon: Icons.notifications_outlined,
+                title: 'Push Notifications',
+                subtitle: 'Receive push notifications',
+                value: _notificationsEnabled,
+                onChanged: (value) => setState(() => _notificationsEnabled = value),
+              ),
+              _SettingsDivider(),
+              _SettingsSwitchRow(
+                icon: Icons.mail_outline_rounded,
+                title: 'Email Notifications',
+                subtitle: 'Receive email updates',
+                value: _emailNotifications,
+                onChanged: (value) => setState(() => _emailNotifications = value),
+              ),
+            ],
           ),
-          SwitchListTile(
-            secondary: const Icon(Icons.mail_outline),
-            title: const Text('Email Notifications'),
-            subtitle: const Text('Receive email updates'),
-            value: _emailNotifications,
-            onChanged: (value) {
-              setState(() => _emailNotifications = value);
-            },
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            label: 'PRIVACY',
+            children: [
+              _SettingsNavRow(
+                icon: Icons.shield_outlined,
+                title: 'Privacy Policy',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                  );
+                },
+              ),
+              _SettingsDivider(),
+              _SettingsNavRow(
+                icon: Icons.description_outlined,
+                title: 'Terms of Service',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
+                  );
+                },
+              ),
+            ],
           ),
-          const Divider(),
-
-          // Privacy Section
-          _buildSectionHeader('Privacy'),
-          ListTile(
-            leading: const Icon(Icons.shield_outlined),
-            title: const Text('Privacy Policy'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
-              );
-            },
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            label: 'ABOUT',
+            children: [
+              _SettingsInfoRow(
+                icon: Icons.info_outline_rounded,
+                title: 'App Version',
+                subtitle: '1.0.0',
+              ),
+              _SettingsDivider(),
+              _SettingsNavRow(
+                icon: Icons.star_outline_rounded,
+                title: 'Rate App',
+                subtitle: 'Enjoying finds? Leave a review',
+                onTap: () {
+                  // Open app store
+                },
+              ),
+              _SettingsDivider(),
+              _SettingsNavRow(
+                icon: Icons.share_outlined,
+                title: 'Share App',
+                subtitle: 'Invite friends to discover with you',
+                onTap: () {
+                  // Share app
+                },
+              ),
+            ],
           ),
-          ListTile(
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('Terms of Service'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
-              );
-            },
+          const SizedBox(height: 24),
+          Center(child: BrandLogo(fontSize: 20, iconSize: 6)),
+          const SizedBox(height: 24),
+          _buildSectionCard(
+            label: 'ACCOUNT ACTIONS',
+            children: [
+              _SettingsNavRow(
+                icon: Icons.logout_rounded,
+                title: 'Sign Out',
+                iconColor: const Color(0xFFD97706),
+                iconBackground: const Color(0xFFFFF7ED),
+                onTap: () => _showSignOutDialog(context, auth),
+              ),
+              _SettingsDivider(),
+              _SettingsNavRow(
+                icon: Icons.delete_forever_outlined,
+                title: 'Delete Account',
+                subtitle: 'Permanently remove your data',
+                iconColor: AppColors.heartSalmon,
+                iconBackground: const Color(0xFFFEF2F2),
+                titleColor: AppColors.heartSalmon,
+                onTap: () => _showDeleteAccountDialog(context),
+              ),
+            ],
           ),
-          const Divider(),
-
-          // About Section
-          _buildSectionHeader('About'),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('App Version'),
-            subtitle: const Text('1.0.0'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.star_outline),
-            title: const Text('Rate App'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // Open app store
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.share_outlined),
-            title: const Text('Share App'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // Share app
-            },
-          ),
-          const Divider(),
-
-          // Danger Zone
-          _buildSectionHeader('Danger Zone'),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.orange),
-            title: const Text('Sign Out'),
-            onTap: () => _showSignOutDialog(context, auth),
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text('Delete Account', style: TextStyle(color: Colors.red)),
-            onTap: () => _showDeleteAccountDialog(context),
-          ),
-          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: AppColors.primaryPurple,
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-        ),
+  Widget _buildSectionCard({
+    required String label,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          ...children,
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
@@ -172,8 +252,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Change Password'),
-        content: const Text('A password reset email will be sent to your registered email address.'),
+        title: Text(
+          'Change Password',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'A password reset email will be sent to your registered email address.',
+          style: GoogleFonts.plusJakartaSans(
+            color: AppColors.textSecondary,
+            height: 1.4,
+          ),
+        ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           OutlinedButton(
@@ -198,8 +287,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
+        title: Text(
+          'Sign Out',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Are you sure you want to sign out?',
+          style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary),
+        ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           OutlinedButton(
@@ -207,7 +302,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700]),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706)),
             onPressed: () {
               auth.signOut();
               Navigator.of(context).popUntil((route) => route.isFirst);
@@ -223,9 +318,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: const Text(
+        title: Text(
+          'Delete Account',
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            color: AppColors.heartSalmon,
+          ),
+        ),
+        content: Text(
           'This action cannot be undone. All your data will be permanently deleted.',
+          style: GoogleFonts.plusJakartaSans(
+            color: AppColors.textSecondary,
+            height: 1.4,
+          ),
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
@@ -234,12 +339,264 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.heartSalmon),
             onPressed: () {
               // TODO: Implement account deletion
               Navigator.pop(context);
             },
             child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      child: Divider(height: 1, color: AppColors.divider),
+    );
+  }
+}
+
+class _VerifiedBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.verified_rounded, size: 14, color: Colors.green.shade700),
+          const SizedBox(width: 4),
+          Text(
+            'Verified',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.green.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsIconBox extends StatelessWidget {
+  final IconData icon;
+  final Color? iconColor;
+  final Color? backgroundColor;
+
+  const _SettingsIconBox({
+    required this.icon,
+    this.iconColor,
+    this.backgroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        icon,
+        color: iconColor ?? AppColors.textMuted,
+        size: 20,
+      ),
+    );
+  }
+}
+
+class _SettingsNavRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+  final Color? iconColor;
+  final Color? iconBackground;
+  final Color? titleColor;
+
+  const _SettingsNavRow({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.onTap,
+    this.iconColor,
+    this.iconBackground,
+    this.titleColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              _SettingsIconBox(
+                icon: icon,
+                iconColor: iconColor,
+                backgroundColor: iconBackground,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: titleColor ?? AppColors.textPrimary,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textMuted,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+
+  const _SettingsInfoRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          _SettingsIconBox(icon: icon),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (trailing != null) trailing!,
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsSwitchRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SettingsSwitchRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          _SettingsIconBox(icon: icon),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.primary,
           ),
         ],
       ),
