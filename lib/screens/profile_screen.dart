@@ -185,10 +185,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  List<CollectionEntity> _mergedMyCollections() {
+  List<CollectionEntity> _mergedMyCollections(String userId) {
     final ownedIds = _myCollections.map((c) => c.id).toSet();
     final collaborated = _collaborationCollections
-        .where((c) => !c.isOpenForContribution && !ownedIds.contains(c.id))
+        .where((c) =>
+            !c.isOpenForContribution &&
+            !ownedIds.contains(c.id) &&
+            c.editors.contains(userId))
         .toList();
     return [..._myCollections, ...collaborated];
   }
@@ -206,7 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           );
         }
 
-        final mergedCollections = _mergedMyCollections();
+        final mergedCollections = _mergedMyCollections(auth.userId);
 
         final activeCollections = _tabController.index == 0
             ? mergedCollections

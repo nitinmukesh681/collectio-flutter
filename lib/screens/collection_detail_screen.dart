@@ -14,6 +14,7 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
 import '../widgets/avatar_fallback.dart';
+import '../widgets/user_avatar.dart';
 import '../widgets/mention_text_field.dart';
 import '../widgets/comment_mention_text.dart';
 import 'add_item_screen.dart';
@@ -350,7 +351,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
-              _buildUserAvatar(username, avatarUrl, size: 32),
+              _buildUserAvatar(
+                username,
+                avatarUrl,
+                size: 32,
+                userId: userId,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -1413,7 +1419,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildUserAvatar(collection.userName, collection.userAvatarUrl, size: 28),
+                  _buildUserAvatar(
+                    collection.userName,
+                    collection.userAvatarUrl,
+                    size: 28,
+                    userId: collection.userId,
+                  ),
                   const SizedBox(width: _heroInlineGap),
                   Flexible(
                     child: Text(
@@ -1917,21 +1928,25 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   Widget _buildDiscussionComments() {
-    return Container(
-      color: AppColors.backgroundSurface,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: StreamBuilder<List<CommentEntity>>(
-        stream: _firestoreService.getCommentsStream(widget.collectionId),
-        builder: (context, snapshot) {
-          final comments = snapshot.data ?? [];
-          final commentsById = {for (final c in comments) c.id: c};
-          final topLevel = comments.where((c) => c.parentCommentId == null).toList();
-          final repliesByParent = <String, List<CommentEntity>>{};
-          for (final c in comments.where((c) => c.parentCommentId != null)) {
-            repliesByParent.putIfAbsent(c.parentCommentId!, () => []).add(c);
-          }
+    return StreamBuilder<List<CommentEntity>>(
+      stream: _firestoreService.getCommentsStream(widget.collectionId),
+      builder: (context, snapshot) {
+        final comments = snapshot.data ?? [];
+        if (comments.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
-          return Column(
+        final commentsById = {for (final c in comments) c.id: c};
+        final topLevel = comments.where((c) => c.parentCommentId == null).toList();
+        final repliesByParent = <String, List<CommentEntity>>{};
+        for (final c in comments.where((c) => c.parentCommentId != null)) {
+          repliesByParent.putIfAbsent(c.parentCommentId!, () => []).add(c);
+        }
+
+        return Container(
+          color: AppColors.backgroundSurface,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -1963,34 +1978,23 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 ],
               ),
               const SizedBox(height: 16),
-              if (topLevel.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text(
-                      'No comments yet. Start the discussion!',
-                      style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
-                    ),
+              for (var i = 0; i < topLevel.length; i++) ...[
+                _buildCommentThread(
+                  topLevel[i],
+                  repliesByParent,
+                  commentsById: commentsById,
+                  rootId: topLevel[i].id,
+                ),
+                if (i < topLevel.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(color: AppColors.divider.withValues(alpha: 0.6), height: 1),
                   ),
-                )
-              else
-                for (var i = 0; i < topLevel.length; i++) ...[
-                  _buildCommentThread(
-                    topLevel[i],
-                    repliesByParent,
-                    commentsById: commentsById,
-                    rootId: topLevel[i].id,
-                  ),
-                  if (i < topLevel.length - 1)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Divider(color: AppColors.divider.withValues(alpha: 0.6), height: 1),
-                    ),
-                ],
+              ],
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -2404,39 +2408,17 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
-  Widget _buildUserAvatar(String name, String? avatarUrl, {double size = 28}) {
-    Widget placeholder = AvatarFallback(name: name, size: size);
-
-    if (avatarUrl == null || avatarUrl.trim().isEmpty) return placeholder;
-
-    final trimmed = avatarUrl.trim();
-
-    if (trimmed.startsWith('gs://')) {
-      return FutureBuilder<String>(
-        future: FirebaseStorage.instance.refFromURL(trimmed).getDownloadURL(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return _buildNetworkAvatar(snapshot.data!, size, name: name);
-          }
-          return placeholder;
-        },
-      );
-    }
-
-    return _buildNetworkAvatar(trimmed, size, name: name);
-  }
-
-  Widget _buildNetworkAvatar(String url, double size, {required String name}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(size),
-      child: CachedNetworkImage(
-        imageUrl: url,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        placeholder: (_, __) => AvatarFallback(name: name, size: size),
-        errorWidget: (_, __, ___) => AvatarFallback(name: name, size: size),
-      ),
+  Widget _buildUserAvatar(
+    String name,
+    String? avatarUrl, {
+    double size = 28,
+    String? userId,
+  }) {
+    return UserAvatar(
+      name: name,
+      size: size,
+      avatarUrl: avatarUrl,
+      userId: userId,
     );
   }
 

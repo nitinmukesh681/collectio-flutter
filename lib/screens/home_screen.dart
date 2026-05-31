@@ -228,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 265, // Reduced from 275 to further tighten the carousel and reduce bottom whitespace
+                        height: 265,
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           scrollDirection: Axis.horizontal,

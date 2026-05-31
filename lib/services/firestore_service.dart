@@ -137,6 +137,11 @@ class FirestoreService {
     required String text,
     String? parentCommentId,
   }) async {
+    var resolvedAvatarUrl = userAvatarUrl;
+    if (resolvedAvatarUrl == null || resolvedAvatarUrl.trim().isEmpty) {
+      resolvedAvatarUrl = await _getUserAvatarUrl(userId);
+    }
+
     Future<void> createNotification({
       required String toUserId,
       required String type,
@@ -148,7 +153,7 @@ class FirestoreService {
         'type': type,
         'fromUserId': userId,
         'fromUsername': UsernameUtils.normalize(userName),
-        'fromUserAvatarUrl': userAvatarUrl,
+        'fromUserAvatarUrl': resolvedAvatarUrl,
         'collectionId': collectionId,
         'collectionTitle': collectionTitle,
         'commentId': commentId,
@@ -211,6 +216,11 @@ class FirestoreService {
     required String text,
     required List<CommentMention> mentions,
   }) async {
+    var resolvedAvatarUrl = userAvatarUrl;
+    if (resolvedAvatarUrl == null || resolvedAvatarUrl.trim().isEmpty) {
+      resolvedAvatarUrl = await _getUserAvatarUrl(userId);
+    }
+
     for (final mention in mentions) {
       if (mention.userId.isEmpty || mention.userId == userId) continue;
 
@@ -219,7 +229,7 @@ class FirestoreService {
         'type': 'COMMENT_MENTION',
         'fromUserId': userId,
         'fromUsername': UsernameUtils.normalize(userName),
-        'fromUserAvatarUrl': userAvatarUrl,
+        'fromUserAvatarUrl': resolvedAvatarUrl,
         'collectionId': collectionId,
         'collectionTitle': collectionTitle,
         'commentId': commentId,
@@ -257,6 +267,7 @@ class FirestoreService {
           final collectionId = data['collectionId'] as String? ?? '';
           if (commentUserId.isNotEmpty && commentUserId != userId) {
             final fromUsername = await _getUsername(userId);
+            final fromUserAvatarUrl = await _getUserAvatarUrl(userId);
             String collectionTitle = '';
             if (collectionId.isNotEmpty) {
               final collectionSnap = await _collectionsRef.doc(collectionId).get();
@@ -270,6 +281,7 @@ class FirestoreService {
               'type': 'COMMENT_LIKE',
               'fromUserId': userId,
               'fromUsername': UsernameUtils.normalize(fromUsername),
+              if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
               'collectionId': collectionId,
               'collectionTitle': collectionTitle,
               'commentId': commentId,
@@ -309,6 +321,16 @@ class FirestoreService {
     return trimmed.isNotEmpty ? UsernameUtils.normalize(trimmed) : 'Someone';
   }
 
+  Future<String?> _getUserAvatarUrl(String userId) async {
+    if (userId.isEmpty) return null;
+    try {
+      final user = await getUser(userId);
+      final avatar = user?.avatarUrl?.trim();
+      if (avatar != null && avatar.isNotEmpty) return avatar;
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _createLikeNotification({
     required String toUserId,
     required String fromUserId,
@@ -339,6 +361,10 @@ class FirestoreService {
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     };
+    final fromUserAvatarUrl = await _getUserAvatarUrl(fromUserId);
+    if (fromUserAvatarUrl != null) {
+      payload['fromUserAvatarUrl'] = fromUserAvatarUrl;
+    }
     if (itemId.isNotEmpty) payload['itemId'] = itemId;
     if (itemTitle.isNotEmpty) payload['itemTitle'] = itemTitle;
 
@@ -510,11 +536,13 @@ class FirestoreService {
       });
 
       if (didFollow) {
+        final fromUserAvatarUrl = await _getUserAvatarUrl(currentUserId);
         await _firestore.collection('notifications').add({
           'type': 'NEW_FOLLOWER',
           'toUserId': targetUserId,
           'fromUserId': currentUserId,
           'fromUsername': UsernameUtils.normalize(currentUsername),
+          if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -1034,11 +1062,13 @@ class FirestoreService {
     });
 
     // Create notification for the invited user
+    final fromUserAvatarUrl = await _getUserAvatarUrl(currentUserId);
     await _firestore.collection('notifications').add({
       'type': 'COLLABORATION_INVITE',
       'toUserId': userId,
       'fromUserId': currentUserId,
       'fromUsername': UsernameUtils.normalize(currentUsername),
+      if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
       'collectionId': collectionId,
       'collectionTitle': collectionTitle,
       'role': normalizedRole,
@@ -1079,11 +1109,13 @@ class FirestoreService {
     });
 
     // Create notification
+    final fromUserAvatarUrl = await _getUserAvatarUrl(currentUserId);
     await _firestore.collection('notifications').add({
       'type': 'FOLLOW_REQUEST',
       'toUserId': targetUserId,
       'fromUserId': currentUserId,
       'fromUsername': UsernameUtils.normalize(currentUsername),
+      if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -1976,39 +2008,16 @@ class FirestoreService {
 
   Future<List<CollectionEntity>> getUserCollaborations(String userId) async {
     try {
-      final results = <String, CollectionEntity>{};
-
       final editorsSnap = await _collectionsRef
           .where('editors', arrayContains: userId)
           .get();
-      for (final doc in editorsSnap.docs) {
-        final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-        if (c.userId != userId && !c.isOpenForContribution) {
-          results[doc.id] = c;
-        }
-      }
 
-      final viewersSnap = await _collectionsRef
-          .where('viewers', arrayContains: userId)
-          .get();
-      for (final doc in viewersSnap.docs) {
-        final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-        if (c.userId != userId && !c.isOpenForContribution) {
-          results[doc.id] = c;
-        }
-      }
+      final list = editorsSnap.docs
+          .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .where((c) => c.userId != userId && !c.isOpenForContribution)
+          .toList();
 
-      final list = results.values.toList();
-      // Defensive sort to ensure proper chronological ordering
-      list.sort((a, b) {
-        final aTime = a.createdAt;
-        final bTime = b.createdAt;
-        // Handle null/missing timestamps by treating them as oldest
-        if (aTime == null && bTime == null) return 0;
-        if (aTime == null) return 1;  // a is older
-        if (bTime == null) return -1; // b is older
-        return bTime.compareTo(aTime); // descending (newest first)
-      });
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return list;
     } catch (e) {
       debugPrint('Error loading collaborations for user $userId: $e');
@@ -2016,47 +2025,20 @@ class FirestoreService {
     }
   }
 
-  /// Get user collaborations as a stream
+  /// Get user collaborations as a stream (editor access only; excludes view-only).
   Stream<List<CollectionEntity>> getUserCollaborationsStream(String userId) {
-    // We combine viewers and editors queries
-    final editorsStream = _collectionsRef
+    return _collectionsRef
         .where('editors', arrayContains: userId)
-        .snapshots();
-    
-    final viewersStream = _collectionsRef
-        .where('viewers', arrayContains: userId)
-        .snapshots();
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .where((c) => c.userId != userId && !c.isOpenForContribution)
+          .toList();
 
-    return Rx.combineLatest2<QuerySnapshot, QuerySnapshot, List<CollectionEntity>>(
-      editorsStream,
-      viewersStream,
-      (editors, viewers) {
-        final results = <String, CollectionEntity>{};
-        
-        for (final doc in editors.docs) {
-          final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-          if (c.userId != userId && !c.isOpenForContribution) results[doc.id] = c;
-        }
-        
-        for (final doc in viewers.docs) {
-          final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-          if (c.userId != userId && !c.isOpenForContribution) results[doc.id] = c;
-        }
-        
-        final list = results.values.toList();
-        // Defensive sort to ensure proper chronological ordering
-        list.sort((a, b) {
-          final aTime = a.createdAt;
-          final bTime = b.createdAt;
-          // Handle null/missing timestamps by treating them as oldest
-          if (aTime == null && bTime == null) return 0;
-          if (aTime == null) return 1;  // a is older
-          if (bTime == null) return -1; // b is older
-          return bTime.compareTo(aTime); // descending (newest first)
-        });
-        return list;
-      },
-    );
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
+    });
   }
 
   // ==================== NOTIFICATION OPERATIONS ====================

@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../services/firestore_service.dart';
 import '../utils/snackbar_utils.dart';
-import '../widgets/avatar_fallback.dart';
+import '../widgets/user_avatar.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -347,8 +346,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         actionText = '';
     }
 
-    final hasAvatar = data['fromUserAvatarUrl'] != null && (data['fromUserAvatarUrl'] as String).isNotEmpty;
-
     return InkWell(
       onTap: () => _handleNotificationTap(id, data),
       child: Container(
@@ -374,18 +371,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    ClipOval(
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: hasAvatar
-                            ? CachedNetworkImage(
-                                imageUrl: data['fromUserAvatarUrl'],
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => _avatarFallback(fromUsername),
-                              )
-                            : _avatarFallback(fromUsername),
-                      ),
+                    UserAvatar(
+                      name: fromUsername,
+                      size: 48,
+                      userId: fromUserId,
                     ),
                     Positioned(
                       bottom: -2,
@@ -482,10 +471,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
       ),
     );
-  }
-
-  Widget _avatarFallback(String name) {
-    return AvatarFallback(name: name, size: 48);
   }
 
   void _navigateToUser(String userId) {

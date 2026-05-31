@@ -85,7 +85,6 @@ class _CollaborationCardState extends State<CollaborationCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Image section — top half
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(AppColors.radiusCard)),
               child: SizedBox(
@@ -106,10 +105,8 @@ class _CollaborationCardState extends State<CollaborationCard> {
                 ),
               ),
             ),
-
-            // Content section — white bottom
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 2), // Tighter bottom padding
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -128,8 +125,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  const SizedBox(height: 10), // Reduced from 12
-                  // Contribute button
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
