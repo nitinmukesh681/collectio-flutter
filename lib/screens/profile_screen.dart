@@ -248,8 +248,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                             child: ProfileHeaderLayout(
                               user: user,
-                              showAvatarEditBadge: true,
-                              onAvatarTap: _navigateToEditProfile,
                               actionButton: _buildEditProfileButton(),
                               statsRow: ProfileHeaderLayout.buildStatsRow(
                                 collectionsCount: _formatCount(mergedCollections.length),
