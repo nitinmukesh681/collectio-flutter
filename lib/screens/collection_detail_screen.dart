@@ -1182,7 +1182,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   label,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.plusJakartaSans(
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
                     fontSize: 13,
                     letterSpacing: 0.6,
                     color: isSelected ? AppColors.primary : AppColors.textMuted,
@@ -1900,6 +1900,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   final text = _commentController.text.trim();
                   if (text.isEmpty) return;
                   _commentController.clear();
+                  _commentFocusNode.unfocus();
                   final auth = await _firestoreService.getUser(widget.currentUserId);
                   await _firestoreService.addComment(
                     collectionId: widget.collectionId,
@@ -1937,10 +1938,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         }
 
         final commentsById = {for (final c in comments) c.id: c};
-        final topLevel = comments.where((c) => c.parentCommentId == null).toList();
+        final topLevel = comments.where((c) => c.parentCommentId == null).toList()
+          ..sort(_compareCommentsByNewest);
         final repliesByParent = <String, List<CommentEntity>>{};
         for (final c in comments.where((c) => c.parentCommentId != null)) {
           repliesByParent.putIfAbsent(c.parentCommentId!, () => []).add(c);
+        }
+        for (final replies in repliesByParent.values) {
+          replies.sort(_compareCommentsByNewest);
         }
 
         return Container(
@@ -1978,24 +1983,22 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 ],
               ),
               const SizedBox(height: 16),
-              for (var i = 0; i < topLevel.length; i++) ...[
+              for (final comment in topLevel)
                 _buildCommentThread(
-                  topLevel[i],
+                  comment,
                   repliesByParent,
                   commentsById: commentsById,
-                  rootId: topLevel[i].id,
+                  rootId: comment.id,
                 ),
-                if (i < topLevel.length - 1)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Divider(color: AppColors.divider.withValues(alpha: 0.6), height: 1),
-                  ),
-              ],
             ],
           ),
         );
       },
     );
+  }
+
+  int _compareCommentsByNewest(CommentEntity a, CommentEntity b) {
+    return b.createdAt.compareTo(a.createdAt);
   }
 
   int _countThreadReplies(String commentId, Map<String, List<CommentEntity>> repliesByParent, int depth) {
@@ -2078,7 +2081,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final isThreadExpanded = _expandedThreadIds.contains(rootId);
     final replyCount = depth == 0 ? _countThreadReplies(comment.id, repliesByParent, 0) : 0;
 
-    return Column(
+    final threadContent = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildCommentTile(
@@ -2103,6 +2106,22 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           _buildHideRepliesButton(rootId: rootId, count: replyCount),
       ],
     );
+
+    if (depth == 0) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: threadContent,
+      );
+    }
+
+    return threadContent;
   }
 
   void _startReplyTo(CommentEntity comment, String rootId, Map<String, CommentEntity> commentsById) {
@@ -2136,6 +2155,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final text = _replyController.text.trim();
     if (text.isEmpty) return;
     _replyController.clear();
+    _replyFocusNode.unfocus();
     final auth = await _firestoreService.getUser(widget.currentUserId);
     await _firestoreService.addComment(
       collectionId: widget.collectionId,
@@ -2367,10 +2387,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
 
     if (depth == 0) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: content,
-      );
+      return content;
     }
 
     return Padding(
