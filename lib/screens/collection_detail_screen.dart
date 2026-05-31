@@ -1195,7 +1195,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   static const double _heroHorizontalPadding = 16;
-  static const double _heroCoverAspectRatio = 0.72;
+  static const double _heroNavContentGap = 20;
   static const double _heroInlineGap = 8;
   static const double _heroStatGap = 36;
   static const double _heroTagHorizontalPadding = 12;
@@ -1288,15 +1288,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     const navButtonSize = 38.0;
     const topPadding = 8.0;
     const bottomPadding = 20.0;
-    final coverHeight = mediaQuery.size.width / _heroCoverAspectRatio;
 
-    return SizedBox(
-      width: double.infinity,
-      height: coverHeight,
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        fit: StackFit.expand,
-        children: [
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
           Positioned.fill(
             child: IgnorePointer(
               child: _buildCoverBackground(
@@ -1310,6 +1305,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             child: IgnorePointer(child: _buildHeroScrim()),
           ),
           Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(height: topInset),
@@ -1377,7 +1373,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   ],
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: _heroNavContentGap),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   _heroHorizontalPadding,
@@ -1400,7 +1396,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             ],
           ),
         ],
-      ),
     );
   }
 
