@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
@@ -50,7 +51,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
   late TabController _tabController;
   final TextEditingController _commentController = TextEditingController();
-  String? _replyingTo; // comment ID being replied to
+  final TextEditingController _replyController = TextEditingController();
+  final FocusNode _replyFocusNode = FocusNode();
+  String? _replyingToCommentId; // specific comment whose Reply was tapped
+  final Set<String> _expandedThreadIds = {};
+  static const int _maxCommentDepth = 2;
+  final Map<String, ({bool isLiked, int likes})> _optimisticCommentLikes = {};
 
   StreamSubscription<CollectionEntity?>? _collectionSubscription;
   Stream<List<CollectionItemEntity>>? _itemsStream;
@@ -203,6 +209,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     _collectionSubscription?.cancel();
     _tabController.dispose();
     _commentController.dispose();
+    _replyController.dispose();
+    _replyFocusNode.dispose();
     super.dispose();
   }
 
@@ -528,6 +536,42 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           saveCount: wasSaved ? _collection!.saveCount + 1 : _collection!.saveCount - 1,
         );
       });
+    }
+  }
+
+  bool _commentIsLiked(CommentEntity comment) {
+    final override = _optimisticCommentLikes[comment.id];
+    if (override != null) return override.isLiked;
+    return comment.likedBy.contains(widget.currentUserId);
+  }
+
+  int _commentLikeCount(CommentEntity comment) {
+    final override = _optimisticCommentLikes[comment.id];
+    if (override != null) return override.likes;
+    return comment.likes;
+  }
+
+  Future<void> _toggleCommentLike(CommentEntity comment) async {
+    final wasLiked = _commentIsLiked(comment);
+    final currentLikes = _commentLikeCount(comment);
+
+    setState(() {
+      _optimisticCommentLikes[comment.id] = (
+        isLiked: !wasLiked,
+        likes: wasLiked ? currentLikes - 1 : currentLikes + 1,
+      );
+    });
+
+    try {
+      await _firestoreService.toggleCommentLike(comment.id, widget.currentUserId);
+      if (mounted) {
+        setState(() => _optimisticCommentLikes.remove(comment.id));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _optimisticCommentLikes.remove(comment.id));
+        SnackBarUtils.showErrorSnackBar(context, 'Could not update like');
+      }
     }
   }
 
@@ -912,10 +956,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final gradientColors = AppColors.categoryGradients[collection.category.name] ?? 
         AppColors.categoryGradients['other']!;
 
-    return Scaffold(
-      extendBody: true,
-      backgroundColor: AppColors.backgroundSurface,
-      body: StreamBuilder<List<CollectionItemEntity>>(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        extendBody: true,
+        backgroundColor: AppColors.backgroundSurface,
+        body: StreamBuilder<List<CollectionItemEntity>>(
         stream: _itemsStream,
         builder: (context, snapshot) {
           if (snapshot.hasData) {
@@ -925,271 +975,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
           return CustomScrollView(
             slivers: [
-              // Hero header with cover image
-              SliverAppBar(
-                expandedHeight: hasCoverImage ? 280 : kToolbarHeight,
-                pinned: true,
-                stretch: true,
-                backgroundColor: hasCoverImage ? Colors.transparent : Colors.white,
-                leadingWidth: 56,
-                leading: Center(
-                  child: _buildCircleButton(
-                    icon: Icons.keyboard_arrow_left,
-                    onTap: () => Navigator.pop(context),
-                  ),
-                ),
-                actions: [
-                  _buildCircleButton(
-                    icon: Icons.search_rounded,
-                    onTap: () {
-                      setState(() {
-                        _showSearch = !_showSearch;
-                        if (!_showSearch) _searchQuery = '';
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    padding: EdgeInsets.zero,
-                    offset: const Offset(0, 40),
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
-                    ),
-                    itemBuilder: (context) => [
-                      if (_isOwner)
-                        const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
-                      if (_isOwner)
-                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      if (!_isOwner)
-                        const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
-                    ],
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _navigateToEditCollection();
-                      } else if (value == 'delete') {
-                        _showDeleteDialog();
-                      } else if (value == 'add_to_new') {
-                        _duplicateCollection();
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                flexibleSpace: hasCoverImage
-                    ? FlexibleSpaceBar(
-                        background: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          FutureBuilder<String?>(
-                            future: () async {
-                              final raw = collection.coverImageUrl;
-                              if (raw == null || raw.isEmpty) return null;
-                              if (raw.startsWith('gs://')) {
-                                try {
-                                  return await FirebaseStorage.instance.refFromURL(raw).getDownloadURL();
-                                } catch (_) {
-                                  return null;
-                                }
-                              }
-                              return raw;
-                            }(),
-                            builder: (context, snap) {
-                              final url = snap.data;
-                              if (url == null || url.isEmpty) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: gradientColors,
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                  ),
-                                );
-                              }
-                              return CachedNetworkImage(
-                                imageUrl: url,
-                                fit: BoxFit.cover,
-                                errorWidget: (context, u, error) {
-                                  return Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: gradientColors,
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                          ],
-                        ),
-                      )
-                    : null,
-              ),
-
-              // Collection info — matching mockup
               SliverToBoxAdapter(
-                child: Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Updated time
-                      Text(
-                        'UPDATED ${_getTimeAgo(collection.lastActivityAt).toUpperCase()}',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
-                      ),
-                      const SizedBox(height: 10),
-
-                      // User Info
-                      GestureDetector(
-                        onTap: () => _navigateToUserProfile(collection.userId),
-                        child: Row(
-                          children: [
-                            _buildUserAvatar(collection.userName, collection.userAvatarUrl, size: 28),
-                            const SizedBox(width: 8),
-                            Text(
-                              '@${collection.userName}',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Large title — Changed from w800 to w900
-                      Text(
-                        collection.title,
-                        style: GoogleFonts.plusJakartaSans(fontSize: 34, fontWeight: FontWeight.w900, color: AppColors.textPrimary, height: 1.1, letterSpacing: -0.8),
-                      ),
-
-                      // Description
-                      if (collection.description != null && collection.description!.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          collection.description!,
-                          style: AppTextStyles.collectionDescription(
-                            fontSize: 15,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-
-                      // Tags and open badge
-                      if (collection.tags.isNotEmpty || collection.isOpenForContribution) ...[
-                        const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 8, runSpacing: 8,
-                          children: [
-                            ...collection.tags.map((tag) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(8)),
-                              child: Text('#${tag.toLowerCase()}', style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
-                            )),
-                            if (collection.isOpenForContribution)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
-                                child: Text('OPEN', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-                              ),
-                          ],
-                        ),
-                      ],
-
-                      // Stats
-                      const SizedBox(height: 20),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4.0),
-                        child: Row(
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('$itemsCount', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                                Text('ITEMS', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
-                              ],
-                            ),
-                            Container(width: 1, height: 36, color: AppColors.divider, margin: const EdgeInsets.symmetric(horizontal: 20)),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${collection.likes}', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                                Text('LIKES', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Action buttons — Save, Share, +, Heart
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          // Save
-                          ElevatedButton.icon(
-                            onPressed: _toggleSave,
-                            icon: Icon(collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 16),
-                            label: Text(collection.isSaved ? 'Saved' : 'Save', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 18),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Share
-                          OutlinedButton.icon(
-                            onPressed: _shareCollection,
-                            icon: const Icon(Icons.share_outlined, size: 16),
-                            label: Text('Share', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.textSecondary,
-                              side: const BorderSide(color: AppColors.divider),
-                              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Add item
-                          if (_isOwner || collection.isOpenForContribution) ...[
-                            GestureDetector(
-                              onTap: () => _navigateToAddItem(),
-                              child: Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
-                                child: const Icon(Icons.add_rounded, size: 20, color: AppColors.secondary),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          // Like (heart on the right)
-                          GestureDetector(
-                            onTap: _toggleLike,
-                            child: Icon(
-                              collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                              size: 24, color: collection.isLiked ? AppColors.heartSalmon : AppColors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                  ),
+                child: _buildHeroHeader(
+                  collection: collection,
+                  itemsCount: itemsCount,
+                  gradientColors: gradientColors,
+                  hasCoverImage: hasCoverImage,
                 ),
               ),
 
@@ -1197,18 +988,26 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
               SliverToBoxAdapter(
                 child: Container(
                   color: Colors.white,
-                  padding: const EdgeInsets.only(top: 8),
                   child: TabBar(
                     controller: _tabController,
                     onTap: (_) => setState(() {}),
                     isScrollable: true,
                     tabAlignment: TabAlignment.start,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                    unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                    indicatorWeight: 3,
+                    labelPadding: EdgeInsets.fromLTRB(
+                      _heroHorizontalPadding + _heroContentShift,
+                      6,
+                      _heroHorizontalPadding,
+                      4,
+                    ),
+                    labelColor: AppColors.primary,
+                    unselectedLabelColor: AppColors.textMuted,
+                    labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14),
+                    unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 14),
+                    indicatorColor: AppColors.primary,
+                    indicatorWeight: 1.5,
                     indicatorSize: TabBarIndicatorSize.label,
                     dividerColor: AppColors.divider,
+                    dividerHeight: 1,
                     tabs: const [Tab(text: 'Items'), Tab(text: 'Discussion')],
                   ),
                 ),
@@ -1254,13 +1053,551 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
               // Discussion tab
               if (_tabController.index == 1) ...[
-                SliverToBoxAdapter(child: _buildDiscussionTab()),
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _DiscussionComposerHeaderDelegate(
+                    child: _buildDiscussionComposer(),
+                  ),
+                ),
+                SliverToBoxAdapter(child: _buildDiscussionComments()),
               ],
 
               const SliverToBoxAdapter(child: SizedBox(height: 110)),
             ],
           );
         },
+      ),
+      ),
+    );
+  }
+
+  static const double _heroHorizontalPadding = 20;
+  static const double _heroContentShift = -3;
+  static const double _heroNavContentGap = 20;
+  static const double _heroStatsBandInset = 12;
+  static const double _heroDividerInset = 2;
+  static const Color _heroMutedButtonFill = Color(0xCC444444);
+  static const Color _heroMutedButtonBorder = Color(0x40FFFFFF);
+
+  static const TextStyle _heroTitleStyle = TextStyle(
+    fontSize: 32,
+    fontWeight: FontWeight.w900,
+    color: Colors.white,
+    height: 1.15,
+    letterSpacing: -0.2,
+  );
+
+  static const TextStyle _heroDescriptionStyle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    color: Colors.white,
+    height: 1.5,
+    letterSpacing: 0,
+  );
+
+  static const TextHeightBehavior _heroTextHeightBehavior = TextHeightBehavior(
+    applyHeightToFirstAscent: true,
+    applyHeightToLastDescent: false,
+  );
+
+  Widget _buildHeroScrim() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.30),
+            Colors.black.withValues(alpha: 0.44),
+            Colors.black.withValues(alpha: 0.58),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroHeader({
+    required CollectionEntity collection,
+    required int itemsCount,
+    required List<Color> gradientColors,
+    required bool hasCoverImage,
+  }) {
+    final mediaQuery = MediaQuery.of(context);
+    final topInset = mediaQuery.viewPadding.top > mediaQuery.padding.top
+        ? mediaQuery.viewPadding.top
+        : mediaQuery.padding.top;
+    const navButtonSize = 38.0;
+    const topPadding = 8.0;
+    const bottomPadding = 20.0;
+
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: _buildCoverBackground(
+              coverImageUrl: collection.coverImageUrl,
+              gradientColors: gradientColors,
+              hasCoverImage: hasCoverImage,
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(child: _buildHeroScrim()),
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: topInset),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                _heroHorizontalPadding,
+                topPadding,
+                _heroHorizontalPadding,
+                0,
+              ),
+              child: Row(
+                children: [
+                  Transform.translate(
+                    offset: const Offset(_heroContentShift, 0),
+                    child: _buildCircleButton(
+                      icon: Icons.keyboard_arrow_left,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                  ),
+                  const Spacer(),
+                  _buildCircleButton(
+                    icon: Icons.search_rounded,
+                    onTap: () {
+                      setState(() {
+                        _showSearch = !_showSearch;
+                        if (!_showSearch) _searchQuery = '';
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    offset: const Offset(0, 44),
+                    child: Container(
+                      width: navButtonSize,
+                      height: navButtonSize,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                    ),
+                    itemBuilder: (context) => [
+                      if (_isOwner)
+                        const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
+                      if (_isOwner)
+                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      if (!_isOwner)
+                        const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _navigateToEditCollection();
+                      } else if (value == 'delete') {
+                        _showDeleteDialog();
+                      } else if (value == 'add_to_new') {
+                        _duplicateCollection();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: _heroNavContentGap),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                _heroHorizontalPadding,
+                0,
+                _heroHorizontalPadding,
+                bottomPadding,
+              ),
+              child: Transform.translate(
+                offset: const Offset(_heroContentShift, 0),
+                child: _buildHeroContent(
+                  collection: collection,
+                  itemsCount: itemsCount,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeroContent({
+    required CollectionEntity collection,
+    required int itemsCount,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () => _navigateToUserProfile(collection.userId),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildUserAvatar(collection.userName, collection.userAvatarUrl, size: 28),
+              const SizedBox(width: 8),
+              Text(
+                '@${collection.userName}',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        DefaultTextStyle(
+          style: GoogleFonts.plusJakartaSans(textStyle: _heroTitleStyle),
+          textHeightBehavior: _heroTextHeightBehavior,
+          child: Text(collection.title),
+        ),
+        if (collection.description != null && collection.description!.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          DefaultTextStyle(
+            style: GoogleFonts.plusJakartaSans(
+              textStyle: _heroDescriptionStyle,
+            ).copyWith(color: Colors.white.withValues(alpha: 0.95)),
+            textHeightBehavior: _heroTextHeightBehavior,
+            child: Text(collection.description!),
+          ),
+        ],
+        if (collection.tags.isNotEmpty || collection.isOpenForContribution) ...[
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.start,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ...collection.tags.map(_buildHeroTag),
+              if (collection.isOpenForContribution)
+                _buildHeroPill(
+                  label: 'OPEN',
+                  backgroundColor: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 24),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: _heroDividerInset),
+              child: _buildHeroDivider(),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(_heroStatsBandInset, 16, 0, 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeroStat('$itemsCount', 'ITEMS'),
+                  const SizedBox(width: 36),
+                  _buildHeroStat('${collection.likes}', 'LIKES'),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: _heroDividerInset),
+              child: _buildHeroDivider(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.start,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _buildHeroPrimaryButton(
+              icon: collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+              label: collection.isSaved ? 'Saved' : 'Save',
+              onTap: _toggleSave,
+            ),
+            _buildHeroSecondaryButton(
+              icon: Icons.share_outlined,
+              label: 'Share',
+              onTap: _shareCollection,
+            ),
+            _buildHeroIconButton(
+              icon: collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              onTap: _toggleLike,
+              backgroundColor: collection.isLiked ? AppColors.heartSalmon : null,
+            ),
+            if (_isOwner || collection.isOpenForContribution)
+              _buildHeroIconButton(
+                icon: Icons.add_rounded,
+                onTap: () => _navigateToAddItem(),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCoverBackground({
+    required String? coverImageUrl,
+    required List<Color> gradientColors,
+    required bool hasCoverImage,
+  }) {
+    if (!hasCoverImage) {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<String?>(
+      future: () async {
+        final raw = coverImageUrl;
+        if (raw == null || raw.isEmpty) return null;
+        if (raw.startsWith('gs://')) {
+          try {
+            return await FirebaseStorage.instance.refFromURL(raw).getDownloadURL();
+          } catch (_) {
+            return null;
+          }
+        }
+        return raw;
+      }(),
+      builder: (context, snap) {
+        final url = snap.data;
+        if (url == null || url.isEmpty) {
+          return Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: gradientColors,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          );
+        }
+        return CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          errorWidget: (context, u, error) {
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: gradientColors,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHeroDivider() {
+    return SizedBox(
+      width: double.infinity,
+      height: 1,
+      child: ColoredBox(color: Colors.white.withValues(alpha: 0.18)),
+    );
+  }
+
+  String _formatHeroTagLabel(String tag) {
+    final trimmed = tag.trim().toLowerCase();
+    if (trimmed.startsWith('#')) return trimmed;
+    return '#$trimmed';
+  }
+
+  Widget _buildHeroPill({
+    required String label,
+    required Color backgroundColor,
+    Color textColor = Colors.white,
+    FontWeight fontWeight = FontWeight.w600,
+  }) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            color: textColor,
+            fontSize: 12,
+            fontWeight: fontWeight,
+            height: 1.0,
+            letterSpacing: 0,
+          ),
+          textHeightBehavior: _heroTextHeightBehavior,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroTag(String tag) {
+    return _buildHeroPill(
+      label: _formatHeroTagLabel(tag),
+      backgroundColor: Colors.black.withValues(alpha: 0.42),
+    );
+  }
+
+  Widget _buildHeroStat(String value, String label) {
+    const statValueStyle = TextStyle(
+      fontSize: 22,
+      fontWeight: FontWeight.w800,
+      color: Colors.white,
+      height: 1,
+      letterSpacing: 0,
+    );
+    const statLabelStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+      height: 1,
+      letterSpacing: 0.6,
+    );
+
+    return DefaultTextStyle(
+      style: GoogleFonts.plusJakartaSans(),
+      textHeightBehavior: _heroTextHeightBehavior,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.plusJakartaSans(textStyle: statValueStyle),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              textStyle: statLabelStyle,
+            ).copyWith(color: Colors.white.withValues(alpha: 0.65)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroPrimaryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroSecondaryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: _heroMutedButtonFill,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _heroMutedButtonBorder),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroIconButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    Color? backgroundColor,
+    Color iconColor = Colors.white,
+  }) {
+    final bg = backgroundColor ?? _heroMutedButtonFill;
+    final showBorder = backgroundColor == null;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+            border: showBorder
+                ? Border.all(color: _heroMutedButtonBorder)
+                : null,
+          ),
+          child: Icon(icon, size: 20, color: iconColor),
+        ),
       ),
     );
   }
@@ -1288,7 +1625,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
@@ -1337,220 +1674,567 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
-  Widget _buildDiscussionTab() {
+  Widget _buildDiscussionComposer() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Comment input — wrapped in a white container with styling
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.divider),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Current user avatar
-                    SizedBox(
-                      width: 36, height: 36,
-                      child: ClipOval(
-                        child: FutureBuilder<UserEntity?>(
-                          future: _firestoreService.getUser(widget.currentUserId),
-                          builder: (context, snap) {
-                            final user = snap.data;
-                            final userName = user?.userName ?? '';
-                            if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty) {
-                              return CachedNetworkImage(
-                                imageUrl: user.avatarUrl!,
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) =>
-                                    AvatarFallback(name: userName, size: 36),
-                              );
-                            }
-                            return AvatarFallback(name: userName, size: 36);
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        style: GoogleFonts.plusJakartaSans(fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: _replyingTo != null ? 'Write a reply...' : 'Add a comment...',
-                          hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
-                          border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none,
-                          filled: false, contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () async {
-                        final text = _commentController.text.trim();
-                        if (text.isEmpty) return;
-                        _commentController.clear();
-                        final auth = await _firestoreService.getUser(widget.currentUserId);
-                        await _firestoreService.addComment(
-                          collectionId: widget.collectionId, userId: widget.currentUserId,
-                          userName: auth?.userName ?? '', userAvatarUrl: auth?.avatarUrl,
-                          text: text, parentCommentId: _replyingTo,
-                        );
-                        if (mounted) setState(() => _replyingTo = null);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      child: Text('Post', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13)),
-                    ),
-                  ],
-                ),
-                if (_replyingTo != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2, left: 46, bottom: 6),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _replyingTo = null),
-                      child: Text('Cancel reply', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-              ],
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: ClipOval(
+              child: FutureBuilder<UserEntity?>(
+                future: _firestoreService.getUser(widget.currentUserId),
+                builder: (context, snap) {
+                  final user = snap.data;
+                  final userName = user?.userName ?? '';
+                  if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty) {
+                    return CachedNetworkImage(
+                      imageUrl: user.avatarUrl!,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => AvatarFallback(name: userName, size: 36),
+                    );
+                  }
+                  return AvatarFallback(name: userName, size: 36);
+                },
+              ),
             ),
           ),
-          const SizedBox(height: 24),
-          // Comments list
-          StreamBuilder<List<CommentEntity>>(
-            stream: _firestoreService.getCommentsStream(widget.collectionId),
-            builder: (context, snapshot) {
-              final comments = snapshot.data ?? [];
-              final topLevel = comments.where((c) => c.parentCommentId == null).toList();
-              final replies = <String, List<CommentEntity>>{};
-              for (final c in comments.where((c) => c.parentCommentId != null)) {
-                replies.putIfAbsent(c.parentCommentId!, () => []).add(c);
-              }
-
-              if (topLevel.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(child: Text('No comments yet. Start the discussion!', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted))),
-                );
-              }
-
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      Text('Community Discussion', style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(8)),
-                        child: Text('${comments.length} comments', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  for (final comment in topLevel) ...[
-                    _buildCommentTile(comment),
-                    if (replies.containsKey(comment.id))
-                      Padding(
-                        padding: const EdgeInsets.only(left: 32),
-                        child: Column(children: replies[comment.id]!.map((r) => _buildCommentTile(r)).toList()),
-                      ),
-                    const SizedBox(height: 12),
-                  ],
-                ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: _commentController,
+              style: GoogleFonts.plusJakartaSans(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Add a comment...',
+                hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () async {
+              final text = _commentController.text.trim();
+              if (text.isEmpty) return;
+              _commentController.clear();
+              final auth = await _firestoreService.getUser(widget.currentUserId);
+              await _firestoreService.addComment(
+                collectionId: widget.collectionId,
+                userId: widget.currentUserId,
+                userName: auth?.userName ?? '',
+                userAvatarUrl: auth?.avatarUrl,
+                text: text,
               );
             },
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            child: Text(
+              'Post',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCommentTile(CommentEntity comment) {
-    final isLiked = comment.likedBy.contains(widget.currentUserId);
+  Widget _buildDiscussionComments() {
+    return Container(
+      color: AppColors.backgroundSurface,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: StreamBuilder<List<CommentEntity>>(
+        stream: _firestoreService.getCommentsStream(widget.collectionId),
+        builder: (context, snapshot) {
+          final comments = snapshot.data ?? [];
+          final commentsById = {for (final c in comments) c.id: c};
+          final topLevel = comments.where((c) => c.parentCommentId == null).toList();
+          final repliesByParent = <String, List<CommentEntity>>{};
+          for (final c in comments.where((c) => c.parentCommentId != null)) {
+            repliesByParent.putIfAbsent(c.parentCommentId!, () => []).add(c);
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Community Discussion',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${comments.length} comments',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (topLevel.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Text(
+                      'No comments yet. Start the discussion!',
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+                    ),
+                  ),
+                )
+              else
+                for (var i = 0; i < topLevel.length; i++) ...[
+                  _buildCommentThread(
+                    topLevel[i],
+                    repliesByParent,
+                    commentsById: commentsById,
+                    rootId: topLevel[i].id,
+                  ),
+                  if (i < topLevel.length - 1)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(color: AppColors.divider.withValues(alpha: 0.6), height: 1),
+                    ),
+                ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  int _countThreadReplies(String commentId, Map<String, List<CommentEntity>> repliesByParent, int depth) {
+    if (depth >= _maxCommentDepth) return 0;
+    final children = repliesByParent[commentId] ?? const [];
+    var count = children.length;
+    for (final child in children) {
+      count += _countThreadReplies(child.id, repliesByParent, depth + 1);
+    }
+    return count;
+  }
+
+  int _commentDepth(CommentEntity comment, Map<String, CommentEntity> commentsById) {
+    var depth = 0;
+    var parentId = comment.parentCommentId;
+    while (parentId != null) {
+      depth++;
+      parentId = commentsById[parentId]?.parentCommentId;
+    }
+    return depth;
+  }
+
+  Widget _buildViewRepliesButton({required String rootId, required int count}) {
+    return GestureDetector(
+      onTap: () => setState(() => _expandedThreadIds.add(rootId)),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 48, top: 2, bottom: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.subdirectory_arrow_right_rounded, size: 16, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              'View $count ${count == 1 ? 'reply' : 'replies'}',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHideRepliesButton({required String rootId, required int count}) {
+    return GestureDetector(
+      onTap: () => setState(() => _expandedThreadIds.remove(rootId)),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 48, top: 2, bottom: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.expand_less_rounded, size: 18, color: AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text(
+              'Hide $count ${count == 1 ? 'reply' : 'replies'}',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentThread(
+    CommentEntity comment,
+    Map<String, List<CommentEntity>> repliesByParent, {
+    required Map<String, CommentEntity> commentsById,
+    required String rootId,
+    int depth = 0,
+  }) {
+    final children = repliesByParent[comment.id] ?? const [];
+    final hasReplies = children.isNotEmpty && depth < _maxCommentDepth;
+    final isThreadExpanded = _expandedThreadIds.contains(rootId);
+    final replyCount = depth == 0 ? _countThreadReplies(comment.id, repliesByParent, 0) : 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildCommentTile(
+          comment,
+          depth: depth,
+          rootId: rootId,
+          commentsById: commentsById,
+          canReply: depth < _maxCommentDepth,
+        ),
+        if (depth == 0 && hasReplies && !isThreadExpanded)
+          _buildViewRepliesButton(rootId: rootId, count: replyCount),
+        if (isThreadExpanded && hasReplies)
+          for (final child in children)
+            _buildCommentThread(
+              child,
+              repliesByParent,
+              commentsById: commentsById,
+              rootId: rootId,
+              depth: depth + 1,
+            ),
+        if (depth == 0 && hasReplies && isThreadExpanded)
+          _buildHideRepliesButton(rootId: rootId, count: replyCount),
+      ],
+    );
+  }
+
+  void _startReplyTo(CommentEntity comment, String rootId, Map<String, CommentEntity> commentsById) {
+    if (_commentDepth(comment, commentsById) >= _maxCommentDepth) return;
+
+    if (_replyingToCommentId == comment.id) {
+      _replyFocusNode.requestFocus();
+      return;
+    }
+    _replyController.clear();
+    setState(() {
+      _expandedThreadIds.add(rootId);
+      _replyingToCommentId = comment.id;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _replyFocusNode.requestFocus();
+    });
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToCommentId = null;
+      _replyController.clear();
+    });
+    _replyFocusNode.unfocus();
+  }
+
+  Future<void> _postReply(CommentEntity targetComment, Map<String, CommentEntity> commentsById) async {
+    if (_commentDepth(targetComment, commentsById) >= _maxCommentDepth) return;
+
+    final text = _replyController.text.trim();
+    if (text.isEmpty) return;
+    _replyController.clear();
+    final auth = await _firestoreService.getUser(widget.currentUserId);
+    await _firestoreService.addComment(
+      collectionId: widget.collectionId,
+      userId: widget.currentUserId,
+      userName: auth?.userName ?? '',
+      userAvatarUrl: auth?.avatarUrl,
+      text: text,
+      parentCommentId: targetComment.id,
+    );
+    if (mounted) _cancelReply();
+  }
+
+  Widget _buildReplyComposer(CommentEntity targetComment, Map<String, CommentEntity> commentsById) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        TextField(
+          controller: _replyController,
+          focusNode: _replyFocusNode,
+          style: GoogleFonts.plusJakartaSans(fontSize: 14),
+          minLines: 1,
+          maxLines: 4,
+          decoration: InputDecoration(
+            hintText: 'Reply to ${targetComment.userName}...',
+            hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 14),
+            filled: true,
+            fillColor: AppColors.surfaceMuted,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            GestureDetector(
+              onTap: _cancelReply,
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () => _postReply(targetComment, commentsById),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: Text(
+                'Reply',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCommentActionButton({
+    required VoidCallback onTap,
+    required Widget child,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildCommentOwnerBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        'Owner',
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          height: 1.1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentTile(
+    CommentEntity comment, {
+    required int depth,
+    required String rootId,
+    required Map<String, CommentEntity> commentsById,
+    required bool canReply,
+  }) {
+    final isLiked = _commentIsLiked(comment);
+    final likeCount = _commentLikeCount(comment);
     final isOwn = comment.userId == widget.currentUserId;
+    final isCollectionOwner = comment.userId == _collection?.userId;
+    final isReplying = _replyingToCommentId == comment.id;
+    final avatarSize = depth == 0 ? 36.0 : 30.0;
+
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: avatarSize,
+          height: avatarSize,
+          child: ClipOval(
+            child: (comment.userAvatarUrl != null && comment.userAvatarUrl!.isNotEmpty)
+                ? CachedNetworkImage(
+                    imageUrl: comment.userAvatarUrl!,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) =>
+                        AvatarFallback(name: comment.userName, size: avatarSize),
+                  )
+                : AvatarFallback(name: comment.userName, size: avatarSize),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      comment.userName,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w700,
+                        fontSize: depth == 0 ? 14 : 13,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  if (isCollectionOwner) ...[
+                    const SizedBox(width: 6),
+                    _buildCommentOwnerBadge(),
+                  ],
+                  const SizedBox(width: 8),
+                  Text(
+                    _getTimeAgo(comment.createdAt),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                comment.text,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: depth == 0 ? 15 : 14,
+                  color: AppColors.textPrimary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  _buildCommentActionButton(
+                    onTap: () => _toggleCommentLike(comment),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(
+                        isLiked ? Icons.thumb_up_rounded : Icons.thumb_up_alt_outlined,
+                        size: 15,
+                        color: isLiked ? AppColors.primary : AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$likeCount',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: isLiked ? AppColors.primary : AppColors.textSecondary,
+                        ),
+                      ),
+                    ]),
+                  ),
+                  if (canReply) ...[
+                    const SizedBox(width: 12),
+                    _buildCommentActionButton(
+                      onTap: () => _startReplyTo(comment, rootId, commentsById),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          size: 14,
+                          color: isReplying ? AppColors.primary : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Reply',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            color: isReplying ? AppColors.primary : AppColors.textSecondary,
+                            fontWeight: isReplying ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ],
+                ],
+              ),
+              if (isReplying) _buildReplyComposer(comment, commentsById),
+            ],
+          ),
+        ),
+        if (isOwn)
+          GestureDetector(
+            onTap: () => _firestoreService.deleteComment(comment.id),
+            child: const Padding(
+              padding: EdgeInsets.only(left: 8, top: 2),
+              child: Icon(Icons.close, size: 14, color: AppColors.textMuted),
+            ),
+          ),
+      ],
+    );
+
+    if (depth == 0) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: content,
+      );
+    }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.only(left: 22.0 * depth, top: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar
-          SizedBox(
-            width: 40, height: 40,
-            child: ClipOval(
-              child: (comment.userAvatarUrl != null && comment.userAvatarUrl!.isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: comment.userAvatarUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) =>
-                          AvatarFallback(name: comment.userName, size: 40),
-                    )
-                  : AvatarFallback(name: comment.userName, size: 40),
+          Container(
+            width: 2,
+            height: 48,
+            margin: const EdgeInsets.only(right: 12, top: 4),
+            decoration: BoxDecoration(
+              color: AppColors.divider,
+              borderRadius: BorderRadius.circular(1),
             ),
           ),
-          const SizedBox(width: 12),
-          // Content
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(comment.userName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
-                    const Spacer(),
-                    Text(_getTimeAgo(comment.createdAt), style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textMuted)),
-                    if (isOwn) ...[
-                      const SizedBox(width: 6),
-                      GestureDetector(onTap: () => _firestoreService.deleteComment(comment.id),
-                        child: const Icon(Icons.close, size: 14, color: AppColors.textMuted)),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(comment.text, style: GoogleFonts.plusJakartaSans(fontSize: 15, color: AppColors.textPrimary, height: 1.5)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _firestoreService.toggleCommentLike(comment.id, widget.currentUserId),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.thumb_up_alt_outlined, size: 15, color: isLiked ? AppColors.primary : AppColors.textMuted),
-                        const SizedBox(width: 4),
-                        Text('${comment.likes}', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: isLiked ? AppColors.primary : AppColors.textSecondary)),
-                      ]),
-                    ),
-                    const SizedBox(width: 18),
-                    GestureDetector(
-                      onTap: () => setState(() => _replyingTo = comment.parentCommentId == null ? comment.id : comment.parentCommentId),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.subdirectory_arrow_right_rounded, size: 15, color: AppColors.textMuted),
-                        const SizedBox(width: 4),
-                        Text('Reply', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary)),
-                      ]),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: content),
         ],
       ),
     );
@@ -1563,7 +2247,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         width: 38,
         height: 38,
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.3),
+          color: Colors.black.withValues(alpha: 0.45),
           shape: BoxShape.circle,
         ),
         child: Icon(icon, color: Colors.white, size: 22),
@@ -1622,6 +2306,72 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
+  static const double _itemTitleFontSize = 17;
+  static const double _itemTitleLineHeight = _itemTitleFontSize * 1.25;
+  static const double _itemRankSize = 28;
+  static const double _itemSingleLineTitleYOffset = -1.5;
+
+  TextStyle get _itemTitleStyle => GoogleFonts.plusJakartaSans(
+        fontSize: _itemTitleFontSize,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textPrimary,
+        height: 1.25,
+      );
+
+  double _itemTitleTrailingWidth(CollectionItemEntity item) {
+    var width = 24.0;
+    if (item.rating > 0) {
+      width += 14;
+      final displayScore = item.rating;
+      final label = (displayScore % 1 == 0)
+          ? displayScore.toStringAsFixed(0)
+          : displayScore.toStringAsFixed(1);
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      width += painter.width + 16 + 12;
+    }
+    return width;
+  }
+
+  bool _isSingleLineItemTitle(BuildContext context, String title, double maxWidth) {
+    if (title.isEmpty || maxWidth <= 0) return true;
+    final painter = TextPainter(
+      text: TextSpan(text: title, style: _itemTitleStyle),
+      textDirection: Directionality.of(context),
+    )..layout(maxWidth: maxWidth);
+    return painter.computeLineMetrics().length <= 1;
+  }
+
+  Widget _buildItemMenuButton({
+    required CollectionItemEntity item,
+    required bool canEdit,
+  }) {
+    return PopupMenuButton<String>(
+      padding: EdgeInsets.zero,
+      offset: const Offset(0, 24),
+      constraints: const BoxConstraints.tightFor(width: 24, height: 18),
+      child: const Icon(Icons.more_horiz, size: 18, color: AppColors.textMuted),
+      onSelected: (value) {
+        if (value == 'edit') _navigateToAddItem(item);
+        else if (value == 'delete') _deleteItem(item);
+        else if (value == 'add_to_collections') _showAddToCollectionsDialog(item);
+      },
+      itemBuilder: (context) => [
+        if (canEdit) PopupMenuItem(value: 'edit', child: Text('Edit', style: GoogleFonts.plusJakartaSans())),
+        if (_isOwner) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
+        PopupMenuItem(value: 'add_to_collections', child: Text('Add to collection', style: GoogleFonts.plusJakartaSans())),
+      ],
+    );
+  }
+
   Widget _buildItemCard(CollectionItemEntity item, int rank) {
     final canEdit = _isOwner || item.userId == widget.currentUserId;
     final hasImages = item.imageUrls.isNotEmpty;
@@ -1633,82 +2383,122 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(AppColors.radiusCard),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: AppColors.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Rank + Title + Rating + Menu
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Rank container sized to match text line height (22px for 18px font at 1.2 height)
-              Container(
-                width: 18, height: 22,
-                alignment: Alignment.center,
-                child: Container(
-                  width: 18, height: 18,
-                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: Text('$rank', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 9, color: Colors.white)),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(item.title,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.2)),
-              ),
-              if (item.rating > 0) ...[
-                const SizedBox(width: 6),
-                _buildRatingBadge(
-                  item.rating,
-                  fontSize: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  borderRadius: 6,
-                  iconGap: 4,
-                ),
-              ],
-              // Menu button sized to match text line height
-              Container(
-                width: 28, height: 22,
-                alignment: Alignment.centerRight,
-                child: PopupMenuButton<String>(
-                padding: EdgeInsets.zero,
-                iconSize: 18,
-                icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textMuted),
-                onSelected: (value) {
-                  if (value == 'edit') _navigateToAddItem(item);
-                  else if (value == 'delete') _deleteItem(item);
-                  else if (value == 'add_to_collections') _showAddToCollectionsDialog(item);
-                },
-                itemBuilder: (context) => [
-                  if (canEdit) PopupMenuItem(value: 'edit', child: Text('Edit', style: GoogleFonts.plusJakartaSans())),
-                  if (_isOwner) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
-                  PopupMenuItem(value: 'add_to_collections', child: Text('Add to collection', style: GoogleFonts.plusJakartaSans())),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final trailingWidth = _itemTitleTrailingWidth(item);
+              final titleMaxWidth =
+                  constraints.maxWidth - _itemRankSize - 12 - trailingWidth;
+              final isSingleLineTitle =
+                  _isSingleLineItemTitle(context, item.title, titleMaxWidth);
+
+              Widget buildTitleRow() {
+                return Row(
+                  crossAxisAlignment: isSingleLineTitle
+                      ? CrossAxisAlignment.center
+                      : CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Transform.translate(
+                        offset: isSingleLineTitle
+                            ? const Offset(0, _itemSingleLineTitleYOffset)
+                            : Offset.zero,
+                        child: Text(
+                          item.title,
+                          style: _itemTitleStyle,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      height: isSingleLineTitle
+                          ? _itemRankSize
+                          : _itemTitleLineHeight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (item.rating > 0) ...[
+                            const SizedBox(width: 6),
+                            _buildRatingBadge(
+                              item.rating,
+                              fontSize: 12,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              borderRadius: 6,
+                              iconGap: 4,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          _buildItemMenuButton(item: item, canEdit: canEdit),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: _itemRankSize,
+                    height: _itemRankSize,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEEF2FF),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$rank',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isSingleLineTitle)
+                          SizedBox(
+                            height: _itemRankSize,
+                            child: buildTitleRow(),
+                          )
+                        else
+                          buildTitleRow(),
+                        if (item.description != null &&
+                            item.description!.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            item.description!,
+                            style: AppTextStyles.collectionDescription(
+                              fontSize: 14,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
-              ),
-              ),
-            ],
+              );
+            },
           ),
 
-          // Description
-          if (item.description != null && item.description!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(left: 28),
-              child: Text(
-                item.description!,
-                style: AppTextStyles.collectionDescription(fontSize: 14, height: 1.5),
-              ),
-            ),
-          ],
-
-          // Images below description
           if (hasImages) ...[
             const SizedBox(height: 14),
             Padding(
-              padding: const EdgeInsets.only(left: 28, right: 4),
+              padding: const EdgeInsets.only(left: 40, right: 4),
               child: SizedBox(
                 height: 160,
                 child: ListView.separated(
@@ -1717,19 +2507,22 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (context, i) => ClipRRect(
                     borderRadius: BorderRadius.circular(AppColors.radiusSmall),
-                    child: CachedNetworkImage(imageUrl: item.imageUrls[i], fit: BoxFit.cover, width: 200,
-                      errorWidget: (_, __, ___) => Container(width: 200, color: AppColors.surfaceMuted)),
+                    child: CachedNetworkImage(
+                      imageUrl: item.imageUrls[i],
+                      fit: BoxFit.cover,
+                      width: 200,
+                      errorWidget: (_, __, ___) => Container(width: 200, color: AppColors.surfaceMuted),
+                    ),
                   ),
                 ),
               ),
             ),
           ],
 
-          // Website + Location links
           if (hasWebsite || hasLocation) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Padding(
-              padding: const EdgeInsets.only(left: 28),
+              padding: const EdgeInsets.only(left: 40),
               child: Row(
                 children: [
                   if (hasWebsite)
@@ -1741,17 +2534,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
                       },
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Transform.translate(
-                          offset: const Offset(-2, 0),
-                          child: Icon(Icons.language_rounded, size: 16, color: AppColors.primary),
-                        ),
-                        const SizedBox(width: 1),
+                        Icon(Icons.language_rounded, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 4),
                         Text('Website', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
                       ]),
                     ),
-                  if (hasWebsite && hasLocation) ...[
-                    const SizedBox(width: 24),
-                  ],
+                  if (hasWebsite && hasLocation) const SizedBox(width: 24),
                   if (hasLocation)
                     GestureDetector(
                       onTap: () {
@@ -1759,11 +2547,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
                       },
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Transform.translate(
-                          offset: const Offset(-2, 0),
-                          child: Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
-                        ),
-                        const SizedBox(width: 1),
+                        Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 4),
                         Text('Location', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
                       ]),
                     ),
@@ -1817,6 +2602,33 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       return 'now';
     }
   }
+}
+
+class _DiscussionComposerHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _DiscussionComposerHeaderDelegate({required this.child});
+
+  final Widget child;
+  static const double _headerHeight = 84;
+
+  @override
+  double get minExtent => _headerHeight;
+
+  @override
+  double get maxExtent => _headerHeight;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return ColoredBox(
+      color: AppColors.backgroundSurface,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _DiscussionComposerHeaderDelegate oldDelegate) => true;
 }
 
 class _CoverBottomCurveClipper extends CustomClipper<Path> {
