@@ -33,10 +33,42 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   StreamSubscription<List<CollectionEntity>>? _collectionsSubscription;
 
   UserEntity? _user;
+  List<CollectionEntity> _allCollections = [];
   List<CollectionEntity> _collections = [];
   bool _isLoading = true;
   bool _isFollowing = false;
   bool _isFollowLoading = false;
+
+  bool _canViewCollectionOnProfile(CollectionEntity collection) {
+    if (collection.isPublic || collection.visibility == CollectionVisibility.public) {
+      return true;
+    }
+
+    if (collection.visibility == CollectionVisibility.followers && _isFollowing) {
+      return true;
+    }
+
+    final uid = widget.currentUserId;
+    if (collection.editors.contains(uid) || collection.viewers.contains(uid)) {
+      return true;
+    }
+
+    for (final collab in collection.collaborators) {
+      final id = collab['userId'];
+      if (id is String && id == uid) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  void _applyVisibleCollections() {
+    final isOwnProfile = widget.userId == widget.currentUserId;
+    _collections = isOwnProfile
+        ? _allCollections
+        : _allCollections.where(_canViewCollectionOnProfile).toList(growable: false);
+  }
 
   @override
   void initState() {
@@ -54,6 +86,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             _user = user;
             _isFollowing = user.followers.contains(widget.currentUserId);
             _isLoading = false;
+            _applyVisibleCollections();
           });
         }
       },
@@ -66,12 +99,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _collectionsSubscription = _firestoreService.getUserCollectionsStream(widget.userId).listen(
       (collections) {
         if (mounted) {
-          final isOwnProfile = widget.userId == widget.currentUserId;
-          final visibleCollections = isOwnProfile
-              ? collections
-              : collections.where((c) => c.isPublic).toList(growable: false);
           setState(() {
-            _collections = visibleCollections;
+            _allCollections = collections;
+            _applyVisibleCollections();
           });
         }
       },
@@ -110,6 +140,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           );
         }
       }
+
+      _applyVisibleCollections();
     });
 
     try {
@@ -135,6 +167,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               followerCount: _user!.followerCount - 1,
             );
           }
+          _applyVisibleCollections();
         });
       }
       debugPrint('Error toggling follow: $e');
