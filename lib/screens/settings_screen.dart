@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
-import '../widgets/brand_logo.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 
@@ -185,8 +184,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          Center(child: BrandLogo(fontSize: 20, iconSize: 6)),
           const SizedBox(height: 24),
           _buildSectionCard(
             label: 'ACCOUNT ACTIONS',

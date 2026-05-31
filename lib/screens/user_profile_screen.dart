@@ -209,92 +209,107 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final followButton = _buildFollowButton(isOwnProfile);
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              pinned: true,
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: ProfileHeaderLayout(
-                  user: user,
-                  actionButton: followButton,
-                  statsRow: ProfileHeaderLayout.buildStatsRow(
-                    collectionsCount: _formatCount(_collections.length),
-                    followersCount: _formatCount(user.followers.length),
-                    followingCount: _formatCount(user.following.length),
-                    onFollowersTap: () => _navigateToFollowers(showFollowers: true),
-                    onFollowingTap: () => _navigateToFollowers(showFollowers: false),
-                  ),
+      backgroundColor: AppColors.backgroundSurface,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: ColoredBox(
+              color: Colors.white,
+              child: SafeArea(
+                bottom: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: ProfileHeaderLayout(
+                        user: user,
+                        actionButton: followButton,
+                        statsRow: ProfileHeaderLayout.buildStatsRow(
+                          collectionsCount: _formatCount(_collections.length),
+                          followersCount: _formatCount(user.followers.length),
+                          followingCount: _formatCount(user.following.length),
+                          onFollowersTap: () => _navigateToFollowers(showFollowers: true),
+                          onFollowingTap: () => _navigateToFollowers(showFollowers: false),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ];
-        },
-        body: ColoredBox(
-          color: AppColors.backgroundSurface,
-          child: _buildCollectionsList(),
-        ),
+          ),
+          ..._buildCollectionsSlivers(),
+          const SliverToBoxAdapter(child: SizedBox(height: _bottomNavClearance)),
+        ],
       ),
     );
   }
 
-  Widget _buildCollectionsList() {
+  List<Widget> _buildCollectionsSlivers() {
     if (_collections.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.collections_outlined, size: 64, color: AppColors.textMuted),
-            const SizedBox(height: 16),
-            Text(
-              'No collections yet',
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.collections_outlined, size: 64, color: AppColors.textMuted),
+                const SizedBox(height: 16),
+                Text(
+                  'No collections yet',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      );
+      ];
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, _bottomNavClearance),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.72,
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.72,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final collection = _collections[index];
+              return CollectionGridCard(
+                collection: collection,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CollectionDetailScreen(
+                        collectionId: collection.id,
+                        currentUserId: widget.currentUserId,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            childCount: _collections.length,
+          ),
+        ),
       ),
-      itemCount: _collections.length,
-      itemBuilder: (context, index) {
-        final collection = _collections[index];
-        return CollectionGridCard(
-          collection: collection,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => CollectionDetailScreen(
-                  collectionId: collection.id,
-                  currentUserId: widget.currentUserId,
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+    ];
   }
 }

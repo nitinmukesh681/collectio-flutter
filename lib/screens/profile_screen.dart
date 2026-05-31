@@ -21,7 +21,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
-  static const double _headerExpandedHeight = 420;
   static const double _bottomNavClearance = 120;
 
   late TabController _tabController;
@@ -42,6 +41,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -206,34 +208,42 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
         final mergedCollections = _mergedMyCollections();
 
+        final activeCollections = _tabController.index == 0
+            ? mergedCollections
+            : _savedCollections;
+        final emptyMessage = _tabController.index == 0
+            ? 'You haven\'t created any collections yet'
+            : 'No saved collections';
+
         return Scaffold(
-          backgroundColor: Colors.white,
-          body: NestedScrollView(
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                SliverAppBar(
-                  expandedHeight: _headerExpandedHeight,
-                  pinned: true,
-                  backgroundColor: Colors.white,
-                  surfaceTintColor: Colors.transparent,
-                  elevation: 0,
-                  automaticallyImplyLeading: false,
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined, color: AppColors.collectionDescription),
-                      onPressed: _navigateToSettings,
-                    ),
-                  ],
-                  flexibleSpace: FlexibleSpaceBar(
-                    background: SafeArea(
+          backgroundColor: AppColors.backgroundSurface,
+          body: RefreshIndicator(
+            onRefresh: _refreshStreams,
+            color: AppColors.primary,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: ColoredBox(
+                    color: Colors.white,
+                    child: SafeArea(
                       bottom: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const SizedBox(height: 20),
-                            ProfileHeaderLayout(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.settings_outlined,
+                                color: AppColors.collectionDescription,
+                              ),
+                              onPressed: _navigateToSettings,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                            child: ProfileHeaderLayout(
                               user: user,
                               showAvatarEditBadge: true,
                               onAvatarTap: _navigateToEditProfile,
@@ -242,20 +252,22 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 collectionsCount: _formatCount(mergedCollections.length),
                                 followersCount: _formatCount(user.followers.length),
                                 followingCount: _formatCount(user.following.length),
-                                onFollowersTap: () => _navigateToFollowers(auth.userId, showFollowers: true),
-                                onFollowingTap: () => _navigateToFollowers(auth.userId, showFollowers: false),
+                                onFollowersTap: () =>
+                                    _navigateToFollowers(auth.userId, showFollowers: true),
+                                onFollowingTap: () =>
+                                    _navigateToFollowers(auth.userId, showFollowers: false),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _TabBarDelegate(
-                    TabBar(
+                SliverToBoxAdapter(
+                  child: ColoredBox(
+                    color: Colors.white,
+                    child: TabBar(
                       controller: _tabController,
                       labelColor: AppColors.primary,
                       unselectedLabelColor: AppColors.textSecondary,
@@ -280,25 +292,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     ),
                   ),
                 ),
-              ];
-            },
-            body: ColoredBox(
-              color: AppColors.backgroundSurface,
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildCollectionsList(
-                    mergedCollections,
-                    auth.userId,
-                    isEmpty: 'You haven\'t created any collections yet',
-                  ),
-                  _buildCollectionsList(
-                    _savedCollections,
-                    auth.userId,
-                    isEmpty: 'No saved collections',
-                  ),
-                ],
-              ),
+                ..._buildCollectionsSlivers(
+                  activeCollections,
+                  auth.userId,
+                  isEmpty: emptyMessage,
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: _bottomNavClearance)),
+              ],
             ),
           ),
         );
@@ -306,84 +306,76 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildCollectionsList(List<CollectionEntity> collections, String userId, {required String isEmpty}) {
+  List<Widget> _buildCollectionsSlivers(
+    List<CollectionEntity> collections,
+    String userId, {
+    required String isEmpty,
+  }) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
     }
 
     if (collections.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.collections_outlined, size: 64, color: AppColors.textMuted),
-            const SizedBox(height: 16),
-            Text(
-              isEmpty,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _refreshStreams,
-      color: AppColors.primary,
-      child: GridView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, _bottomNavClearance),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.72,
-        ),
-        itemCount: collections.length,
-        itemBuilder: (context, index) {
-          final collection = collections[index];
-          return CollectionGridCard(
-            collection: collection,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CollectionDetailScreen(
-                    collectionId: collection.id,
-                    currentUserId: userId,
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.collections_outlined, size: 64, color: AppColors.textMuted),
+                const SizedBox(height: 16),
+                Text(
+                  isEmpty,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.72,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final collection = collections[index];
+              return CollectionGridCard(
+                collection: collection,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CollectionDetailScreen(
+                        collectionId: collection.id,
+                        currentUserId: userId,
+                      ),
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
+            childCount: collections.length,
+          ),
+        ),
       ),
-    );
+    ];
   }
-}
-
-class _TabBarDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar tabBar;
-
-  _TabBarDelegate(this.tabBar);
-
-  @override
-  double get minExtent => tabBar.preferredSize.height;
-
-  @override
-  double get maxExtent => tabBar.preferredSize.height;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return ColoredBox(
-      color: Colors.white,
-      child: tabBar,
-    );
-  }
-
-  @override
-  bool shouldRebuild(_TabBarDelegate oldDelegate) => false;
 }
