@@ -574,6 +574,16 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
           );
         }
 
+        if (!auth.initialAuthChecked) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+            ),
+          );
+        }
+
         if (auth.isLoading) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }

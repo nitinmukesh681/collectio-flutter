@@ -10,7 +10,6 @@ import '../models/collection_entity.dart';
 import '../models/user_entity.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/collection_card.dart';
-import '../widgets/collection_grid_card.dart';
 import '../widgets/collection_list_card.dart';
 import '../widgets/avatar_fallback.dart';
 import 'collection_detail_screen.dart';
@@ -116,6 +115,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
           _trendingCollections = trending;
           _topLikedCollections = topLiked;
         });
+        // Backfill missing search keywords in the background for active public collections
+        _firestoreService.backfillKeywordsIfEmpty(allCollections);
       }
     } catch (e) {
       debugPrint('Error loading explore data: $e');

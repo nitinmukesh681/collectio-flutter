@@ -3,7 +3,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import '../providers/auth_provider.dart';
-import '../models/user_entity.dart';
 import '../services/firestore_service.dart';
 import '../utils/snackbar_utils.dart';
 import '../theme/app_theme.dart';
@@ -64,10 +63,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       // Upload new avatar if selected
       if (_newAvatar != null) {
-        avatarUrl = await _firestoreService.uploadImage(
+        final rawUrl = await _firestoreService.uploadImage(
           _newAvatar!,
           'avatars/${auth.userId}.jpg',
         );
+        if (rawUrl != null) {
+          final separator = rawUrl.contains('?') ? '&' : '?';
+          avatarUrl = '$rawUrl${separator}t=${DateTime.now().millisecondsSinceEpoch}';
+        }
       }
 
       // Update user profile

@@ -2101,18 +2101,21 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: avatarSize,
-          height: avatarSize,
-          child: ClipOval(
-            child: (comment.userAvatarUrl != null && comment.userAvatarUrl!.isNotEmpty)
-                ? CachedNetworkImage(
-                    imageUrl: comment.userAvatarUrl!,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) =>
-                        AvatarFallback(name: comment.userName, size: avatarSize),
-                  )
-                : AvatarFallback(name: comment.userName, size: avatarSize),
+        GestureDetector(
+          onTap: () => _navigateToUserProfile(comment.userId),
+          child: SizedBox(
+            width: avatarSize,
+            height: avatarSize,
+            child: ClipOval(
+              child: (comment.userAvatarUrl != null && comment.userAvatarUrl!.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: comment.userAvatarUrl!,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) =>
+                          AvatarFallback(name: comment.userName, size: avatarSize),
+                    )
+                  : AvatarFallback(name: comment.userName, size: avatarSize),
+            ),
           ),
         ),
         const SizedBox(width: 10),
@@ -2123,13 +2126,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
               Row(
                 children: [
                   Flexible(
-                    child: Text(
-                      comment.userName,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w700,
-                        fontSize: depth == 0 ? 14 : 13,
-                        color: AppColors.textPrimary,
+                    child: GestureDetector(
+                      onTap: () => _navigateToUserProfile(comment.userId),
+                      child: Text(
+                        comment.userName,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          fontSize: depth == 0 ? 14 : 13,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
                   ),
@@ -2357,7 +2363,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     return PopupMenuButton<String>(
       padding: EdgeInsets.zero,
       offset: const Offset(0, 24),
-      constraints: const BoxConstraints.tightFor(width: 24, height: 18),
       child: const Icon(Icons.more_horiz, size: 18, color: AppColors.textMuted),
       onSelected: (value) {
         if (value == 'edit') _navigateToAddItem(item);
@@ -2366,7 +2371,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       },
       itemBuilder: (context) => [
         if (canEdit) PopupMenuItem(value: 'edit', child: Text('Edit', style: GoogleFonts.plusJakartaSans())),
-        if (_isOwner) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
+        if (canEdit) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
         PopupMenuItem(value: 'add_to_collections', child: Text('Add to collection', style: GoogleFonts.plusJakartaSans())),
       ],
     );
