@@ -333,6 +333,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         icon = Icons.thumb_up_rounded;
         iconColor = AppColors.primary;
         actionText = ' liked your comment';
+        subtitle = collectionTitle;
+        break;
+      case 'comment_mention':
+        icon = Icons.alternate_email_rounded;
+        iconColor = AppColors.primary;
+        actionText = ' mentioned you in a comment';
+        subtitle = collectionTitle;
         break;
       default:
         icon = Icons.notifications_rounded;
@@ -554,6 +561,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'new_collection':
       case 'comment':
       case 'comment_reply':
+      case 'comment_like':
+      case 'comment_mention':
       case 'collaborate':
       case 'collaboration_invite':
       case 'collaborator_added':

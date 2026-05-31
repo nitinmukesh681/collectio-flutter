@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'category_type.dart';
+import '../utils/search_tokenizer.dart';
+import '../utils/username_utils.dart';
 
 /// Visibility options for collections
 enum CollectionVisibility { public, private, followers }
@@ -62,48 +64,25 @@ class CollectionEntity {
     String? description,
     required List<String> tags,
     required String category,
+    String? categoryDisplayName,
     required String userName,
+    List<SearchIndexedItem> items = const [],
   }) {
-    final Set<String> keywords = {};
-
-    void addWordPrefixes(String word) {
-      final cleaned = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-      if (cleaned.isEmpty) return;
-      
-      for (int i = 1; i <= cleaned.length; i++) {
-        keywords.add(cleaned.substring(0, i));
-      }
-    }
-
-    void processText(String text) {
-      final words = text.toLowerCase().split(RegExp(r'[\s!@#\$%^&*()_\-+={[}\]|\\:;"<,>.?/~`’“”]+'));
-      for (final word in words) {
-        addWordPrefixes(word);
-      }
-    }
-
-    processText(title);
-
-    if (description != null && description.isNotEmpty) {
-      // Index only the first 10 words of the description to avoid bloating the index
-      final descWords = description.split(RegExp(r'\s+')).take(10).join(' ');
-      processText(descWords);
-    }
-
-    for (final tag in tags) {
-      processText(tag);
-    }
-
-    processText(category);
-    processText(userName);
-
-    return keywords.toList();
+    return SearchTokenizer.generateKeywords(
+      title: title,
+      description: description,
+      tags: tags,
+      category: category,
+      categoryDisplayName: categoryDisplayName,
+      userName: userName,
+      items: items,
+    );
   }
 
   CollectionEntity({
     required this.id,
     required this.userId,
-    required this.userName,
+    required String userName,
     this.userAvatarUrl,
     required this.title,
     this.description,
@@ -136,12 +115,14 @@ class CollectionEntity {
     List<String>? searchKeywords,
     int? createdAt,
     int? updatedAt,
-  })  : searchKeywords = searchKeywords ?? generateKeywords(
+  })  : userName = UsernameUtils.normalize(userName),
+        searchKeywords = searchKeywords ?? generateKeywords(
           title: title,
           description: description,
           tags: tags,
           category: category.name,
-          userName: userName,
+          categoryDisplayName: category.displayName,
+          userName: UsernameUtils.normalize(userName),
         ),
         createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
         updatedAt = updatedAt ?? createdAt ?? DateTime.now().millisecondsSinceEpoch;
@@ -167,7 +148,9 @@ class CollectionEntity {
     return CollectionEntity(
       id: docId,
       userId: map['userId'] ?? '',
-      userName: map['userName'] ?? map['username'] ?? '',
+      userName: UsernameUtils.normalize(
+        (map['userName'] ?? map['username'] ?? '').toString(),
+      ),
       userAvatarUrl: map['userAvatarUrl'],
       title: map['title'] ?? '',
       description: map['description'],
@@ -195,7 +178,14 @@ class CollectionEntity {
       savedBy: List<String>.from(map['savedBy'] ?? []),
       collaborators: (map['collaborators'] as List?)
               ?.whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
+              .map((e) {
+                final entry = Map<String, dynamic>.from(e);
+                final username = entry['username'];
+                if (username is String && username.isNotEmpty) {
+                  entry['username'] = UsernameUtils.normalize(username);
+                }
+                return entry;
+              })
               .toList() ??
           const [],
       editors: List<String>.from(map['editors'] ?? []),
@@ -331,6 +321,7 @@ class CollectionEntity {
         description: description ?? this.description,
         tags: tags ?? this.tags,
         category: (category ?? this.category).name,
+        categoryDisplayName: (category ?? this.category).displayName,
         userName: userName ?? this.userName,
       ),
       createdAt: createdAt ?? this.createdAt,

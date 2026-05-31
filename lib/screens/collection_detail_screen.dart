@@ -14,9 +14,14 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
 import '../widgets/avatar_fallback.dart';
+import '../widgets/mention_text_field.dart';
+import '../widgets/comment_mention_text.dart';
 import 'add_item_screen.dart';
 import 'create_collection_screen.dart';
 import 'user_profile_screen.dart';
+import 'profile_screen.dart';
+import 'package:intl/intl.dart' hide TextDirection;
+import '../widgets/manage_collaborators_dialog.dart';
 
 class CollectionDetailScreen extends StatefulWidget {
   final String collectionId;
@@ -39,6 +44,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   List<UserEntity> _contributorUsers = [];
   bool _isLoading = true;
   bool _isOwner = false;
+  bool _isEditor = false;
   String _searchQuery = '';
   // ignore: unused_field
   final Set<String> _expandedItemIds = <String>{};
@@ -52,6 +58,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   late TabController _tabController;
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _replyController = TextEditingController();
+  final FocusNode _commentFocusNode = FocusNode();
   final FocusNode _replyFocusNode = FocusNode();
   String? _replyingToCommentId; // specific comment whose Reply was tapped
   final Set<String> _expandedThreadIds = {};
@@ -65,6 +72,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _itemsStream = _firestoreService.getCollectionItems(widget.collectionId);
     _setupCollectionStream();
     _loadCurrentUserName();
@@ -88,6 +98,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           );
 
           final isOwner = collection.userId == widget.currentUserId;
+          final isEditor = collection.editors.contains(widget.currentUserId);
           final canView = _canViewCollection(collection, isOwner: isOwner, isFollowing: isFollowing);
           
           setState(() {
@@ -96,6 +107,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
               isSaved: collection.savedBy.contains(widget.currentUserId),
             );
             _isOwner = isOwner;
+            _isEditor = isEditor;
             _isFollowing = isFollowing;
             _isUnauthorized = !canView;
             _isLoading = false;
@@ -210,6 +222,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     _tabController.dispose();
     _commentController.dispose();
     _replyController.dispose();
+    _commentFocusNode.dispose();
     _replyFocusNode.dispose();
     super.dispose();
   }
@@ -239,203 +252,257 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     }
   }
 
-  // ignore: unused_element
-  void _showContributorsSheet(CollectionEntity collection) {
-    showModalBottomSheet(
+  bool _canAddItems(CollectionEntity collection) {
+    return _isOwner || _isEditor || collection.isOpenForContribution;
+  }
+
+  bool _collectionHasMultipleContributors(CollectionEntity collection) {
+    return collection.isOpenForContribution ||
+        collection.editors.isNotEmpty ||
+        collection.contributorCount > 0;
+  }
+
+  List<Map<String, dynamic>> _editorCollaborators(CollectionEntity collection) {
+    return collection.collaborators
+        .where((c) => collection.editors.contains(c['userId'] as String? ?? ''))
+        .toList();
+  }
+
+  bool _isPublicCollection(CollectionEntity collection) {
+    return collection.isPublic || collection.visibility == CollectionVisibility.public;
+  }
+
+  void _showManageCollaboratorsDialog() {
+    if (_collection == null) return;
+    showDialog(
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        final users = _contributorUsers;
-        final ownerName = collection.userName;
-        final rawOwnerAvatar = collection.userAvatarUrl;
+      builder: (context) => ManageCollaboratorsDialog(
+        collectionId: widget.collectionId,
+        currentUserId: widget.currentUserId,
+        currentUserName: _currentUserName,
+        collectionTitle: _collection!.title,
+        isPublicCollection: _isPublicCollection(_collection!),
+      ),
+    );
+  }
 
-        Widget buildAvatar({required String name, required String? avatarUrl}) {
-          final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
-                ? CachedNetworkImage(
-                    imageUrl: avatarUrl,
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                      width: 36,
-                      height: 36,
-                      color: AppColors.primaryPurple.withOpacity(0.2),
-                      alignment: Alignment.center,
-                      child: Text(
-                        initials,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.primaryPurple,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    errorWidget: (_, __, ___) => Container(
-                      width: 36,
-                      height: 36,
-                      color: AppColors.primaryPurple.withOpacity(0.2),
-                      alignment: Alignment.center,
-                      child: Text(
-                        initials,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.primaryPurple,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  )
-                : Container(
-                    width: 36,
-                    height: 36,
-                    color: AppColors.primaryPurple.withOpacity(0.2),
-                    alignment: Alignment.center,
-                    child: Text(
-                      initials,
-                      style: GoogleFonts.plusJakartaSans(
-                        color: AppColors.primaryPurple,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-          );
-        }
+  void _showCollaboratorsDialog(CollectionEntity collection) {
+    final editors = _editorCollaborators(collection);
+    if (editors.isEmpty) return;
 
-        Widget buildOwnerTile() {
-          if (rawOwnerAvatar == null || rawOwnerAvatar.trim().isEmpty) {
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: buildAvatar(name: ownerName, avatarUrl: null),
-              title: Text(
-                '@$ownerName',
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Collaborators', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPeopleDialogRow(
+                dialogContext: dialogContext,
+                userId: collection.userId,
+                username: collection.userName,
+                avatarUrl: collection.userAvatarUrl,
+                subtitle: 'Owner',
               ),
-              subtitle: Text('Owner', style: GoogleFonts.plusJakartaSans(fontSize: 12)),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UserProfileScreen(
-                      userId: collection.userId,
-                      currentUserId: widget.currentUserId,
-                    ),
-                  ),
+              ...editors.map((collab) {
+                final userId = collab['userId'] as String? ?? '';
+                final username = collab['username'] as String? ?? 'User';
+                return _buildPeopleDialogRow(
+                  dialogContext: dialogContext,
+                  userId: userId,
+                  username: username,
                 );
-              },
-            );
-          }
-
-          final trimmed = rawOwnerAvatar!.trim();
-          if (!trimmed.startsWith('gs://')) {
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: buildAvatar(name: ownerName, avatarUrl: trimmed),
-              title: Text(
-                '@$ownerName',
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text('Owner', style: GoogleFonts.plusJakartaSans(fontSize: 12)),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UserProfileScreen(
-                      userId: collection.userId,
-                      currentUserId: widget.currentUserId,
-                    ),
-                  ),
-                );
-              },
-            );
-          }
-
-          return FutureBuilder<String>(
-            future: FirebaseStorage.instance.refFromURL(trimmed).getDownloadURL(),
-            builder: (context, snapshot) {
-              final resolved = snapshot.data;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: buildAvatar(name: ownerName, avatarUrl: resolved),
-                title: Text(
-                  '@$ownerName',
-                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text('Owner', style: GoogleFonts.plusJakartaSans(fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => UserProfileScreen(
-                        userId: collection.userId,
-                        currentUserId: widget.currentUserId,
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        }
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Contributors',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.55,
-                  child: ListView.separated(
-                    itemCount: users.length + 1,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      if (index == 0) return buildOwnerTile();
-
-                      final u = users[index - 1];
-                      final name = u.userName;
-                      final avatarUrl = u.avatarUrl;
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: buildAvatar(name: name, avatarUrl: avatarUrl),
-                        title: Text(
-                          '@$name',
-                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                        ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => UserProfileScreen(
-                                userId: u.id,
-                                currentUserId: widget.currentUserId,
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+              }),
+            ],
           ),
-        );
-      },
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeopleDialogRow({
+    required BuildContext dialogContext,
+    required String userId,
+    required String username,
+    String? avatarUrl,
+    String? subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: InkWell(
+        onTap: userId.isEmpty
+            ? null
+            : () {
+                Navigator.pop(dialogContext);
+                _navigateToUserProfile(userId);
+              },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              _buildUserAvatar(username, avatarUrl, size: 32),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '@$username',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showContributorsDialog(CollectionEntity collection) {
+    final users = _contributorUsers;
+    if (users.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Contributors', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPeopleDialogRow(
+                dialogContext: dialogContext,
+                userId: collection.userId,
+                username: collection.userName,
+                avatarUrl: collection.userAvatarUrl,
+                subtitle: 'Owner',
+              ),
+              ...users.map(
+                (user) => _buildPeopleDialogRow(
+                  dialogContext: dialogContext,
+                  userId: user.id,
+                  username: user.userName,
+                  avatarUrl: user.avatarUrl,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCollectionInfoDialog(CollectionEntity collection) {
+    final dateFormat = DateFormat('MMM d, yyyy \'at\' h:mm a');
+    final createdAt = dateFormat.format(
+      DateTime.fromMillisecondsSinceEpoch(collection.createdAt),
+    );
+    final updatedAt = dateFormat.format(
+      DateTime.fromMillisecondsSinceEpoch(collection.updatedAt),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Collection info', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Created', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            Text(createdAt, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            Text('Last updated', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            Text(updatedAt, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showItemInfoDialog(CollectionItemEntity item) {
+    final addedAt = DateTime.fromMillisecondsSinceEpoch(item.createdAt);
+    final formattedDate = DateFormat('MMM d, yyyy \'at\' h:mm a').format(addedAt);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Item info', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Added by', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                _navigateToUserProfile(item.userId);
+              },
+              child: Text(
+                '@${item.userName}',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Added on', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            Text(formattedDate, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -821,7 +888,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   void _navigateToUserProfile(String userId) {
-    if (userId == widget.currentUserId) return; // Don't navigate to own profile
+    if (userId.isEmpty) return;
+
+    if (userId == widget.currentUserId) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ProfileScreen()),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -986,31 +1062,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
               // Items / Discussion tab bar
               SliverToBoxAdapter(
-                child: Container(
-                  color: Colors.white,
-                  child: TabBar(
-                    controller: _tabController,
-                    onTap: (_) => setState(() {}),
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    labelPadding: EdgeInsets.fromLTRB(
-                      _heroHorizontalPadding + _heroContentShift,
-                      6,
-                      _heroHorizontalPadding,
-                      4,
-                    ),
-                    labelColor: AppColors.primary,
-                    unselectedLabelColor: AppColors.textMuted,
-                    labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14),
-                    unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 14),
-                    indicatorColor: AppColors.primary,
-                    indicatorWeight: 1.5,
-                    indicatorSize: TabBarIndicatorSize.label,
-                    dividerColor: AppColors.divider,
-                    dividerHeight: 1,
-                    tabs: const [Tab(text: 'Items'), Tab(text: 'Discussion')],
-                  ),
-                ),
+                child: _buildCollectionTabBar(),
               ),
 
               // Search bar (if active)
@@ -1053,9 +1105,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
               // Discussion tab
               if (_tabController.index == 1) ...[
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _DiscussionComposerHeaderDelegate(
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: _buildDiscussionComposer(),
                   ),
                 ),
@@ -1071,21 +1123,126 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
-  static const double _heroHorizontalPadding = 20;
-  static const double _heroContentShift = -3;
-  static const double _heroNavContentGap = 20;
-  static const double _heroStatsBandInset = 12;
-  static const double _heroDividerInset = 2;
-  static const Color _heroMutedButtonFill = Color(0xCC444444);
-  static const Color _heroMutedButtonBorder = Color(0x40FFFFFF);
+  Widget _buildCollectionTabBar() {
+    final selectedIndex = _tabController.index;
 
-  static const TextStyle _heroTitleStyle = TextStyle(
-    fontSize: 32,
-    fontWeight: FontWeight.w900,
-    color: Colors.white,
-    height: 1.15,
-    letterSpacing: -0.2,
-  );
+    return ColoredBox(
+      color: Colors.white,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              _buildCollectionTab(
+                label: 'ITEMS',
+                index: 0,
+                selectedIndex: selectedIndex,
+              ),
+              _buildCollectionTab(
+                label: 'DISCUSSION',
+                index: 1,
+                selectedIndex: selectedIndex,
+              ),
+            ],
+          ),
+          const Divider(height: 1, color: AppColors.divider),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollectionTab({
+    required String label,
+    required int index,
+    required int selectedIndex,
+  }) {
+    final isSelected = index == selectedIndex;
+
+    return Expanded(
+      child: Material(
+        color: Colors.white,
+        child: InkWell(
+          onTap: () {
+            if (_tabController.index != index) {
+              _tabController.index = index;
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                    fontSize: 13,
+                    letterSpacing: 0.6,
+                    color: isSelected ? AppColors.primary : AppColors.textMuted,
+                  ),
+                ),
+              ),
+              Container(
+                height: 2,
+                color: isSelected ? AppColors.primary : Colors.transparent,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const double _heroHorizontalPadding = 16;
+  static const double _heroCoverAspectRatio = 0.72;
+  static const double _heroInlineGap = 8;
+  static const double _heroStatGap = 36;
+  static const double _heroTagHorizontalPadding = 12;
+  static const double _heroTagVerticalPadding = 6;
+  static const double _heroOpenPillHorizontalPadding = 18;
+  static const double _heroOpenPillVerticalPadding = 7;
+  static const double _heroStatsOpticalInset = 4;
+  static const double _heroCircleButtonSize = 36;
+  static const Color _heroTagFill = Color(0x1FFFFFFF);
+  static const Color _heroSecondaryButtonFill = Color(0x1FFFFFFF);
+
+  static const double _heroTitleFontSize = 34;
+  static const double _heroTitleStrokeWidth = 0.45;
+
+  static TextStyle _heroTitleBaseStyle() {
+    return GoogleFonts.plusJakartaSans(
+      fontSize: _heroTitleFontSize,
+      fontWeight: FontWeight.w800,
+      height: 1.12,
+      letterSpacing: -0.45,
+    );
+  }
+
+  Widget _buildHeroTitle(String title) {
+    final baseStyle = _heroTitleBaseStyle();
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Text(
+          title,
+          textHeightBehavior: _heroTextHeightBehavior,
+          style: baseStyle.copyWith(
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = _heroTitleStrokeWidth
+              ..color = Colors.white,
+          ),
+        ),
+        Text(
+          title,
+          textHeightBehavior: _heroTextHeightBehavior,
+          style: baseStyle.copyWith(color: Colors.white),
+        ),
+      ],
+    );
+  }
 
   static const TextStyle _heroDescriptionStyle = TextStyle(
     fontSize: 15,
@@ -1107,10 +1264,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Colors.black.withValues(alpha: 0.30),
-            Colors.black.withValues(alpha: 0.44),
-            Colors.black.withValues(alpha: 0.58),
+            Colors.black.withValues(alpha: 0.38),
+            Colors.black.withValues(alpha: 0.52),
+            Colors.black.withValues(alpha: 0.70),
+            Colors.black.withValues(alpha: 0.84),
           ],
+          stops: const [0.0, 0.35, 0.65, 1.0],
         ),
       ),
     );
@@ -1129,141 +1288,198 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     const navButtonSize = 38.0;
     const topPadding = 8.0;
     const bottomPadding = 20.0;
+    final coverHeight = mediaQuery.size.width / _heroCoverAspectRatio;
 
-    return Stack(
-      clipBehavior: Clip.hardEdge,
-      children: [
-        Positioned.fill(
-          child: IgnorePointer(
-            child: _buildCoverBackground(
-              coverImageUrl: collection.coverImageUrl,
-              gradientColors: gradientColors,
-              hasCoverImage: hasCoverImage,
+    return SizedBox(
+      width: double.infinity,
+      height: coverHeight,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: _buildCoverBackground(
+                coverImageUrl: collection.coverImageUrl,
+                gradientColors: gradientColors,
+                hasCoverImage: hasCoverImage,
+              ),
             ),
           ),
-        ),
-        Positioned.fill(
-          child: IgnorePointer(child: _buildHeroScrim()),
-        ),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(height: topInset),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                _heroHorizontalPadding,
-                topPadding,
-                _heroHorizontalPadding,
-                0,
-              ),
-              child: Row(
-                children: [
-                  Transform.translate(
-                    offset: const Offset(_heroContentShift, 0),
-                    child: _buildCircleButton(
+          Positioned.fill(
+            child: IgnorePointer(child: _buildHeroScrim()),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: topInset),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  _heroHorizontalPadding,
+                  topPadding,
+                  _heroHorizontalPadding,
+                  0,
+                ),
+                child: Row(
+                  children: [
+                    _buildCircleButton(
                       icon: Icons.keyboard_arrow_left,
                       onTap: () => Navigator.pop(context),
                     ),
-                  ),
-                  const Spacer(),
-                  _buildCircleButton(
-                    icon: Icons.search_rounded,
-                    onTap: () {
-                      setState(() {
-                        _showSearch = !_showSearch;
-                        if (!_showSearch) _searchQuery = '';
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    padding: EdgeInsets.zero,
-                    offset: const Offset(0, 44),
-                    child: Container(
-                      width: navButtonSize,
-                      height: navButtonSize,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                    const Spacer(),
+                    _buildCircleButton(
+                      icon: Icons.search_rounded,
+                      onTap: () {
+                        setState(() {
+                          _showSearch = !_showSearch;
+                          if (!_showSearch) _searchQuery = '';
+                        });
+                      },
                     ),
-                    itemBuilder: (context) => [
-                      if (_isOwner)
-                        const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
-                      if (_isOwner)
-                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      if (!_isOwner)
-                        const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
-                    ],
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _navigateToEditCollection();
-                      } else if (value == 'delete') {
-                        _showDeleteDialog();
-                      } else if (value == 'add_to_new') {
-                        _duplicateCollection();
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: _heroNavContentGap),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                _heroHorizontalPadding,
-                0,
-                _heroHorizontalPadding,
-                bottomPadding,
-              ),
-              child: Transform.translate(
-                offset: const Offset(_heroContentShift, 0),
-                child: _buildHeroContent(
-                  collection: collection,
-                  itemsCount: itemsCount,
+                    const SizedBox(width: _heroInlineGap),
+                    PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      offset: const Offset(0, 44),
+                      child: Container(
+                        width: navButtonSize,
+                        height: navButtonSize,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                      ),
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(value: 'get_info', child: Text('Get info')),
+                        if (_isOwner)
+                          const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
+                        if (_isOwner && !(_collection?.isOpenForContribution ?? false))
+                          const PopupMenuItem(value: 'collaborators', child: Text('Add collaborators')),
+                        if (_isOwner)
+                          const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        if (!_isOwner)
+                          const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
+                      ],
+                      onSelected: (value) {
+                        if (value == 'get_info') {
+                          if (_collection != null) _showCollectionInfoDialog(_collection!);
+                        } else if (value == 'edit') {
+                          _navigateToEditCollection();
+                        } else if (value == 'collaborators') {
+                          _showManageCollaboratorsDialog();
+                        } else if (value == 'delete') {
+                          _showDeleteDialog();
+                        } else if (value == 'add_to_new') {
+                          _duplicateCollection();
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ],
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  _heroHorizontalPadding,
+                  0,
+                  _heroHorizontalPadding,
+                  bottomPadding,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeroContent(collection: collection),
+                    const SizedBox(height: 20),
+                    _buildHeroBottomBar(
+                      collection: collection,
+                      itemsCount: itemsCount,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildHeroContent({
     required CollectionEntity collection,
-    required int itemsCount,
   }) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        GestureDetector(
-          onTap: () => _navigateToUserProfile(collection.userId),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildUserAvatar(collection.userName, collection.userAvatarUrl, size: 28),
-              const SizedBox(width: 8),
-              Text(
-                '@${collection.userName}',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  height: 1.2,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () => _navigateToUserProfile(collection.userId),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildUserAvatar(collection.userName, collection.userAvatarUrl, size: 28),
+                  const SizedBox(width: _heroInlineGap),
+                  Flexible(
+                    child: Text(
+                      '@${collection.userName}',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        height: 1.2,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (collection.editors.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _showCollaboratorsDialog(collection),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '+${collection.editors.length}',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ] else if (collection.isOpenForContribution && _contributorUsers.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _showContributorsDialog(collection),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '+${_contributorUsers.length}',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ],
-          ),
+          ],
         ),
         const SizedBox(height: 14),
-        DefaultTextStyle(
-          style: GoogleFonts.plusJakartaSans(textStyle: _heroTitleStyle),
-          textHeightBehavior: _heroTextHeightBehavior,
-          child: Text(collection.title),
-        ),
+        _buildHeroTitle(collection.title),
         if (collection.description != null && collection.description!.isNotEmpty) ...[
           const SizedBox(height: 10),
           DefaultTextStyle(
@@ -1277,9 +1493,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         if (collection.tags.isNotEmpty || collection.isOpenForContribution) ...[
           const SizedBox(height: 16),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: _heroInlineGap,
+            runSpacing: _heroInlineGap,
             alignment: WrapAlignment.start,
+            runAlignment: WrapAlignment.start,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               ...collection.tags.map(_buildHeroTag),
@@ -1287,64 +1504,69 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 _buildHeroPill(
                   label: 'OPEN',
                   backgroundColor: AppColors.primary,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
+                  horizontalPadding: _heroOpenPillHorizontalPadding,
+                  verticalPadding: _heroOpenPillVerticalPadding,
                 ),
             ],
           ),
         ],
-        const SizedBox(height: 24),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: _heroDividerInset),
-              child: _buildHeroDivider(),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(_heroStatsBandInset, 16, 0, 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeroStat('$itemsCount', 'ITEMS'),
-                  const SizedBox(width: 36),
-                  _buildHeroStat('${collection.likes}', 'LIKES'),
-                ],
+      ],
+    );
+  }
+
+  Widget _buildHeroBottomBar({
+    required CollectionEntity collection,
+    required int itemsCount,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeroDivider(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            _heroStatsOpticalInset,
+            16,
+            _heroStatsOpticalInset,
+            16,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _buildHeroStat('$itemsCount', 'ITEMS'),
+              const SizedBox(width: _heroStatGap),
+              _buildHeroStat('${collection.likes}', 'LIKES'),
+              const Spacer(),
+              _buildHeroCircleButton(
+                icon: collection.isSaved
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_border_rounded,
+                onTap: _toggleSave,
+                isPrimary: collection.isSaved,
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: _heroDividerInset),
-              child: _buildHeroDivider(),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: WrapAlignment.start,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _buildHeroPrimaryButton(
-              icon: collection.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-              label: collection.isSaved ? 'Saved' : 'Save',
-              onTap: _toggleSave,
-            ),
-            _buildHeroSecondaryButton(
-              icon: Icons.share_outlined,
-              label: 'Share',
-              onTap: _shareCollection,
-            ),
-            _buildHeroIconButton(
-              icon: collection.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              onTap: _toggleLike,
-              backgroundColor: collection.isLiked ? AppColors.heartSalmon : null,
-            ),
-            if (_isOwner || collection.isOpenForContribution)
-              _buildHeroIconButton(
-                icon: Icons.add_rounded,
-                onTap: () => _navigateToAddItem(),
+              const SizedBox(width: _heroInlineGap),
+              _buildHeroCircleButton(
+                icon: Icons.share_outlined,
+                onTap: _shareCollection,
               ),
-          ],
+              const SizedBox(width: _heroInlineGap),
+              _buildHeroCircleButton(
+                icon: collection.isLiked
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                onTap: _toggleLike,
+                backgroundColor:
+                    collection.isLiked ? AppColors.heartSalmon : null,
+              ),
+              if (_canAddItems(collection)) ...[
+                const SizedBox(width: _heroInlineGap),
+                _buildHeroCircleButton(
+                  icon: Icons.add_rounded,
+                  onTap: () => _navigateToAddItem(),
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     );
@@ -1431,6 +1653,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     required Color backgroundColor,
     Color textColor = Colors.white,
     FontWeight fontWeight = FontWeight.w600,
+    double? horizontalPadding,
+    double? verticalPadding,
   }) {
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1438,7 +1662,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         borderRadius: BorderRadius.circular(20),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding ?? _heroTagHorizontalPadding,
+          vertical: verticalPadding ?? _heroTagVerticalPadding,
+        ),
         child: Text(
           label,
           style: GoogleFonts.plusJakartaSans(
@@ -1457,7 +1684,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   Widget _buildHeroTag(String tag) {
     return _buildHeroPill(
       label: _formatHeroTagLabel(tag),
-      backgroundColor: Colors.black.withValues(alpha: 0.42),
+      backgroundColor: _heroTagFill,
     );
   }
 
@@ -1499,104 +1726,35 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
-  Widget _buildHeroPrimaryButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: Colors.white),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeroSecondaryButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          decoration: BoxDecoration(
-            color: _heroMutedButtonFill,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _heroMutedButtonBorder),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: Colors.white),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeroIconButton({
+  Widget _buildHeroCircleButton({
     required IconData icon,
     required VoidCallback onTap,
+    bool isPrimary = false,
     Color? backgroundColor,
     Color iconColor = Colors.white,
   }) {
-    final bg = backgroundColor ?? _heroMutedButtonFill;
-    final showBorder = backgroundColor == null;
+    final bg = backgroundColor ??
+        (isPrimary ? AppColors.primary : _heroSecondaryButtonFill);
 
     return Material(
       color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        customBorder: const CircleBorder(),
         child: Ink(
-          width: 44,
-          height: 44,
+          width: _heroCircleButtonSize,
+          height: _heroCircleButtonSize,
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(12),
-            border: showBorder
-                ? Border.all(color: _heroMutedButtonBorder)
-                : null,
+            shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: 20, color: iconColor),
+          child: Icon(
+            icon,
+            size: 18,
+            color: iconColor,
+          ),
         ),
       ),
     );
@@ -1675,86 +1833,91 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   Widget _buildDiscussionComposer() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return MentionTextField(
+      controller: _commentController,
+      focusNode: _commentFocusNode,
+      firestoreService: _firestoreService,
+      hintText: 'Add a comment... (@ to tag)',
+      dense: true,
+      surroundBuilder: (textField) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 36,
-            height: 36,
-            child: ClipOval(
-              child: FutureBuilder<UserEntity?>(
-                future: _firestoreService.getUser(widget.currentUserId),
-                builder: (context, snap) {
-                  final user = snap.data;
-                  final userName = user?.userName ?? '';
-                  if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty) {
-                    return CachedNetworkImage(
-                      imageUrl: user.avatarUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => AvatarFallback(name: userName, size: 36),
-                    );
-                  }
-                  return AvatarFallback(name: userName, size: 36);
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: ClipOval(
+                  child: FutureBuilder<UserEntity?>(
+                    future: _firestoreService.getUser(widget.currentUserId),
+                    builder: (context, snap) {
+                      final user = snap.data;
+                      final userName = user?.userName ?? '';
+                      if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty) {
+                        return CachedNetworkImage(
+                          imageUrl: user.avatarUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => AvatarFallback(name: userName, size: 36),
+                        );
+                      }
+                      return AvatarFallback(name: userName, size: 36);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 36,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: textField,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () async {
+                  final text = _commentController.text.trim();
+                  if (text.isEmpty) return;
+                  _commentController.clear();
+                  final auth = await _firestoreService.getUser(widget.currentUserId);
+                  await _firestoreService.addComment(
+                    collectionId: widget.collectionId,
+                    userId: widget.currentUserId,
+                    userName: auth?.userName ?? '',
+                    userAvatarUrl: auth?.avatarUrl,
+                    text: text,
+                  );
                 },
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                child: Text(
+                  'Post',
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: _commentController,
-              style: GoogleFonts.plusJakartaSans(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Add a comment...',
-                hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () async {
-              final text = _commentController.text.trim();
-              if (text.isEmpty) return;
-              _commentController.clear();
-              final auth = await _firestoreService.getUser(widget.currentUserId);
-              await _firestoreService.addComment(
-                collectionId: widget.collectionId,
-                userId: widget.currentUserId,
-                userName: auth?.userName ?? '',
-                userAvatarUrl: auth?.avatarUrl,
-                text: text,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            ),
-            child: Text(
-              'Post',
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1991,31 +2154,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 10),
-        TextField(
+        MentionTextField(
           controller: _replyController,
           focusNode: _replyFocusNode,
-          style: GoogleFonts.plusJakartaSans(fontSize: 14),
+          firestoreService: _firestoreService,
+          hintText: 'Reply to ${targetComment.userName}... (@ to tag)',
+          filled: true,
           minLines: 1,
           maxLines: 4,
-          decoration: InputDecoration(
-            hintText: 'Reply to ${targetComment.userName}...',
-            hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 14),
-            filled: true,
-            fillColor: AppColors.surfaceMuted,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-            ),
-          ),
         ),
         const SizedBox(height: 8),
         Row(
@@ -2151,8 +2297,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                comment.text,
+              CommentMentionText(
+                text: comment.text,
+                mentions: comment.mentions,
+                onMentionTap: _navigateToUserProfile,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: depth == 0 ? 15 : 14,
                   color: AppColors.textPrimary,
@@ -2316,6 +2464,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   static const double _itemTitleLineHeight = _itemTitleFontSize * 1.25;
   static const double _itemRankSize = 28;
   static const double _itemSingleLineTitleYOffset = -1.5;
+  static const double _itemMenuButtonReservedWidth = 24;
 
   TextStyle get _itemTitleStyle => GoogleFonts.plusJakartaSans(
         fontSize: _itemTitleFontSize,
@@ -2325,7 +2474,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       );
 
   double _itemTitleTrailingWidth(CollectionItemEntity item) {
-    var width = 24.0;
+    var width = _itemMenuButtonReservedWidth;
     if (item.rating > 0) {
       width += 14;
       final displayScore = item.rating;
@@ -2359,6 +2508,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   Widget _buildItemMenuButton({
     required CollectionItemEntity item,
     required bool canEdit,
+    required bool showGetInfo,
   }) {
     return PopupMenuButton<String>(
       padding: EdgeInsets.zero,
@@ -2368,17 +2518,21 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         if (value == 'edit') _navigateToAddItem(item);
         else if (value == 'delete') _deleteItem(item);
         else if (value == 'add_to_collections') _showAddToCollectionsDialog(item);
+        else if (value == 'get_info') _showItemInfoDialog(item);
       },
       itemBuilder: (context) => [
         if (canEdit) PopupMenuItem(value: 'edit', child: Text('Edit', style: GoogleFonts.plusJakartaSans())),
         if (canEdit) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
+        if (showGetInfo) PopupMenuItem(value: 'get_info', child: Text('Get info', style: GoogleFonts.plusJakartaSans())),
         PopupMenuItem(value: 'add_to_collections', child: Text('Add to collection', style: GoogleFonts.plusJakartaSans())),
       ],
     );
   }
 
   Widget _buildItemCard(CollectionItemEntity item, int rank) {
+    final collection = _collection;
     final canEdit = _isOwner || item.userId == widget.currentUserId;
+    final showGetInfo = collection != null && _collectionHasMultipleContributors(collection);
     final hasImages = item.imageUrls.isNotEmpty;
     final hasLocation = (item.googleMapsUrl ?? '').trim().isNotEmpty;
     final hasWebsite = (item.websiteUrl ?? '').trim().isNotEmpty;
@@ -2441,7 +2595,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                             ),
                             const SizedBox(width: 8),
                           ],
-                          _buildItemMenuButton(item: item, canEdit: canEdit),
+                          _buildItemMenuButton(item: item, canEdit: canEdit, showGetInfo: showGetInfo),
                         ],
                       ),
                     ),
@@ -2484,11 +2638,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         if (item.description != null &&
                             item.description!.isNotEmpty) ...[
                           const SizedBox(height: 6),
-                          Text(
-                            item.description!,
-                            style: AppTextStyles.collectionDescription(
-                              fontSize: 14,
-                              height: 1.45,
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              right: _itemMenuButtonReservedWidth,
+                            ),
+                            child: Text(
+                              item.description!,
+                              style: AppTextStyles.collectionDescription(
+                                fontSize: 14,
+                                height: 1.45,
+                              ),
                             ),
                           ),
                         ],
@@ -2607,33 +2766,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       return 'now';
     }
   }
-}
-
-class _DiscussionComposerHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _DiscussionComposerHeaderDelegate({required this.child});
-
-  final Widget child;
-  static const double _headerHeight = 84;
-
-  @override
-  double get minExtent => _headerHeight;
-
-  @override
-  double get maxExtent => _headerHeight;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return ColoredBox(
-      color: AppColors.backgroundSurface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: child,
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _DiscussionComposerHeaderDelegate oldDelegate) => true;
 }
 
 class _CoverBottomCurveClipper extends CustomClipper<Path> {

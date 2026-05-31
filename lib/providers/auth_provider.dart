@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../models/user_entity.dart';
+import '../utils/username_utils.dart';
 
 /// Authentication state provider
 class AuthProvider extends ChangeNotifier {
@@ -13,6 +14,7 @@ class AuthProvider extends ChangeNotifier {
   FirestoreService? _firestoreService;
   NotificationService? _notificationService;
   StreamSubscription<UserEntity?>? _userSubscription;
+  StreamSubscription<User?>? _authStateSubscription;
 
   User? _firebaseUser;
   UserEntity? _userEntity;
@@ -30,7 +32,8 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isAuthenticated => _firebaseReady && _firebaseUser != null;
   bool get isEmailVerified => _firebaseUser?.emailVerified ?? false;
-  bool get needsUsername => _needsUsername;
+  /// Only enforce username setup after Firestore profile has been checked.
+  bool get needsUsername => _userProfileLoaded && _needsUsername;
   bool get userProfileLoaded => _userProfileLoaded;
   String get userId => _firebaseUser?.uid ?? '';
   bool get firebaseReady => _firebaseReady;
@@ -52,6 +55,9 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> retryInit() async {
+    await _authStateSubscription?.cancel();
+    _authStateSubscription = null;
+    _initialAuthChecked = false;
     await _init();
   }
 
@@ -68,36 +74,110 @@ class AuthProvider extends ChangeNotifier {
       _notificationService?.initialize().catchError((e) {
         debugPrint('Notification init failed: $e');
       });
-      
-      _authService!.authStateChanges.listen((user) async {
-        _firebaseUser = user;
-        if (user != null) {
-          await _loadUserEntity();
-        } else {
-          _userSubscription?.cancel();
-          _userSubscription = null;
-          _userEntity = null;
-          _needsUsername = false;
-          _userProfileLoaded = false;
-        }
-        _initialAuthChecked = true;
-        notifyListeners();
-      });
+
+      await _restorePersistedSession();
+
+      await _authStateSubscription?.cancel();
+      _authStateSubscription = _authService!.authStateChanges.listen(
+        (user) => unawaited(_onAuthStateChanged(user)),
+      );
     } catch (e) {
       debugPrint('Firebase not available: $e');
       _firebaseReady = false;
+      _initialAuthChecked = true;
+    }
+    notifyListeners();
+  }
+
+  /// Waits for Firebase Auth to hydrate the persisted session from device storage.
+  Future<void> _restorePersistedSession() async {
+    final auth = _authService;
+    if (auth == null) return;
+
+    try {
+      final user = await _waitForHydratedUser(auth);
+      await _onAuthStateChanged(user);
+    } catch (e) {
+      debugPrint('Persisted session restore failed: $e');
+      await _onAuthStateChanged(auth.currentUser);
+    } finally {
+      _initialAuthChecked = true;
+    }
+  }
+
+  /// Firebase often emits null before the persisted user on cold start (e.g. share sheet).
+  Future<User?> _waitForHydratedUser(AuthService auth) async {
+    var user = auth.currentUser;
+    if (user != null) return user;
+
+    final completer = Completer<User?>();
+    late StreamSubscription<User?> subscription;
+    Timer? settleTimer;
+
+    void complete(User? result) {
+      if (completer.isCompleted) return;
+      settleTimer?.cancel();
+      subscription.cancel();
+      completer.complete(result);
+    }
+
+    settleTimer = Timer(const Duration(milliseconds: 400), () {
+      complete(auth.currentUser);
+    });
+
+    subscription = auth.authStateChanges.listen((event) {
+      if (event != null) {
+        complete(event);
+      }
+    });
+
+    try {
+      user = await completer.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          complete(auth.currentUser);
+          return auth.currentUser;
+        },
+      );
+    } catch (e) {
+      complete(auth.currentUser);
+      user = auth.currentUser;
+    }
+
+    return user;
+  }
+
+  Future<void> _onAuthStateChanged(User? user) async {
+    final uidChanged = _firebaseUser?.uid != user?.uid;
+    _firebaseUser = user;
+
+    if (user != null) {
+      if (uidChanged || !_userProfileLoaded) {
+        unawaited(_loadUserEntity());
+      }
+    } else {
+      _userSubscription?.cancel();
+      _userSubscription = null;
+      _userEntity = null;
+      _needsUsername = false;
+      _userProfileLoaded = false;
     }
     notifyListeners();
   }
 
   Future<void> _loadUserEntity() async {
     if (_firebaseUser == null || _firestoreService == null) return;
-    _userProfileLoaded = false;
-    notifyListeners();
     try {
       debugPrint('Loading user entity for uid: ${_firebaseUser!.uid}');
-      // Initial one-time fetch for immediate state
-      _userEntity = await _firestoreService!.getUser(_firebaseUser!.uid);
+      var profileTimedOut = false;
+      // Initial one-time fetch for immediate state (bounded so cold start cannot hang).
+      _userEntity = await _firestoreService!
+          .getUser(_firebaseUser!.uid)
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        profileTimedOut = true;
+        debugPrint('User entity load timed out — continuing offline');
+        return null;
+      });
       debugPrint('User entity result: ${_userEntity?.userName ?? "null (new user)"}');
 
       if (_userEntity != null) {
@@ -105,7 +185,12 @@ class AuthProvider extends ChangeNotifier {
         _notificationService?.saveTokenToUser(_userEntity!.id);
       }
 
-      _needsUsername = _userEntity == null || (_userEntity!.userName.isEmpty);
+      if (profileTimedOut) {
+        _needsUsername = false;
+      } else {
+        _needsUsername =
+            _userEntity == null || (_userEntity!.userName.isEmpty);
+      }
       _userProfileLoaded = true;
       notifyListeners();
 
@@ -126,7 +211,8 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error loading user entity: $e');
       _userEntity = null;
-      _needsUsername = true;
+      // Do not block the app (or share import) when profile fetch fails offline.
+      _needsUsername = false;
       _userProfileLoaded = true;
       notifyListeners();
     }
@@ -191,7 +277,7 @@ class AuthProvider extends ChangeNotifier {
         final newUser = UserEntity(
           id: userCredential.user!.uid,
           email: email,
-          username: username.trim(),
+          username: UsernameUtils.normalize(username),
         );
         await _firestoreService!.saveUser(newUser);
         _userEntity = newUser;
@@ -241,7 +327,7 @@ class AuthProvider extends ChangeNotifier {
       final user = UserEntity(
         id: _firebaseUser!.uid,
         email: _firebaseUser!.email ?? '',
-        username: username,
+        username: UsernameUtils.normalize(username),
       );
       await _firestoreService!.saveUser(user);
       _userEntity = user;

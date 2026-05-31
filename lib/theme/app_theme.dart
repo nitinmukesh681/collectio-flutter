@@ -51,6 +51,11 @@ class AppColors {
   static const List<BoxShadow> elevatedShadow = [
     BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, 4)),
   ];
+  /// Soft shadow around collection cover cards (all sides).
+  static const List<BoxShadow> collectionCoverShadow = [
+    BoxShadow(color: Color(0x1F000000), blurRadius: 16, spreadRadius: 0, offset: Offset.zero),
+    BoxShadow(color: Color(0x0A000000), blurRadius: 6, spreadRadius: 1, offset: Offset.zero),
+  ];
 
   // Radii
   static const double radiusSmall = 8.0;

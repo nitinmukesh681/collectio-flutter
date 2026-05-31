@@ -1,11 +1,15 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../utils/snackbar_utils.dart';
+import '../utils/username_utils.dart';
 import '../theme/app_theme.dart';
+import '../widgets/avatar_fallback.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -17,19 +21,28 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final _formKey = GlobalKey<FormState>();
-  
+
   late TextEditingController _usernameController;
   late TextEditingController _bioController;
-  
+  late String _originalUsername;
+
   File? _newAvatar;
   bool _isLoading = false;
+  bool _usernameTaken = false;
+
+  static const double _avatarSize = 108;
 
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthProvider>();
-    _usernameController = TextEditingController(text: auth.userEntity?.userName ?? '');
+    _originalUsername = UsernameUtils.normalize(auth.userEntity?.userName ?? '');
+    _usernameController = TextEditingController(text: _originalUsername);
     _bioController = TextEditingController(text: auth.userEntity?.bio ?? '');
+    _usernameController.addListener(() {
+      if (_usernameTaken) setState(() => _usernameTaken = false);
+    });
+    _bioController.addListener(() => setState(() {}));
   }
 
   @override
@@ -55,13 +68,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _usernameTaken = false;
+    });
 
     try {
       final auth = context.read<AuthProvider>();
+      final newUsername = UsernameUtils.normalize(_usernameController.text);
+
+      if (newUsername != UsernameUtils.normalize(_originalUsername)) {
+        final available = await _firestoreService.isUsernameAvailable(
+          newUsername,
+          excludeUserId: auth.userId,
+        );
+        if (!available) {
+          if (mounted) {
+            setState(() {
+              _usernameTaken = true;
+              _isLoading = false;
+            });
+            _formKey.currentState!.validate();
+          }
+          return;
+        }
+      }
+
       String? avatarUrl = auth.userEntity?.avatarUrl;
 
-      // Upload new avatar if selected
       if (_newAvatar != null) {
         final rawUrl = await _firestoreService.uploadImage(
           _newAvatar!,
@@ -73,15 +107,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
 
-      // Update user profile
       final updatedUser = auth.userEntity!.copyWith(
-        username: _usernameController.text.trim(),
+        username: newUsername,
         bio: _bioController.text.trim(),
         avatarUrl: avatarUrl,
       );
 
       final success = await auth.updateProfile(updatedUser);
-      
+
       if (success && mounted) {
         SnackBarUtils.showSuccessSnackBar(context, 'Profile updated successfully');
         Navigator.pop(context, true);
@@ -94,156 +127,410 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final user = auth.userEntity;
+    final email = auth.firebaseUser?.email ?? '';
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
-        title: const Text('Edit Profile'),
-        actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _save,
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text(
-                    'Save',
-                    style: TextStyle(
-                      color: AppColors.primaryPurple,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+        backgroundColor: AppColors.backgroundSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          onPressed: _isLoading ? null : () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Edit Profile',
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            fontSize: 18,
           ),
-        ],
+        ),
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(24),
+        child: Column(
           children: [
-            // Avatar
-            Center(
-              child: Stack(
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
-                  GestureDetector(
-                    onTap: _pickAvatar,
-                    child: CircleAvatar(
-                      radius: 60,
-                      backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
-                      backgroundImage: _newAvatar != null
-                          ? FileImage(_newAvatar!)
-                          : user?.avatarUrl != null
-                              ? NetworkImage(user!.avatarUrl!) as ImageProvider
-                              : null,
-                      child: _newAvatar == null && user?.avatarUrl == null
-                          ? Text(
-                              (user?.userName ?? 'U')[0].toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 48,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryPurple,
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: GestureDetector(
-                      onTap: _pickAvatar,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryPurple,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                      ),
-                    ),
-                  ),
+                  _buildAvatarSection(user?.userName ?? 'U', user?.avatarUrl),
+                  const SizedBox(height: 28),
+                  _buildFormCard(),
+                  const SizedBox(height: 16),
+                  _buildEmailCard(auth, email),
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            _buildSaveButton(),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // Username
-            TextFormField(
-              controller: _usernameController,
-              decoration: InputDecoration(
-                labelText: 'Username',
-                prefixIcon: const Icon(Icons.alternate_email),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+  Widget _buildAvatarSection(String userName, String? avatarUrl) {
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: _pickAvatar,
+          child: SizedBox(
+            width: _avatarSize + 8,
+            height: _avatarSize + 8,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: SizedBox(
+                      width: _avatarSize,
+                      height: _avatarSize,
+                      child: _buildAvatarImage(userName, avatarUrl),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Change photo',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.primary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvatarImage(String userName, String? avatarUrl) {
+    if (_newAvatar != null) {
+      return Image.file(_newAvatar!, fit: BoxFit.cover);
+    }
+
+    if (avatarUrl == null || avatarUrl.isEmpty) {
+      return AvatarFallback(name: userName, size: _avatarSize);
+    }
+
+    return CachedNetworkImage(
+      imageUrl: avatarUrl,
+      fit: BoxFit.cover,
+      errorWidget: (_, __, ___) => AvatarFallback(name: userName, size: _avatarSize),
+    );
+  }
+
+  Widget _buildFormCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFieldLabel('Username'),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _usernameController,
+            style: _fieldTextStyle(),
+            textInputAction: TextInputAction.next,
+            autocorrect: false,
+            inputFormatters: UsernameUtils.inputFormatters,
+            decoration: _fieldDecoration(
+              hintText: 'Choose a username',
+              prefixIcon: Icons.alternate_email_rounded,
+            ),
+            validator: (value) {
+              if (_usernameTaken) {
+                return 'This username is already taken';
+              }
+              return UsernameUtils.validate(value);
+            },
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(child: _buildFieldLabel('Bio')),
+              Text(
+                '${_bioController.text.characters.length}/150',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMuted,
                 ),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a username';
-                }
-                if (value.length < 3) {
-                  return 'Username must be at least 3 characters';
-                }
-                if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value)) {
-                  return 'Only letters, numbers, and underscores allowed';
-                }
-                return null;
-              },
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _bioController,
+            style: _fieldTextStyle(),
+            maxLines: 4,
+            maxLength: 150,
+            buildCounter: (_, {required currentLength, required isFocused, maxLength}) =>
+                const SizedBox.shrink(),
+            decoration: _fieldDecoration(
+              hintText: 'Tell people a little about yourself',
             ),
-            const SizedBox(height: 16),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Bio
-            TextFormField(
-              controller: _bioController,
-              decoration: InputDecoration(
-                labelText: 'Bio',
-                hintText: 'Tell us about yourself',
-                prefixIcon: const Icon(Icons.info_outline),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+  Widget _buildEmailCard(AuthProvider auth, String email) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'ACCOUNT',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.mail_outline_rounded, color: AppColors.textMuted, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Email',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      email,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              maxLines: 3,
-              maxLength: 150,
-            ),
-            const SizedBox(height: 24),
-
-            // Email (read-only)
-            TextFormField(
-              initialValue: auth.firebaseUser?.email ?? '',
-              decoration: InputDecoration(
-                labelText: 'Email',
-                prefixIcon: const Icon(Icons.email_outlined),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+              if (auth.isEmailVerified)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.verified_rounded, size: 14, color: Colors.green.shade700),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Verified',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                suffixIcon: auth.isEmailVerified
-                    ? const Icon(Icons.verified, color: Colors.green)
-                    : null,
-              ),
-              enabled: false,
-            ),
-            const SizedBox(height: 8),
-            if (!auth.isEmailVerified)
-              TextButton.icon(
+            ],
+          ),
+          if (!auth.isEmailVerified) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
                 onPressed: () {
                   auth.resendEmailVerification();
                   SnackBarUtils.showSuccessSnackBar(context, 'Verification email sent');
                 },
-                icon: const Icon(Icons.send),
-                label: const Text('Resend Verification Email'),
+                icon: const Icon(Icons.send_rounded, size: 18),
+                label: Text(
+                  'Resend verification email',
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
+            ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _save,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.surfaceMuted,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(26),
+              ),
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(
+                    'Save changes',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+
+  TextStyle _fieldTextStyle() {
+    return GoogleFonts.plusJakartaSans(
+      fontSize: 15,
+      color: AppColors.textPrimary,
+      fontWeight: FontWeight.w500,
+    );
+  }
+
+  InputDecoration _fieldDecoration({
+    required String hintText,
+    IconData? prefixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: GoogleFonts.plusJakartaSans(
+        color: AppColors.textMuted,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      ),
+      prefixIcon: prefixIcon == null
+          ? null
+          : Icon(prefixIcon, color: AppColors.textMuted, size: 20),
+      filled: true,
+      fillColor: AppColors.surfaceMuted,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.redAccent, width: 1),
       ),
     );
   }

@@ -7,6 +7,9 @@ import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
 import '../models/user_entity.dart';
 import '../models/comment_entity.dart';
+import '../utils/comment_mentions.dart';
+import '../utils/search_tokenizer.dart';
+import '../utils/username_utils.dart';
 
 
 /// Firestore service for database operations
@@ -59,39 +62,55 @@ class FirestoreService {
     required String text,
     String? parentCommentId,
   }) async {
-    final docRef = await _commentsRef.add({
+    final normalizedParentId = _normalizeCommentParentId(parentCommentId);
+    final mentions = await _resolveCommentMentions(text);
+
+    final commentData = <String, dynamic>{
       'collectionId': collectionId,
       'userId': userId,
-      'userName': userName,
+      'userName': UsernameUtils.normalize(userName),
       'userAvatarUrl': userAvatarUrl,
       'text': text,
-      'parentCommentId': parentCommentId,
       'likes': 0,
       'likedBy': [],
       'createdAt': FieldValue.serverTimestamp(),
-    });
+    };
+    if (normalizedParentId != null) {
+      commentData['parentCommentId'] = normalizedParentId;
+    }
+    if (mentions.isNotEmpty) {
+      commentData['mentions'] = mentions.map((m) => m.toMap()).toList();
+    }
 
-    // Send notification to collection owner
+    final docRef = await _commentsRef.add(commentData);
+
     try {
       final collectionSnap = await _collectionsRef.doc(collectionId).get();
       if (collectionSnap.exists) {
         final data = collectionSnap.data() as Map<String, dynamic>;
         final ownerId = data['userId'] as String? ?? '';
         final title = data['title'] as String? ?? '';
-        if (ownerId.isNotEmpty && ownerId != userId) {
-          await _firestore.collection('notifications').add({
-            'toUserId': ownerId,
-            'type': parentCommentId != null ? 'COMMENT_REPLY' : 'COMMENT',
-            'fromUserId': userId,
-            'fromUsername': userName,
-            'fromUserAvatarUrl': userAvatarUrl,
-            'collectionId': collectionId,
-            'collectionTitle': title,
-            'message': text,
-            'isRead': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
+        await _sendCommentNotifications(
+          commentId: docRef.id,
+          collectionId: collectionId,
+          collectionTitle: title,
+          ownerId: ownerId,
+          userId: userId,
+          userName: userName,
+          userAvatarUrl: userAvatarUrl,
+          text: text,
+          parentCommentId: normalizedParentId,
+        );
+        await _sendMentionNotifications(
+          commentId: docRef.id,
+          collectionId: collectionId,
+          collectionTitle: title,
+          userId: userId,
+          userName: userName,
+          userAvatarUrl: userAvatarUrl,
+          text: text,
+          mentions: mentions,
+        );
       }
     } catch (e) {
       debugPrint('Comment notification error: $e');
@@ -99,6 +118,116 @@ class FirestoreService {
 
     await _touchCollectionUpdatedAt(collectionId);
     return docRef.id;
+  }
+
+  String? _normalizeCommentParentId(String? parentCommentId) {
+    final trimmed = parentCommentId?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return trimmed;
+  }
+
+  Future<void> _sendCommentNotifications({
+    required String commentId,
+    required String collectionId,
+    required String collectionTitle,
+    required String ownerId,
+    required String userId,
+    required String userName,
+    String? userAvatarUrl,
+    required String text,
+    String? parentCommentId,
+  }) async {
+    Future<void> createNotification({
+      required String toUserId,
+      required String type,
+    }) async {
+      if (toUserId.isEmpty || toUserId == userId) return;
+
+      final payload = <String, dynamic>{
+        'toUserId': toUserId,
+        'type': type,
+        'fromUserId': userId,
+        'fromUsername': UsernameUtils.normalize(userName),
+        'fromUserAvatarUrl': userAvatarUrl,
+        'collectionId': collectionId,
+        'collectionTitle': collectionTitle,
+        'commentId': commentId,
+        'message': text,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+      if (parentCommentId != null) {
+        payload['parentCommentId'] = parentCommentId;
+      }
+      await _firestore.collection('notifications').add(payload);
+    }
+
+    if (parentCommentId == null) {
+      await createNotification(toUserId: ownerId, type: 'COMMENT');
+      return;
+    }
+
+    final parentSnap = await _commentsRef.doc(parentCommentId).get();
+    final parentAuthorId = parentSnap.exists
+        ? (parentSnap.data() as Map<String, dynamic>)['userId'] as String? ?? ''
+        : '';
+
+    if (parentAuthorId.isNotEmpty) {
+      await createNotification(toUserId: parentAuthorId, type: 'COMMENT_REPLY');
+    }
+
+    if (ownerId.isNotEmpty && ownerId != parentAuthorId) {
+      await createNotification(toUserId: ownerId, type: 'COMMENT');
+    }
+  }
+
+  Future<List<CommentMention>> _resolveCommentMentions(String text) async {
+    final usernames = CommentMentions.extractUsernames(text);
+    if (usernames.isEmpty) return const [];
+
+    final users = await getUsersByUsernames(usernames);
+    final usersByLowerUsername = {
+      for (final user in users) user.username.toLowerCase(): user,
+    };
+
+    final mentions = <CommentMention>[];
+    final seenUserIds = <String>{};
+    for (final username in usernames) {
+      final user = usersByLowerUsername[username.toLowerCase()];
+      if (user == null || user.id.isEmpty || seenUserIds.contains(user.id)) continue;
+      seenUserIds.add(user.id);
+      mentions.add(CommentMention(userId: user.id, username: user.username));
+    }
+    return mentions;
+  }
+
+  Future<void> _sendMentionNotifications({
+    required String commentId,
+    required String collectionId,
+    required String collectionTitle,
+    required String userId,
+    required String userName,
+    String? userAvatarUrl,
+    required String text,
+    required List<CommentMention> mentions,
+  }) async {
+    for (final mention in mentions) {
+      if (mention.userId.isEmpty || mention.userId == userId) continue;
+
+      await _firestore.collection('notifications').add({
+        'toUserId': mention.userId,
+        'type': 'COMMENT_MENTION',
+        'fromUserId': userId,
+        'fromUsername': UsernameUtils.normalize(userName),
+        'fromUserAvatarUrl': userAvatarUrl,
+        'collectionId': collectionId,
+        'collectionTitle': collectionTitle,
+        'commentId': commentId,
+        'message': text,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   Future<void> toggleCommentLike(String commentId, String userId) async {
@@ -125,14 +254,25 @@ class FirestoreService {
         // Notify comment author
         try {
           final commentUserId = data['userId'] as String? ?? '';
+          final collectionId = data['collectionId'] as String? ?? '';
           if (commentUserId.isNotEmpty && commentUserId != userId) {
             final fromUsername = await _getUsername(userId);
+            String collectionTitle = '';
+            if (collectionId.isNotEmpty) {
+              final collectionSnap = await _collectionsRef.doc(collectionId).get();
+              if (collectionSnap.exists) {
+                collectionTitle =
+                    (collectionSnap.data() as Map<String, dynamic>)['title'] as String? ?? '';
+              }
+            }
             await _firestore.collection('notifications').add({
               'toUserId': commentUserId,
               'type': 'COMMENT_LIKE',
               'fromUserId': userId,
-              'fromUsername': fromUsername,
-              'collectionId': data['collectionId'] ?? '',
+              'fromUsername': UsernameUtils.normalize(fromUsername),
+              'collectionId': collectionId,
+              'collectionTitle': collectionTitle,
+              'commentId': commentId,
               'message': data['text'] ?? '',
               'isRead': false,
               'createdAt': FieldValue.serverTimestamp(),
@@ -166,7 +306,7 @@ class FirestoreService {
         (data['displayName'] as String?) ??
         '';
     final trimmed = name.trim();
-    return trimmed.isNotEmpty ? trimmed : 'Someone';
+    return trimmed.isNotEmpty ? UsernameUtils.normalize(trimmed) : 'Someone';
   }
 
   Future<void> _createLikeNotification({
@@ -193,7 +333,7 @@ class FirestoreService {
       'toUserId': toUserId,
       'type': type,
       'fromUserId': fromUserId,
-      'fromUsername': fromUsername,
+      'fromUsername': UsernameUtils.normalize(fromUsername),
       'collectionId': collectionId,
       'collectionTitle': collectionTitle,
       'isRead': false,
@@ -249,29 +389,80 @@ class FirestoreService {
 
   /// Create or update user
   Future<void> saveUser(UserEntity user) async {
+    final normalized = UsernameUtils.normalize(user.username);
     await _usersRef.doc(user.id).set({
-      ...user.toMap(),
-      'usernameLower': user.username.toLowerCase(),
+      ...user.copyWith(username: normalized).toMap(),
+      'usernameLower': normalized,
     }, SetOptions(merge: true));
   }
 
   /// Update username
   Future<void> updateUsername(String userId, String username) async {
+    final normalized = UsernameUtils.normalize(username);
     await _usersRef.doc(userId).update({
-      'username': username,
-      'usernameLower': username.toLowerCase(),
+      'username': normalized,
+      'usernameLower': normalized,
     });
+  }
+
+  /// Returns true when [username] is not used by another user.
+  Future<bool> isUsernameAvailable(
+    String username, {
+    required String excludeUserId,
+  }) async {
+    final lower = UsernameUtils.normalize(username);
+    if (lower.isEmpty) return false;
+
+    try {
+      final snapshot = await _usersRef
+          .where('usernameLower', isEqualTo: lower)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isEmpty) return true;
+      return snapshot.docs.first.id == excludeUserId;
+    } catch (e) {
+      debugPrint('isUsernameAvailable query failed: $e');
+    }
+
+    final fallbackSnapshot = await _usersRef.limit(200).get();
+    for (final doc in fallbackSnapshot.docs) {
+      if (doc.id == excludeUserId) continue;
+      final data = doc.data() as Map<String, dynamic>;
+      final storedLower = (data['usernameLower'] as String?) ??
+          (data['username'] as String?)?.toLowerCase();
+      if (storedLower == lower) return false;
+    }
+    return true;
   }
 
   /// Get user email by username
   Future<String?> getUserEmailByUsername(String username) async {
-    final querySnapshot = await _usersRef
-        .where('username', isEqualTo: username)
+    final lower = UsernameUtils.normalize(username);
+    if (lower.isEmpty) return null;
+
+    try {
+      final querySnapshot = await _usersRef
+          .where('usernameLower', isEqualTo: lower)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        return (querySnapshot.docs.first.data() as Map<String, dynamic>)['email']
+            as String?;
+      }
+    } catch (e) {
+      debugPrint('getUserEmailByUsername usernameLower query failed: $e');
+    }
+
+    final fallbackSnapshot = await _usersRef
+        .where('username', isEqualTo: lower)
         .limit(1)
         .get();
 
-    if (querySnapshot.docs.isEmpty) return null;
-    return (querySnapshot.docs.first.data() as Map<String, dynamic>)['email'] as String?;
+    if (fallbackSnapshot.docs.isEmpty) return null;
+    return (fallbackSnapshot.docs.first.data() as Map<String, dynamic>)['email']
+        as String?;
   }
 
   /// Follow a user
@@ -323,7 +514,7 @@ class FirestoreService {
           'type': 'NEW_FOLLOWER',
           'toUserId': targetUserId,
           'fromUserId': currentUserId,
-          'fromUsername': currentUsername,
+          'fromUsername': UsernameUtils.normalize(currentUsername),
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -524,7 +715,7 @@ class FirestoreService {
   final itemData = {
       'collectionId': collectionId,
       'userId': userId,
-      'userName': userName,
+      'userName': UsernameUtils.normalize(userName),
       'title': title,
       'websiteUrl': websiteUrl,
       'description': (trimmedDescription != null && trimmedDescription.isNotEmpty)
@@ -571,17 +762,19 @@ class FirestoreService {
 
   /// Create a new collection
   Future<String> createCollection(CollectionEntity collection) async {
-    var userName = collection.userName.trim();
+    var userName = UsernameUtils.normalize(collection.userName.trim());
     var userAvatarUrl = collection.userAvatarUrl;
 
     if (userName.isEmpty) {
       final user = await getUser(collection.userId);
-      userName = user?.userName.trim() ?? '';
+      userName = UsernameUtils.normalize(user?.userName.trim() ?? '');
       userAvatarUrl ??= user?.avatarUrl;
     }
     if (userName.isEmpty) {
       final resolved = await _getUsername(collection.userId);
-      userName = resolved == 'Someone' ? 'User' : resolved;
+      userName = UsernameUtils.normalize(
+        resolved == 'Someone' ? 'User' : resolved,
+      );
     }
 
     final resolvedCollection = collection.copyWith(
@@ -589,9 +782,14 @@ class FirestoreService {
       userAvatarUrl: userAvatarUrl,
     );
 
+    final searchKeywords = await _buildSearchKeywords(
+      resolvedCollection,
+      items: const [],
+    );
+
     final docRef = await _collectionsRef.add({
       ...resolvedCollection.toMap(),
-      'searchKeywords': resolvedCollection.searchKeywords,
+      'searchKeywords': searchKeywords,
       'savedBy': resolvedCollection.savedBy,
       'contributorIds': resolvedCollection.contributorIds,
       'createdAt': FieldValue.serverTimestamp(),
@@ -607,8 +805,10 @@ class FirestoreService {
 
   /// Update a collection
   Future<void> updateCollection(CollectionEntity collection) async {
+    final searchKeywords = await _buildSearchKeywords(collection);
     await _collectionsRef.doc(collection.id).update({
       ...collection.toMap(),
+      'searchKeywords': searchKeywords,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -793,18 +993,44 @@ class FirestoreService {
     required String currentUsername,
     required String collectionTitle,
   }) async {
-    // Add to collection's collaborators array
-    await _collectionsRef.doc(collectionId).update({
-      'collaborators': FieldValue.arrayUnion([{
+    final collectionRef = _collectionsRef.doc(collectionId);
+    final normalizedRole = role.toUpperCase();
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(collectionRef);
+      if (!snap.exists) {
+        throw Exception('Collection not found');
+      }
+
+      final data = snap.data() as Map<String, dynamic>;
+      final collaborators = (data['collaborators'] as List?)
+              ?.map((entry) => Map<String, dynamic>.from(entry as Map))
+              .toList() ??
+          <Map<String, dynamic>>[];
+
+      if (collaborators.any((c) => c['userId'] == userId)) {
+        return;
+      }
+
+      collaborators.add({
         'userId': userId,
-        'username': username,
-        'role': role.toUpperCase(),
-        'addedAt': FieldValue.serverTimestamp(),
-      }]),
-      if (role.toUpperCase() == 'EDITOR')
-        'editors': FieldValue.arrayUnion([userId])
-      else
-        'viewers': FieldValue.arrayUnion([userId]),
+        'username': UsernameUtils.normalize(username),
+        'role': normalizedRole,
+        'addedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      final updates = <String, dynamic>{
+        'collaborators': collaborators,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (normalizedRole == 'EDITOR') {
+        updates['editors'] = FieldValue.arrayUnion([userId]);
+      } else {
+        updates['viewers'] = FieldValue.arrayUnion([userId]);
+      }
+
+      tx.update(collectionRef, updates);
     });
 
     // Create notification for the invited user
@@ -812,10 +1038,10 @@ class FirestoreService {
       'type': 'COLLABORATION_INVITE',
       'toUserId': userId,
       'fromUserId': currentUserId,
-      'fromUsername': currentUsername,
+      'fromUsername': UsernameUtils.normalize(currentUsername),
       'collectionId': collectionId,
       'collectionTitle': collectionTitle,
-      'role': role.toUpperCase(),
+      'role': normalizedRole,
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -857,7 +1083,7 @@ class FirestoreService {
       'type': 'FOLLOW_REQUEST',
       'toUserId': targetUserId,
       'fromUserId': currentUserId,
-      'fromUsername': currentUsername,
+      'fromUsername': UsernameUtils.normalize(currentUsername),
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -1024,6 +1250,8 @@ class FirestoreService {
       }
     }
 
+    await _refreshCollectionSearchKeywords(collectionId);
+
     return docRef.id;
   }
 
@@ -1034,6 +1262,7 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await _touchCollectionUpdatedAt(collectionId);
+    await _refreshCollectionSearchKeywords(collectionId);
   }
 
   /// Delete an item
@@ -1049,6 +1278,8 @@ class FirestoreService {
     } catch (e) {
       debugPrint('Could not update collection itemCount after delete: $e');
     }
+
+    await _refreshCollectionSearchKeywords(collectionId);
   }
 
   /// Toggle like on an item
@@ -1152,7 +1383,7 @@ class FirestoreService {
     final newCollectionData = {
       ...originalData,
       'userId': newOwnerId,
-      'userName': newOwnerName,
+      'userName': UsernameUtils.normalize(newOwnerName),
       'title': newTitle ?? '${originalData['title']} (Copy)',
       'description': newDescription ?? originalData['description'],
       'websiteUrl': originalData['websiteUrl'],
@@ -1186,7 +1417,7 @@ class FirestoreService {
         ...itemData,
         'collectionId': newCollectionRef.id,
         'userId': newOwnerId,
-        'userName': newOwnerName,
+        'userName': UsernameUtils.normalize(newOwnerName),
         'likes': 0,
         'likedBy': [],
         'createdAt': FieldValue.serverTimestamp(),
@@ -1221,65 +1452,284 @@ class FirestoreService {
     }
   }
 
-  /// Safely backfill search keywords for public collections in the background
-  Future<void> backfillKeywordsIfEmpty(List<CollectionEntity> collections) async {
+  /// One-time legacy catch-up for collections created before search indexing.
+  ///
+  /// New users are skipped automatically when their collections are already indexed
+  /// (e.g. created via [createCollection] after this shipped). Runs at most once per
+  /// user, tracked by `searchIndexInitialSync` on the user doc.
+  Future<void> runLegacySearchIndexSyncIfNeeded(String userId) async {
+    if (userId.isEmpty) return;
+    if (await _hasCompletedSearchIndexInitialSync(userId)) return;
+
+    final collections = await getUserCollections(userId);
+    if (await _anyOwnedCollectionNeedsReindex(collections)) {
+      await reindexEditableCollections(
+        collections,
+        currentUserId: userId,
+      );
+    }
+
+    await _markSearchIndexInitialSyncComplete(userId);
+  }
+
+  Future<bool> _anyOwnedCollectionNeedsReindex(
+    List<CollectionEntity> collections,
+  ) async {
     for (final collection in collections) {
-      if (collection.searchKeywords.isEmpty) {
-        try {
-          final keywords = CollectionEntity.generateKeywords(
-            title: collection.title,
-            description: collection.description,
-            tags: collection.tags,
-            category: collection.category.name,
-            userName: collection.userName,
-          );
-          if (keywords.isNotEmpty) {
-            await _collectionsRef.doc(collection.id).update({
-              'searchKeywords': keywords,
-            });
-            debugPrint('Backfilled keywords for collection ${collection.id}: $keywords');
-          }
-        } catch (e) {
-          debugPrint('Failed to backfill keywords for ${collection.id}: $e');
-        }
+      final items = collection.itemCount > 0
+          ? await _getCollectionItemsForSearch(collection.id)
+          : const <CollectionItemEntity>[];
+
+      if (SearchTokenizer.needsReindex(
+        existingKeywords: collection.searchKeywords,
+        title: collection.title,
+        description: collection.description,
+        tags: collection.tags,
+        category: collection.category.name,
+        categoryDisplayName: collection.category.displayName,
+        items: _toSearchIndexedItems(items),
+      )) {
+        return true;
+      }
+
+      if (collection.itemCount > 0 && items.isEmpty) {
+        return true;
       }
     }
+    return false;
+  }
+
+  Future<void> reindexEditableCollections(
+    List<CollectionEntity> collections, {
+    required String currentUserId,
+  }) async {
+    for (final collection in collections) {
+      if (!_canUserUpdateSearchIndex(collection, currentUserId)) {
+        continue;
+      }
+
+      final items = collection.itemCount > 0
+          ? await _getCollectionItemsForSearch(collection.id)
+          : const <CollectionItemEntity>[];
+      final indexedItems = _toSearchIndexedItems(items);
+
+      var needsRefresh = SearchTokenizer.needsReindex(
+        existingKeywords: collection.searchKeywords,
+        title: collection.title,
+        description: collection.description,
+        tags: collection.tags,
+        category: collection.category.name,
+        categoryDisplayName: collection.category.displayName,
+        items: indexedItems,
+      );
+
+      if (!needsRefresh && collection.itemCount > 0 && indexedItems.isEmpty) {
+        needsRefresh = true;
+      }
+
+      if (!needsRefresh) continue;
+
+      try {
+        final keywords = await _buildSearchKeywords(
+          collection,
+          items: items,
+        );
+        if (keywords.isEmpty) continue;
+
+        await _collectionsRef.doc(collection.id).update({
+          'searchKeywords': keywords,
+        });
+        debugPrint('Reindexed search keywords for collection ${collection.id}');
+      } catch (e) {
+        debugPrint('Failed to reindex keywords for ${collection.id}: $e');
+      }
+    }
+  }
+
+  Future<bool> _hasCompletedSearchIndexInitialSync(String userId) async {
+    try {
+      final doc = await _usersRef.doc(userId).get();
+      if (!doc.exists) return false;
+      final data = doc.data() as Map<String, dynamic>?;
+      return data?['searchIndexInitialSync'] == true;
+    } catch (e) {
+      debugPrint('Failed to read search index sync flag: $e');
+      return false;
+    }
+  }
+
+  Future<void> _markSearchIndexInitialSyncComplete(String userId) async {
+    try {
+      await _usersRef.doc(userId).update({
+        'searchIndexInitialSync': true,
+        'searchIndexInitialSyncAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Failed to mark search index initial sync complete: $e');
+    }
+  }
+
+  bool _canUserUpdateSearchIndex(
+    CollectionEntity collection,
+    String currentUserId,
+  ) {
+    if (currentUserId.isEmpty) return false;
+    if (collection.userId == currentUserId) return true;
+    return collection.editors.contains(currentUserId);
+  }
+
+  Future<List<CollectionItemEntity>> _getCollectionItemsForSearch(
+    String collectionId,
+  ) async {
+    final snapshot = await _collectionItemsRef
+        .where('collectionId', isEqualTo: collectionId)
+        .orderBy('order')
+        .get();
+
+    return snapshot.docs
+        .map((doc) => CollectionItemEntity.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            ))
+        .toList();
+  }
+
+  List<SearchIndexedItem> _toSearchIndexedItems(
+    List<CollectionItemEntity> items,
+  ) {
+    return items
+        .map(
+          (item) => SearchIndexedItem(
+            title: item.title,
+            description: item.description,
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<String>> _buildSearchKeywords(
+    CollectionEntity collection, {
+    List<CollectionItemEntity>? items,
+  }) async {
+    final resolvedItems =
+        items ?? await _getCollectionItemsForSearch(collection.id);
+
+    return CollectionEntity.generateKeywords(
+      title: collection.title,
+      description: collection.description,
+      tags: collection.tags,
+      category: collection.category.name,
+      categoryDisplayName: collection.category.displayName,
+      userName: collection.userName,
+      items: _toSearchIndexedItems(resolvedItems),
+    );
+  }
+
+  Future<void> _refreshCollectionSearchKeywords(String collectionId) async {
+    try {
+      final collection = await getCollection(collectionId);
+      if (collection == null) return;
+
+      final keywords = await _buildSearchKeywords(collection);
+      if (keywords.isEmpty) return;
+
+      await _collectionsRef.doc(collectionId).update({
+        'searchKeywords': keywords,
+      });
+    } catch (e) {
+      debugPrint('Failed to refresh search keywords for $collectionId: $e');
+    }
+  }
+
+  List<String> _ephemeralSearchKeywords(
+    CollectionEntity collection, {
+    List<SearchIndexedItem> items = const [],
+  }) {
+    return CollectionEntity.generateKeywords(
+      title: collection.title,
+      description: collection.description,
+      tags: collection.tags,
+      category: collection.category.name,
+      categoryDisplayName: collection.category.displayName,
+      userName: collection.userName,
+      items: items,
+    );
+  }
+
+  int _searchRelevanceScore(CollectionEntity collection, List<String> terms) {
+    final keywords = collection.searchKeywords.isNotEmpty
+        ? collection.searchKeywords
+        : _ephemeralSearchKeywords(collection);
+
+    return SearchTokenizer.relevanceScore(
+      queryTerms: terms,
+      title: collection.title,
+      description: collection.description,
+      tags: collection.tags,
+      category: collection.category.name,
+      categoryDisplayName: collection.category.displayName,
+      indexedKeywords: keywords,
+    );
   }
 
 
   // ==================== SEARCH OPERATIONS ====================
 
 
-  /// Search collections by title
-  /// Search collections by keywords (case-insensitive)
-  Future<List<CollectionEntity>> searchCollections(String query) async {
+  /// Search public collections by tokenized title, description, tags, category,
+  /// and indexed item text.
+  ///
+  /// [supplementalCollections] enables client-side matching for collections whose
+  /// search index could not be updated (e.g. owned by another user).
+  Future<List<CollectionEntity>> searchCollections(
+    String query, {
+    List<CollectionEntity>? supplementalCollections,
+  }) async {
     if (query.trim().isEmpty) return [];
 
-    // Split query into terms and lowercase them
-    final terms = query.trim().toLowerCase().split(RegExp(r'\s+'));
+    final terms = SearchTokenizer.tokenizeQuery(query);
     if (terms.isEmpty) return [];
-    
-    final primaryTerm = terms.first;
 
-    // Use primary term for Firestore query
+    final firestoreTerms =
+        terms.length > 10 ? terms.sublist(0, 10) : List<String>.from(terms);
+
     final snapshot = await _collectionsRef
         .where('isPublic', isEqualTo: true)
-        .where('searchKeywords', arrayContains: primaryTerm)
-        .limit(50) // Fetch more to allow for client-side filtering
+        .where('searchKeywords', arrayContainsAny: firestoreTerms)
+        .limit(75)
         .get();
 
-    final collections = snapshot.docs
+    final indexedResults = snapshot.docs
         .map((doc) =>
             CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .where(
+          (collection) => SearchTokenizer.matchesAllTerms(
+            collection.searchKeywords,
+            terms,
+          ),
+        )
         .toList();
 
-    // Client-side filtering if multiple terms
-    if (terms.length > 1) {
-      return collections.where((collection) {
-        return terms.skip(1).every((term) =>
-            collection.searchKeywords.any((keyword) => keyword.contains(term)));
-      }).toList();
-    }
+    final resultIds = indexedResults.map((collection) => collection.id).toSet();
+    final supplementalResults = (supplementalCollections ?? const [])
+        .where((collection) {
+          if (!collection.isPublic || resultIds.contains(collection.id)) {
+            return false;
+          }
+
+          final keywords = collection.searchKeywords.isNotEmpty
+              ? collection.searchKeywords
+              : _ephemeralSearchKeywords(collection);
+          return SearchTokenizer.matchesAllTerms(keywords, terms);
+        })
+        .toList();
+
+    final collections = [...indexedResults, ...supplementalResults];
+
+    collections.sort(
+      (a, b) => _searchRelevanceScore(b, terms)
+          .compareTo(_searchRelevanceScore(a, terms)),
+    );
 
     return collections;
   }
@@ -1533,7 +1983,7 @@ class FirestoreService {
           .get();
       for (final doc in editorsSnap.docs) {
         final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-        if (c.userId != userId) {
+        if (c.userId != userId && !c.isOpenForContribution) {
           results[doc.id] = c;
         }
       }
@@ -1543,7 +1993,7 @@ class FirestoreService {
           .get();
       for (final doc in viewersSnap.docs) {
         final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-        if (c.userId != userId) {
+        if (c.userId != userId && !c.isOpenForContribution) {
           results[doc.id] = c;
         }
       }
@@ -1585,12 +2035,12 @@ class FirestoreService {
         
         for (final doc in editors.docs) {
           final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-          if (c.userId != userId) results[doc.id] = c;
+          if (c.userId != userId && !c.isOpenForContribution) results[doc.id] = c;
         }
         
         for (final doc in viewers.docs) {
           final c = CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-          if (c.userId != userId) results[doc.id] = c;
+          if (c.userId != userId && !c.isOpenForContribution) results[doc.id] = c;
         }
         
         final list = results.values.toList();
@@ -1663,13 +2113,118 @@ class FirestoreService {
 
   // ==================== USER SEARCH OPERATIONS ====================
 
+  String _normalizedUsernameFromMap(Map<String, dynamic> data) {
+    final storedLower = data['usernameLower'] as String?;
+    if (storedLower != null && storedLower.trim().isNotEmpty) {
+      return storedLower.trim().toLowerCase();
+    }
+
+    final username = (data['username'] ?? data['userName'] ?? '').toString().trim();
+    return username.toLowerCase();
+  }
+
+  List<UserEntity> _filterUsersByUsernamePrefix(
+    Iterable<QueryDocumentSnapshot<Object?>> docs,
+    String lowerQuery, {
+    int limit = 20,
+  }) {
+    final users = docs
+        .map((doc) => UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .where((user) => user.username.toLowerCase().startsWith(lowerQuery))
+        .take(limit)
+        .toList();
+    users.sort((a, b) => a.username.toLowerCase().compareTo(b.username.toLowerCase()));
+    return users;
+  }
+
+  /// Resolve exact usernames to user records for @mentions.
+  Future<List<UserEntity>> getUsersByUsernames(List<String> usernames) async {
+    if (usernames.isEmpty) return const [];
+
+    final lowerUsernames = usernames
+        .map((username) => username.trim().toLowerCase())
+        .where((username) => username.isNotEmpty)
+        .toSet()
+        .toList();
+    if (lowerUsernames.isEmpty) return const [];
+
+    final users = <UserEntity>[];
+    final foundUsernames = <String>{};
+
+    for (var i = 0; i < lowerUsernames.length; i += 10) {
+      final batch = lowerUsernames.sublist(
+        i,
+        i + 10 > lowerUsernames.length ? lowerUsernames.length : i + 10,
+      );
+      try {
+        final snapshot = await _usersRef.where('usernameLower', whereIn: batch).get();
+        for (final doc in snapshot.docs) {
+          final user = UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+          final lower = user.username.toLowerCase();
+          if (foundUsernames.add(lower)) {
+            users.add(user);
+          }
+        }
+      } catch (e) {
+        debugPrint('getUsersByUsernames batch lookup failed: $e');
+      }
+    }
+
+    if (foundUsernames.length == lowerUsernames.length) {
+      return users;
+    }
+
+    final missing = lowerUsernames.where((username) => !foundUsernames.contains(username)).toList();
+    if (missing.isEmpty) return users;
+
+    final fallbackSnapshot = await _usersRef.limit(200).get();
+    for (final doc in fallbackSnapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final lower = _normalizedUsernameFromMap(data);
+      if (lower.isEmpty) continue;
+      if (missing.contains(lower) && foundUsernames.add(lower)) {
+        users.add(UserEntity.fromMap(data, doc.id));
+      }
+    }
+
+    return users;
+  }
+
+  /// User suggestions while typing @mentions in comments.
+  Future<List<UserEntity>> getMentionUserSuggestions(String query) async {
+    try {
+      final lowerQuery = query.trim().toLowerCase();
+      final snapshot = await _usersRef.limit(150).get();
+      final users = snapshot.docs
+          .map((doc) => UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .where((user) => user.username.trim().isNotEmpty)
+          .toList();
+
+      users.sort(
+        (a, b) => a.username.toLowerCase().compareTo(b.username.toLowerCase()),
+      );
+
+      if (lowerQuery.isEmpty) {
+        return users.take(15).toList();
+      }
+
+      return users
+          .where((user) => user.username.toLowerCase().startsWith(lowerQuery))
+          .take(20)
+          .toList();
+    } catch (e) {
+      debugPrint('getMentionUserSuggestions failed: $e');
+      return const [];
+    }
+  }
+
   /// Search users by username
   Future<List<UserEntity>> searchUsers(String query) async {
     if (query.isEmpty) return [];
-    
+
     final lowerQuery = query.toLowerCase();
 
-    // 1. Try case-insensitive indexed query using usernameLower
+    // Prefer indexed lookup when usernameLower exists on user docs.
     try {
       final snapshot = await _usersRef
           .orderBy('usernameLower')
@@ -1687,30 +2242,9 @@ class FirestoreService {
       debugPrint('Search by usernameLower failed or not indexed: $e');
     }
 
-    // 2. Fallback: Fetch a larger batch, filter case-insensitively in memory, and backfill missing fields in background
+    // Read-only fallback: scan a batch and filter locally. Never write other users' docs.
     final fallbackSnapshot = await _usersRef.limit(100).get();
-    
-    // Asynchronously backfill usernameLower for loaded users
-    for (final doc in fallbackSnapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      if (data['usernameLower'] == null) {
-        final username = data['username'] ?? '';
-        if (username.isNotEmpty) {
-          doc.reference.update({'usernameLower': username.toLowerCase()}).catchError((e) {
-            debugPrint('Failed to backfill usernameLower for user ${doc.id}: $e');
-          });
-        }
-      }
-    }
-
-    final allUsers = fallbackSnapshot.docs
-        .map((doc) => UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-        .toList();
-    
-    return allUsers
-        .where((u) => u.username.toLowerCase().startsWith(lowerQuery))
-        .take(20)
-        .toList();
+    return _filterUsersByUsernamePrefix(fallbackSnapshot.docs, lowerQuery);
   }
 
   // ==================== STORAGE OPERATIONS ====================

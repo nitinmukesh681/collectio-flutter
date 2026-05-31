@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/username_utils.dart';
 
 /// Domain entity representing a user
 class UserEntity {
@@ -22,7 +23,7 @@ class UserEntity {
     required this.id,
     this.displayName = '',
     required this.email,
-    required this.username,
+    required String username,
     this.avatarUrl,
     this.bio,
     this.isPrivateAccount = false,
@@ -34,7 +35,8 @@ class UserEntity {
     this.followRequests = const [],
     this.savedCollections = const [],
     int? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
+  }) : username = UsernameUtils.normalize(username),
+       createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
 
   String get userName => username;
   int get followersCount => followerCount;
@@ -60,7 +62,9 @@ class UserEntity {
       id: id ?? this.id,
       displayName: displayName ?? this.displayName,
       email: email ?? this.email,
-      username: username ?? this.username,
+      username: username != null
+          ? UsernameUtils.normalize(username)
+          : this.username,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bio: bio ?? this.bio,
       isPrivateAccount: isPrivateAccount ?? this.isPrivateAccount,
@@ -107,7 +111,9 @@ class UserEntity {
       id: docId,
       displayName: map['displayName'] ?? '',
       email: map['email'] ?? '',
-      username: map['username'] ?? map['userName'] ?? '',
+      username: UsernameUtils.normalize(
+        (map['username'] ?? map['userName'] ?? '').toString(),
+      ),
       avatarUrl: map['avatarUrl'],
       bio: map['bio'],
       collectionsCount: map['collectionsCount'] ?? 0,

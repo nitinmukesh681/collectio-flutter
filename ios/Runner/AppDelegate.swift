@@ -14,26 +14,19 @@ import UIKit
     NSLog("[AppDelegate:1] didFinishLaunchingWithOptions — launchOptions keys=\(launchOptions?.keys.map { $0.rawValue } ?? [])")
     let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     NSLog("[AppDelegate:1] super.application result=\(result)")
-
-    if let registrar = self.registrar(forPlugin: "ShareExtensionPlugin") {
-      self.setupMethodChannel(messenger: registrar.messenger())
-      NSLog("[AppDelegate:1] Method channel 'com.collectio.app/share_extension' setup via registrar — OK")
-    } else {
-      NSLog("[AppDelegate:1] ERROR: Could not get plugin registrar for 'ShareExtensionPlugin'")
-    }
-
-    NSLog("[AppDelegate:1] Scheduling checkAndProcessSharedData on main queue")
-    DispatchQueue.main.async { [weak self] in
-      self?.checkAndProcessSharedData()
-    }
-
     return result
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     NSLog("[AppDelegate:engine] didInitializeImplicitFlutterEngine — registering plugins")
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    NSLog("[AppDelegate:engine] Plugin registration complete")
+    setupMethodChannel(messenger: engineBridge.applicationRegistrar.messenger())
+    NSLog("[AppDelegate:engine] share_extension method channel ready")
+
+    DispatchQueue.main.async { [weak self] in
+      self?.checkAndProcessSharedData()
+      self?.handleShareExtensionURL()
+    }
   }
   
   private func setupMethodChannel(messenger: FlutterBinaryMessenger) {
@@ -92,14 +85,22 @@ import UIKit
   }
   
   // Called by SceneDelegate when collectio://share URL is received
-  func handleShareExtensionURL() {
+  func handleShareExtensionURL(retryCount: Int = 0) {
     NSLog("[AppDelegate:url] handleShareExtensionURL — checking appGroup '\(appGroupId)' key '\(sharedKey)'")
     if let userDefaults = UserDefaults(suiteName: appGroupId),
        let sharedUrl = userDefaults.string(forKey: sharedKey),
        !sharedUrl.isEmpty {
       NSLog("[AppDelegate:url] found URL '\(sharedUrl)' — shareChannel=\(shareChannel != nil ? "SET" : "NIL")")
       if shareChannel == nil {
-        NSLog("[AppDelegate:url] WARNING: shareChannel is nil, Flutter method call will be dropped!")
+        if retryCount < 10 {
+          NSLog("[AppDelegate:url] shareChannel nil — retry \(retryCount + 1)/10 in 300ms")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.handleShareExtensionURL(retryCount: retryCount + 1)
+          }
+        } else {
+          NSLog("[AppDelegate:url] shareChannel still nil after retries — Flutter will read via getSharedUrl on resume")
+        }
+        return
       }
       shareChannel?.invokeMethod("shareReceived", arguments: sharedUrl)
       NSLog("[AppDelegate:url] invokeMethod 'shareReceived' called")

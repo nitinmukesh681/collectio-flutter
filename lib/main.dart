@@ -13,7 +13,14 @@ import 'screens/landing_screen.dart';
 import 'screens/home_screen.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'screens/import_link_screen.dart';
+import 'screens/collection_detail_screen.dart';
+import 'utils/link_import_utils.dart';
 import 'utils/link_title_utils.dart';
+import 'utils/share_intent_controller.dart';
+import 'utils/username_utils.dart';
+import 'services/username_lowercase_migration.dart';
+import 'services/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_options.dart';
 import 'services/firebase_messaging_background_handler.dart';
@@ -54,7 +61,8 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
-  
+
+  ShareIntentController.install();
   runApp(const CollectioApp());
 }
 
@@ -84,7 +92,10 @@ class CollectioApp extends StatelessWidget {
               textScaler: const TextScaler.linear(0.9),
               platformBrightness: Brightness.light,
             ),
-            child: child ?? const SizedBox.shrink(),
+            child: child ??
+                const SizedBox.expand(
+                  child: ColoredBox(color: AppColors.backgroundSurface),
+                ),
           );
         },
         home: const AuthGate(),
@@ -106,17 +117,24 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   String? _pendingSharedUrl;
   String? _pendingSharedTitle;
   bool _didHandlePendingShare = false;
+  String? _postImportCollectionId;
   bool _isCheckingAndroidShare = false;
-  bool _isOpeningImport = false;
+  bool _usernameMigrationStarted = false;
+  bool _legacySearchSyncInFlight = false;
   static const _shareExtensionChannel = MethodChannel('com.collectio.app/share_extension');
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _setupShareExtensionHandler();
-    // Wait for first frame so Android has non-zero viewport before share handling.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initShareIntentListeners());
+    ShareIntentController.attach(_handleNativeSharePayload);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runUsernameMigrationIfNeeded();
+      // Android cold start from share can report zero viewport on first frame.
+      Future<void>.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) _initShareIntentListeners();
+      });
+    });
   }
 
   @override
@@ -127,49 +145,117 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       _auth?.removeListener(_onAuthUpdated);
       _auth = auth;
       _auth!.addListener(_onAuthUpdated);
-      _openPendingShareIfReady();
     }
   }
 
   @override
   void dispose() {
+    ShareIntentController.detach();
     _auth?.removeListener(_onAuthUpdated);
     WidgetsBinding.instance.removeObserver(this);
     _mediaSub?.cancel();
-    _shareExtensionChannel.setMethodCallHandler(null);
     super.dispose();
   }
 
-  void _onAuthUpdated() {
-    _openPendingShareIfReady();
+  void _handleNativeSharePayload({
+    required String? url,
+    required String? text,
+    required String? subject,
+  }) {
+    if (!mounted) return;
+
+    if (url != null && _normalizeUrl(url) != null && (text == null || text == url)) {
+      setState(() {
+        _pendingSharedUrl = _normalizeUrl(url) ?? url;
+        _pendingSharedTitle = LinkTitleUtils.resolveItemTitle(
+          sharedTitle: subject,
+          url: _pendingSharedUrl!,
+        );
+        _didHandlePendingShare = false;
+      });
+      return;
+    }
+
+    if (text != null && text.isNotEmpty) {
+      _processSharedContent(text, sharedTitle: subject);
+    }
   }
 
-  void _setupShareExtensionHandler() {
-    _shareExtensionChannel.setMethodCallHandler((call) async {
-      if (call.method != 'shareReceived' || !mounted) return;
+  void _onAuthUpdated() {
+    if (_pendingSharedUrl != null && !_didHandlePendingShare && mounted) {
+      setState(() {});
+    }
+    _runUsernameMigrationIfNeeded();
+    _runLegacySearchIndexSyncIfNeeded();
+  }
 
-      if (call.arguments is String) {
-        final url = call.arguments as String;
-        if (url.isEmpty) return;
-        setState(() {
-          _pendingSharedUrl = url;
-          _pendingSharedTitle = null;
-          _didHandlePendingShare = false;
-          _isOpeningImport = false;
-        });
-        _openPendingShareIfReady();
-        return;
-      }
+  void _runLegacySearchIndexSyncIfNeeded() {
+    final auth = _auth;
+    if (auth == null ||
+        !auth.isAuthenticated ||
+        !auth.firebaseReady ||
+        auth.needsUsername ||
+        !auth.userProfileLoaded) {
+      return;
+    }
 
-      if (call.arguments is Map) {
-        final payload = Map<Object?, Object?>.from(call.arguments as Map);
-        final text = _readShareString(payload['text']) ?? '';
-        final subject = _readShareString(payload['subject']);
-        if (text.isEmpty) return;
-        debugPrint('[Share] native shareReceived text=$text subject=$subject');
-        _processSharedContent(text, sharedTitle: subject);
+    final userId = auth.userId;
+    if (userId.isEmpty || _legacySearchSyncInFlight) return;
+
+    _legacySearchSyncInFlight = true;
+    unawaited(
+      FirestoreService()
+          .runLegacySearchIndexSyncIfNeeded(userId)
+          .catchError((Object e) {
+        debugPrint('[SearchIndex] Legacy sync failed: $e');
+      })
+          .whenComplete(() {
+        _legacySearchSyncInFlight = false;
+      }),
+    );
+  }
+
+  void _runUsernameMigrationIfNeeded() {
+    if (_usernameMigrationStarted) return;
+    final auth = _auth;
+    if (auth == null || !auth.isAuthenticated || !auth.firebaseReady) return;
+
+    _usernameMigrationStarted = true;
+    try {
+      Firebase.app();
+    } catch (_) {
+      _usernameMigrationStarted = false;
+      return;
+    }
+
+    unawaited(
+      UsernameLowercaseMigration.runIfNeeded(FirebaseFirestore.instance).catchError(
+        (Object e, StackTrace st) {
+          debugPrint('[Migration] Username lowercase migration failed: $e');
+          _usernameMigrationStarted = false;
+        },
+      ),
+    );
+  }
+
+
+  Future<void> _pollAndroidShare() async {
+    if (!Platform.isAndroid || !mounted) return;
+
+    await _processAndroidShareFromExtrasOnly();
+
+    try {
+      final files = await ReceiveSharingIntent.instance.getInitialMedia();
+      if (files.isNotEmpty) {
+        await _processSharedMedia(files);
       }
-    });
+    } catch (e) {
+      debugPrint('[Share] Android getInitialMedia failed: $e');
+    }
+
+    if (mounted && _pendingSharedUrl != null) {
+      setState(() {});
+    }
   }
 
   Future<void> _clearNativeShare() async {
@@ -184,9 +270,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     if (Platform.isIOS) {
-      _checkIOSShareExtensionData();
-    } else if (Platform.isAndroid && !_didHandlePendingShare) {
-      _checkAndroidShareIntent();
+      unawaited(_pollIOSSharedUrl());
+    } else if (Platform.isAndroid) {
+      unawaited(_pollAndroidShare());
     }
   }
 
@@ -222,10 +308,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       _pendingSharedUrl = url;
       _pendingSharedTitle = title;
       _didHandlePendingShare = false;
-      _isOpeningImport = false;
     });
-
-    _openPendingShareIfReady();
   }
 
   Future<void> _processSharedMedia(List<SharedMediaFile> files) async {
@@ -333,13 +416,11 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     if (!Platform.isAndroid || _isCheckingAndroidShare) return;
     _isCheckingAndroidShare = true;
 
-    final maxAttempts = retryOnStartup ? 15 : 5;
+    final maxAttempts = retryOnStartup ? 20 : 8;
     const delay = Duration(milliseconds: 250);
 
     try {
-      if (mounted && _pendingSharedUrl == null) {
-        await _processAndroidShareFromExtrasOnly();
-      }
+      await _processAndroidShareFromExtrasOnly();
 
       for (var attempt = 0; attempt < maxAttempts; attempt++) {
         if (!mounted) break;
@@ -356,10 +437,10 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       }
 
       if (mounted && _pendingSharedUrl != null) {
-        _openPendingShareIfReady();
+        setState(() {});
       }
     } catch (e) {
-      debugPrint('Error checking Android share intent: $e');
+      debugPrint('[Share] Error checking Android share intent: $e');
     } finally {
       _isCheckingAndroidShare = false;
     }
@@ -367,39 +448,56 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   bool _isCheckingShareExtension = false;
 
+  Future<void> _pollIOSSharedUrl() async {
+    try {
+      final sharedUrl =
+          await _shareExtensionChannel.invokeMethod<String>('getSharedUrl');
+      if (sharedUrl == null || sharedUrl.isEmpty || !mounted) return;
+
+      debugPrint('[Share] iOS polled shared URL: $sharedUrl');
+      setState(() {
+        _pendingSharedUrl = sharedUrl;
+        _pendingSharedTitle = null;
+        _didHandlePendingShare = false;
+      });
+    } catch (e) {
+      debugPrint('[Share] getSharedUrl failed: $e');
+    }
+  }
+
   Future<void> _checkIOSShareExtensionData({bool retryOnStartup = false}) async {
     if (_isCheckingShareExtension) return;
     _isCheckingShareExtension = true;
 
     final int maxAttempts = retryOnStartup ? 10 : 3;
     final Duration delay = const Duration(milliseconds: 200);
-    
+
     try {
       for (int attempt = 0; attempt < maxAttempts; attempt++) {
         if (!mounted) break;
-        
-        final sharedUrl = await _shareExtensionChannel.invokeMethod<String>('getSharedUrl');
+
+        final sharedUrl =
+            await _shareExtensionChannel.invokeMethod<String>('getSharedUrl');
         if (sharedUrl != null && sharedUrl.isNotEmpty) {
+          debugPrint('[Share] iOS startup shared URL: $sharedUrl');
           if (mounted) {
             setState(() {
               _pendingSharedUrl = sharedUrl;
               _pendingSharedTitle = null;
               _didHandlePendingShare = false;
-              _isOpeningImport = false;
             });
-            _openPendingShareIfReady();
           }
           break;
         }
-        
+
         if (attempt < maxAttempts - 1) {
           await Future.delayed(delay);
         }
       }
     } catch (e) {
-      debugPrint('Error checking share extension data: $e');
+      debugPrint('[Share] Error checking share extension data: $e');
     }
-    
+
     _isCheckingShareExtension = false;
   }
 
@@ -425,122 +523,58 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     return uri.toString();
   }
 
-  void _openPendingShareIfReady() {
-    if (!mounted ||
-        _pendingSharedUrl == null ||
-        _didHandlePendingShare ||
-        _isOpeningImport) {
-      return;
+  bool _canPresentShareImport(AuthProvider auth) {
+    if (!auth.firebaseReady || !auth.initialAuthChecked || auth.isLoading) {
+      return false;
     }
-
-    final auth = _auth;
-    if (auth == null || !auth.firebaseReady) {
-      return;
+    if (!auth.isAuthenticated || !auth.isEmailVerified || auth.needsUsername) {
+      return false;
     }
-    if (auth.isLoading) {
-      debugPrint('[Share] waiting — auth isLoading');
-      return;
-    }
-    if (!auth.isAuthenticated) {
-      debugPrint('[Share] waiting — not authenticated');
-      return;
-    }
-    if (!auth.isEmailVerified) {
-      debugPrint('[Share] blocked — email not verified');
-      return;
-    }
-    if (!auth.userProfileLoaded) {
-      debugPrint('[Share] waiting — user profile loading');
-      return;
-    }
-    if (auth.needsUsername) {
-      debugPrint('[Share] blocked — username required');
-      return;
-    }
-
-    final userName = auth.resolvedUserName;
-    final url = _pendingSharedUrl!;
-    final title = _pendingSharedTitle;
-
-    _isOpeningImport = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_pushImportRoute(
-        url: url,
-        title: title,
-        userId: auth.userId,
-        userName: userName,
-      ));
-    });
+    return true;
   }
 
-  Future<void> _pushImportRoute({
-    required String url,
-    required String? title,
-    required String userId,
-    required String userName,
-  }) async {
-    if (!mounted) {
-      _isOpeningImport = false;
-      return;
-    }
+  void _completeShareImport([String? collectionId]) {
+    if (!mounted) return;
+    setState(() {
+      _pendingSharedUrl = null;
+      _pendingSharedTitle = null;
+      _didHandlePendingShare = true;
+      _postImportCollectionId = collectionId;
+    });
+    _clearNativeSharePayload();
+  }
 
-    NavigatorState? navigator = CollectioApp.navigatorKey.currentState;
-    for (var attempt = 0; attempt < 40 && navigator == null; attempt++) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      if (!mounted) {
-        _isOpeningImport = false;
-        return;
-      }
-      navigator = CollectioApp.navigatorKey.currentState;
-    }
+  void _clearPostImportCollection() {
+    if (!mounted) return;
+    setState(() => _postImportCollectionId = null);
+  }
 
-    if (navigator == null) {
-      debugPrint('[Share] aborted — root navigator not ready');
-      if (mounted) {
-        setState(() {
-          _isOpeningImport = false;
-          _didHandlePendingShare = false;
-        });
-      }
-      return;
-    }
+  Widget? _buildShareImportScreen(AuthProvider auth) {
+    if (_pendingSharedUrl == null || _didHandlePendingShare) return null;
+    if (!_canPresentShareImport(auth)) return null;
 
-    debugPrint('[Share] opening ImportLinkScreen for $url');
-
-    if (mounted) {
-      setState(() {
-        _pendingSharedUrl = null;
-        _pendingSharedTitle = null;
-        _didHandlePendingShare = true;
-      });
-    }
-
-    try {
-      await navigator.push<void>(
-        MaterialPageRoute(
-          builder: (context) => ImportLinkScreen(
-            sharedUrl: url,
-            sharedTitle: title,
-            userId: userId,
-            userName: userName,
-          ),
+    final url = _pendingSharedUrl!;
+    final collectionId = LinkImportUtils.extractCollectionId(url);
+    if (collectionId != null) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _completeShareImport();
+        },
+        child: CollectionDetailScreen(
+          collectionId: collectionId,
+          currentUserId: auth.userId,
         ),
       );
-    } catch (e) {
-      debugPrint('[Share] navigation error: $e');
-      if (mounted) {
-        setState(() {
-          _pendingSharedUrl = url;
-          _pendingSharedTitle = title;
-          _didHandlePendingShare = false;
-        });
-      }
-    } finally {
-      _clearNativeSharePayload();
-      if (mounted) {
-        setState(() => _isOpeningImport = false);
-      }
     }
+
+    return ImportLinkScreen(
+      sharedUrl: url,
+      sharedTitle: _pendingSharedTitle,
+      userId: auth.userId,
+      userName: auth.resolvedUserName,
+      onComplete: _completeShareImport,
+    );
   }
 
   void _clearNativeSharePayload() {
@@ -590,11 +624,36 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
         if (!auth.isAuthenticated) return const LandingScreen();
         if (!auth.isEmailVerified) return const EmailVerificationScreen();
+
+        final shareImportScreen = _buildShareImportScreen(auth);
+        if (shareImportScreen != null) {
+          return shareImportScreen;
+        }
+
+        if (_postImportCollectionId != null) {
+          return PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _clearPostImportCollection();
+            },
+            child: CollectionDetailScreen(
+              collectionId: _postImportCollectionId!,
+              currentUserId: auth.userId,
+            ),
+          );
+        }
+
+        if (auth.isAuthenticated && !auth.userProfileLoaded) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+            ),
+          );
+        }
         if (auth.needsUsername) return const UsernameScreen();
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _openPendingShareIfReady();
-        });
         return const HomeScreen();
       },
     );
@@ -634,28 +693,44 @@ class UsernameScreen extends StatefulWidget {
 
 class _UsernameScreenState extends State<UsernameScreen> {
   final _controller = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     return Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Choose Username', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 32),
-            TextField(controller: _controller, decoration: const InputDecoration(labelText: 'Username')),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () => auth.setUsername(_controller.text.trim()),
-                child: const Text('Continue'),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Choose Username', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 32),
+              TextFormField(
+                controller: _controller,
+                autocorrect: false,
+                inputFormatters: UsernameUtils.inputFormatters,
+                decoration: const InputDecoration(labelText: 'Username'),
+                validator: UsernameUtils.validate,
               ),
-            ),
-          ],
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: auth.isLoading
+                      ? null
+                      : () {
+                          if (!_formKey.currentState!.validate()) return;
+                          auth.setUsername(UsernameUtils.normalize(_controller.text));
+                        },
+                  child: const Text('Continue'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

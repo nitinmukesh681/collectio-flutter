@@ -3,8 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
-import '../models/category_type.dart';
 import '../theme/app_theme.dart';
+import '../utils/category_icons.dart';
 import '../screens/collection_detail_screen.dart';
 
 class CollectionListCard extends StatelessWidget {
@@ -19,53 +19,11 @@ class CollectionListCard extends StatelessWidget {
     this.profileStyle = false,
   });
 
-  IconData _categoryIcon() {
-    switch (collection.category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
-  }
-
-  Future<String?> _resolveCoverUrl() async {
+  Future<String?> _resolveCover() async {
     final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)
         ? collection.coverImageUrl!.trim()
         : (collection.previewImageUrls.isNotEmpty ? collection.previewImageUrls.first.trim() : '');
     if (candidate.isEmpty) return null;
-    if (!(candidate.startsWith('http://') || candidate.startsWith('https://') || candidate.startsWith('gs://'))) {
-      return null;
-    }
     if (candidate.startsWith('gs://')) {
       try {
         return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL();
@@ -73,181 +31,206 @@ class CollectionListCard extends StatelessWidget {
         return null;
       }
     }
-    return candidate;
+    if (candidate.startsWith('http')) return candidate;
+    return null;
+  }
+
+  String _visibilityLabel() {
+    if (collection.visibility == CollectionVisibility.followers) {
+      return 'Followers';
+    }
+    return collection.isPublic ? 'Public' : 'Private';
   }
 
   @override
   Widget build(BuildContext context) {
+    if (profileStyle) return _buildProfileCard(context);
+    return _buildListCard(context);
+  }
+
+  Widget _buildCoverThumbnail(List<Color> gradientColors, {double size = 88}) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: AppColors.collectionCoverShadow,
+      ),
+      child: ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: FutureBuilder<String?>(
+          future: _resolveCover(),
+          builder: (context, snap) {
+            final url = snap.data;
+            if (url != null && url.isNotEmpty) {
+              return CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => _defaultCover(gradientColors),
+              );
+            }
+            return _defaultCover(gradientColors);
+          },
+        ),
+      ),
+    ),
+    );
+  }
+
+  Widget _defaultCover(List<Color> gradientColors) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          categoryIcon(collection.category),
+          size: 32,
+          color: Colors.white.withValues(alpha: 0.9),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryLabel() {
+    return Text(
+      collection.category.displayName.toUpperCase(),
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        color: AppColors.categoryLabelColor(collection.category.name),
+        letterSpacing: 1,
+      ),
+    );
+  }
+
+  Widget _buildProfileCard(BuildContext context) {
     final gradientColors = AppColors.categoryGradients[collection.category.name] ??
         AppColors.categoryGradients['other']!;
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CollectionDetailScreen(
-              collectionId: collection.id,
-              currentUserId: currentUserId,
-            ),
-          ),
-        );
-      },
+      onTap: () => _openDetail(context),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(AppColors.radiusCard),
-          border: Border.all(color: AppColors.divider),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x06000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+          boxShadow: AppColors.cardShadow,
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Left: Cover Image/Gradient
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 80,
-                height: 80,
-                child: FutureBuilder<String?>(
-                  future: _resolveCoverUrl(),
-                  builder: (context, snap) {
-                    final url = snap.data;
-                    if (url == null || url.isEmpty) {
-                      return Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: gradientColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Center(
-                          child: Icon(
-                            _categoryIcon(),
-                            size: 24,
-                            color: Colors.white.withOpacity(0.9),
-                          ),
-                        ),
-                      );
-                    }
-
-                    return CachedNetworkImage(
-                      imageUrl: url,
-                      fit: BoxFit.cover,
-                      errorWidget: (context, _, __) => Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: gradientColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Center(
-                          child: Icon(
-                            _categoryIcon(),
-                            size: 24,
-                            color: Colors.white.withOpacity(0.9),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            // Right: Content
+            _buildCoverThumbnail(gradientColors, size: 80),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: gradientColors[0].withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          collection.category.displayName.toUpperCase(),
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: gradientColors[0],
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            collection.isLiked ? Icons.favorite : Icons.favorite_border,
-                            size: 13,
-                            color: AppColors.heartSalmon,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            '${collection.likes}',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.heartSalmon,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  _buildCategoryLabel(),
                   const SizedBox(height: 6),
                   Text(
                     collection.title,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
+                      fontSize: 18,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
-                      height: 1.2,
+                      height: 1.15,
+                      letterSpacing: -0.35,
                     ),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (collection.description != null && collection.description!.trim().isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      collection.description!.trim(),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    '${collection.itemCount} items',
+                    '${collection.itemCount} items • ${_visibilityLabel()}',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: AppColors.textMuted,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListCard(BuildContext context) {
+    final gradientColors = AppColors.categoryGradients[collection.category.name] ??
+        AppColors.categoryGradients['other']!;
+    final description = collection.description?.trim();
+
+    return GestureDetector(
+      onTap: () => _openDetail(context),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+          boxShadow: AppColors.cardShadow,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildCoverThumbnail(gradientColors),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildCategoryLabel(),
+                  const SizedBox(height: 6),
+                  Text(
+                    collection.title,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      height: 1.15,
+                      letterSpacing: -0.35,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (description != null && description.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      description,
+                      style: AppTextStyles.collectionDescription(fontSize: 14, height: 1.4),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, size: 24, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openDetail(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CollectionDetailScreen(
+          collectionId: collection.id,
+          currentUserId: currentUserId,
         ),
       ),
     );

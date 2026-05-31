@@ -33,7 +33,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   List<CollectionEntity> _myCollections = [];
   List<CollectionEntity> _savedCollections = [];
-  // ignore: unused_field
   List<CollectionEntity> _collaborationCollections = [];
   bool _isLoading = true;
 
@@ -184,6 +183,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
+  List<CollectionEntity> _mergedMyCollections() {
+    final ownedIds = _myCollections.map((c) => c.id).toSet();
+    final collaborated = _collaborationCollections
+        .where((c) => !c.isOpenForContribution && !ownedIds.contains(c.id))
+        .toList();
+    return [..._myCollections, ...collaborated];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
@@ -196,6 +203,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             body: Center(child: CircularProgressIndicator()),
           );
         }
+
+        final mergedCollections = _mergedMyCollections();
 
         return Scaffold(
           backgroundColor: Colors.white,
@@ -230,7 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               onAvatarTap: _navigateToEditProfile,
                               actionButton: _buildEditProfileButton(),
                               statsRow: ProfileHeaderLayout.buildStatsRow(
-                                collectionsCount: _formatCount(_myCollections.length),
+                                collectionsCount: _formatCount(mergedCollections.length),
                                 followersCount: _formatCount(user.followers.length),
                                 followingCount: _formatCount(user.following.length),
                                 onFollowersTap: () => _navigateToFollowers(auth.userId, showFollowers: true),
@@ -279,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 controller: _tabController,
                 children: [
                   _buildCollectionsList(
-                    _myCollections,
+                    mergedCollections,
                     auth.userId,
                     isEmpty: 'You haven\'t created any collections yet',
                   ),

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/username_utils.dart';
 
 /// Helper to convert Firestore Timestamp to int
 int _timestampToInt(dynamic value) {
@@ -33,7 +34,7 @@ class CollectionItemEntity {
     required this.id,
     required this.collectionId,
     required this.userId,
-    required this.userName,
+    required String userName,
     required this.title,
     this.description,
     this.rating = 0.0,
@@ -46,7 +47,8 @@ class CollectionItemEntity {
     this.isLiked = false,
     int? createdAt,
     int? updatedAt,
-  })  : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
+  })  : userName = UsernameUtils.normalize(userName),
+        createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
         updatedAt = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
 
   /// Create from Firestore document
@@ -55,7 +57,7 @@ class CollectionItemEntity {
       id: docId,
       collectionId: map['collectionId'] ?? '',
       userId: map['userId'] ?? '',
-      userName: map['userName'] ?? '',
+      userName: UsernameUtils.normalize((map['userName'] ?? '').toString()),
       title: map['title'] ?? '',
       description: map['description'],
       rating: (map['rating'] ?? 0).toDouble(),

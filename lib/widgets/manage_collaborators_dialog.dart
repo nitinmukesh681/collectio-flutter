@@ -11,8 +11,10 @@ class ManageCollaboratorsDialog extends StatefulWidget {
   final String currentUserId;
   final String currentUserName;
   final String collectionTitle;
+  final bool isPublicCollection;
+  final bool showOpenCollaborationToggle;
   final bool isOpenForContribution;
-  final VoidCallback onOpenForContributionChanged;
+  final VoidCallback? onOpenForContributionChanged;
 
   const ManageCollaboratorsDialog({
     super.key,
@@ -20,8 +22,10 @@ class ManageCollaboratorsDialog extends StatefulWidget {
     required this.currentUserId,
     required this.currentUserName,
     required this.collectionTitle,
-    required this.isOpenForContribution,
-    required this.onOpenForContributionChanged,
+    required this.isPublicCollection,
+    this.showOpenCollaborationToggle = false,
+    this.isOpenForContribution = false,
+    this.onOpenForContributionChanged,
   });
 
   @override
@@ -35,7 +39,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
   List<UserEntity> _searchResults = [];
   List<Map<String, dynamic>> _collaborators = [];
   String _selectedRole = 'editor';
-  bool _isLoading = false;
+  bool _isLoadingCollaborators = false;
   bool _isSearching = false;
 
   @override
@@ -51,7 +55,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
   }
 
   Future<void> _loadCollaborators() async {
-    setState(() => _isLoading = true);
+    setState(() => _isLoadingCollaborators = true);
     try {
       final collection = await _firestoreService.getCollection(widget.collectionId);
       if (collection != null && mounted) {
@@ -64,40 +68,45 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
     } catch (e) {
       debugPrint('Error loading collaborators: $e');
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoadingCollaborators = false);
   }
 
   Future<void> _searchUsers(String query) async {
     if (query.length < 2) {
-      setState(() => _searchResults = []);
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
       return;
     }
-    
+
     setState(() => _isSearching = true);
     try {
       final results = await _firestoreService.searchUsers(query);
-      // Filter out current user and existing collaborators
+      if (!mounted) return;
       final filtered = results.where((user) {
         if (user.id == widget.currentUserId) return false;
         if (_collaborators.any((c) => c['userId'] == user.id)) return false;
         return true;
       }).toList();
-      
+
       setState(() => _searchResults = filtered);
     } catch (e) {
       debugPrint('Error searching users: $e');
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
     }
-    setState(() => _isSearching = false);
   }
 
   Future<void> _addCollaborator(UserEntity user) async {
-    setState(() => _isLoading = true);
+    final role = widget.isPublicCollection ? 'editor' : _selectedRole;
+    setState(() => _isLoadingCollaborators = true);
     try {
       await _firestoreService.addCollaborator(
         collectionId: widget.collectionId,
         userId: user.id,
         username: user.userName,
-        role: _selectedRole,
+        role: role,
         currentUserId: widget.currentUserId,
         currentUsername: widget.currentUserName,
         collectionTitle: widget.collectionTitle,
@@ -107,14 +116,15 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
         _collaborators.add({
           'userId': user.id,
           'username': user.userName,
-          'role': _selectedRole,
+          'role': role.toUpperCase(),
         });
         _searchController.clear();
         _searchResults = [];
       });
       
       if (mounted) {
-        SnackBarUtils.showSuccessSnackBar(context, 'Added ${user.userName} as $_selectedRole');
+        final label = role == 'editor' ? 'edit' : 'view';
+        SnackBarUtils.showSuccessSnackBar(context, 'Added ${user.userName} with $label access');
       }
     } catch (e) {
       debugPrint('Error adding collaborator: $e');
@@ -122,7 +132,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
         SnackBarUtils.showErrorSnackBar(context, 'Error: $e');
       }
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoadingCollaborators = false);
   }
 
   Future<void> _removeCollaborator(String userId, String username) async {
@@ -148,7 +158,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
 
     if (confirmed != true) return;
 
-    setState(() => _isLoading = true);
+    setState(() => _isLoadingCollaborators = true);
     try {
       await _firestoreService.removeCollaborator(
         collectionId: widget.collectionId,
@@ -161,7 +171,18 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
     } catch (e) {
       debugPrint('Error removing collaborator: $e');
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoadingCollaborators = false);
+  }
+
+  String _roleLabel(String role) {
+    switch (role.toUpperCase()) {
+      case 'EDITOR':
+        return 'Edit access';
+      case 'VIEWER':
+        return 'View access';
+      default:
+        return role.toUpperCase();
+    }
   }
 
   @override
@@ -169,7 +190,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
     return Dialog(
       insetPadding: const EdgeInsets.all(20),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 400),
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -190,29 +211,32 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Open for contribution toggle
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Open collaboration', style: TextStyle(fontWeight: FontWeight.w600)),
-                      Text(
-                        'Allow anyone to add items',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+            if (widget.showOpenCollaborationToggle) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Open collaboration', style: TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          'Allow anyone to add items',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Switch(
-                  value: widget.isOpenForContribution,
-                  onChanged: (_) => widget.onOpenForContributionChanged(),
-                  activeColor: AppColors.primaryPurple,
-                ),
-              ],
-            ),
-            const Divider(height: 24),
+                  Switch(
+                    value: widget.isOpenForContribution,
+                    onChanged: widget.onOpenForContributionChanged == null
+                        ? null
+                        : (_) => widget.onOpenForContributionChanged!(),
+                    activeColor: AppColors.primaryPurple,
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+            ],
 
             // Add collaborator section
             const Text('Add collaborator', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -225,31 +249,52 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                     decoration: InputDecoration(
                       hintText: 'Search username...',
                       prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _isSearching
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : null,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
                     onChanged: _searchUsers,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.divider),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedRole,
-                      items: const [
-                        DropdownMenuItem(value: 'viewer', child: Text('Viewer')),
-                        DropdownMenuItem(value: 'editor', child: Text('Editor')),
-                      ],
-                      onChanged: (value) => setState(() => _selectedRole = value!),
+                if (!widget.isPublicCollection) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.divider),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedRole,
+                        items: const [
+                          DropdownMenuItem(value: 'viewer', child: Text('View')),
+                          DropdownMenuItem(value: 'editor', child: Text('Edit')),
+                        ],
+                        onChanged: (value) => setState(() => _selectedRole = value!),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.isPublicCollection
+                  ? 'Public collections already allow view access. Collaborators get edit access.'
+                  : _selectedRole == 'editor'
+                      ? 'Edit access lets them add items to this collection.'
+                      : 'View access lets them see this private collection.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
             ),
 
             // Search results
@@ -301,58 +346,63 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
             Row(
               children: [
                 Text('Collaborators (${_collaborators.length})', style: const TextStyle(fontWeight: FontWeight.w600)),
-                if (_isLoading) ...[
+                if (_isLoadingCollaborators) ...[
                   const SizedBox(width: 10),
                   const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                 ],
               ],
             ),
             const SizedBox(height: 10),
-            
-            Flexible(
-              child: _collaborators.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No collaborators yet',
-                        style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                      ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _collaborators.length,
-                      itemBuilder: (context, index) {
-                        final collab = _collaborators[index];
-                        return ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => UserProfileScreen(
-                                  userId: collab['userId'],
-                                  currentUserId: widget.currentUserId,
-                                ),
-                              ),
-                            );
-                          },
-                          leading: CircleAvatar(
-                            radius: 16,
-                            child: Text((collab['username'] ?? 'U')[0].toUpperCase()),
-                          ),
-                          title: Text('@${collab['username']}'),
-                          subtitle: Text(
-                            (collab['role'] as String).toUpperCase(),
-                            style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                            onPressed: () => _removeCollaborator(collab['userId'], collab['username']),
+
+            if (_collaborators.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'No collaborators yet',
+                  style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.35,
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _collaborators.length,
+                  itemBuilder: (context, index) {
+                    final collab = _collaborators[index];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => UserProfileScreen(
+                              userId: collab['userId'],
+                              currentUserId: widget.currentUserId,
+                            ),
                           ),
                         );
                       },
-                    ),
-            ),
+                      leading: CircleAvatar(
+                        radius: 16,
+                        child: Text((collab['username'] ?? 'U')[0].toUpperCase()),
+                      ),
+                      title: Text('@${collab['username']}'),
+                      subtitle: Text(
+                        _roleLabel(collab['role'] as String? ?? ''),
+                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                        onPressed: () => _removeCollaborator(collab['userId'], collab['username']),
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         ),
       ),

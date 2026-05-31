@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/link_import_defaults.dart';
+import '../utils/link_import_utils.dart';
 import '../utils/link_title_utils.dart';
 import '../utils/snackbar_utils.dart';
 import 'collection_detail_screen.dart';
@@ -19,6 +20,9 @@ class ImportLinkScreen extends StatefulWidget {
   final String? sharedTitle;
   final String userId;
   final String userName;
+  /// Called when import finishes or is dismissed. Pass a collection id after a
+  /// successful add so the caller can open that collection.
+  final void Function(String? collectionId)? onComplete;
 
   const ImportLinkScreen({
     super.key,
@@ -26,6 +30,7 @@ class ImportLinkScreen extends StatefulWidget {
     this.sharedTitle,
     required this.userId,
     required this.userName,
+    this.onComplete,
   });
 
   @override
@@ -62,7 +67,9 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   }
 
   void _checkIfCollectionUrl() {
-    final collectionId = _extractCollectionId(widget.sharedUrl);
+    if (widget.onComplete != null) return;
+
+    final collectionId = LinkImportUtils.extractCollectionId(widget.sharedUrl);
     if (collectionId == null) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,23 +86,26 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
     });
   }
 
-  String? _extractCollectionId(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final host = uri.host.toLowerCase();
-      if (host == 'collectio-b6b15.web.app' ||
-          host.endsWith('.collectio.app') ||
-          host == 'collectio.app' ||
-          host == 'localhost') {
-        final pathSegments = uri.pathSegments;
-        if (pathSegments.length >= 2 && pathSegments[0] == 'collection') {
-          return pathSegments[1];
-        }
-      }
-    } catch (e) {
-      debugPrint('Error parsing collection URL: $e');
+  void _closeImport({dynamic result, String? collectionId}) {
+    if (widget.onComplete != null) {
+      widget.onComplete!(collectionId);
+      return;
     }
-    return null;
+    if (collectionId != null && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CollectionDetailScreen(
+            collectionId: collectionId,
+            currentUserId: widget.userId,
+          ),
+        ),
+      );
+      return;
+    }
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context, result);
+    }
   }
 
   List<CollectionEntity> get _filteredCollections {
@@ -128,8 +138,12 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
 
   Future<void> _loadUserCollections() async {
     try {
-      final collections =
-          await _firestoreService.getUserCollectionsList(widget.userId);
+      final collections = await _firestoreService
+          .getUserCollectionsList(widget.userId)
+          .timeout(const Duration(seconds: 8), onTimeout: () {
+        debugPrint('[ImportLink] Collections load timed out');
+        return <CollectionEntity>[];
+      });
       if (mounted) {
         setState(() {
           _userCollections = collections;
@@ -242,7 +256,10 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
           context,
           'Added to $addedCount collection${addedCount > 1 ? 's' : ''}',
         );
-        Navigator.pop(context, true);
+        _closeImport(
+          result: true,
+          collectionId: _selectedCollectionIds.first,
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -267,7 +284,7 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
         scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => _closeImport(),
         ),
         title: Text(
           'Save Link',

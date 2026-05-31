@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
+import '../utils/username_utils.dart';
 
 /// Modern Login screen with refined typography and brand-consistent styling
 class LoginScreen extends StatefulWidget {
@@ -45,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
       success = await auth.signUpWithEmail(
         _emailController.text.trim(),
         _passwordController.text,
-        username: _usernameController.text.trim(),
+        username: UsernameUtils.normalize(_usernameController.text),
       );
     }
 
@@ -224,11 +226,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _usernameController,
                     label: 'Username',
                     icon: Icons.person_outline_rounded,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return 'Please enter a username';
-                      if (value.length < 3) return 'Username too short';
-                      return null;
-                    },
+                    autocorrect: false,
+                    inputFormatters: UsernameUtils.inputFormatters,
+                    validator: UsernameUtils.validate,
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -422,8 +422,10 @@ class _LoginScreenState extends State<LoginScreen> {
     required String label,
     required IconData icon,
     bool obscureText = false,
+    bool autocorrect = true,
     Widget? suffixIcon,
     TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
   }) {
     return Column(
@@ -442,6 +444,8 @@ class _LoginScreenState extends State<LoginScreen> {
           controller: controller,
           obscureText: obscureText,
           keyboardType: keyboardType,
+          autocorrect: autocorrect,
+          inputFormatters: inputFormatters,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             color: AppColors.textPrimary,

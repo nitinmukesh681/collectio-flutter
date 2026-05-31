@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_theme.dart';
 
+/// Default avatar shown when a user has no profile photo.
 class AvatarFallback extends StatelessWidget {
   final String name;
   final double size;
@@ -8,40 +10,30 @@ class AvatarFallback extends StatelessWidget {
   const AvatarFallback({
     super.key,
     required this.name,
-    required this.size,
+    this.size = 44,
   });
+
+  String get _initial {
+    final trimmed = name.trim();
+    return trimmed.isNotEmpty ? trimmed[0].toUpperCase() : '?';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final initials = name.trim().isNotEmpty
-        ? name.trim().split(' ').map((e) => e[0].toUpperCase()).take(2).join()
-        : '?';
-
-    // Consistent color based on name hash
-    final colors = [
-      const Color(0xFF4338CA), // indigo
-      const Color(0xFF0F172A), // navy
-      const Color(0xFFB95F00), // amber
-      const Color(0xFF0D9488), // teal
-      const Color(0xFFBE185D), // pink
-      const Color(0xFF6D28D9), // purple
-    ];
-    final color = colors[name.hashCode.abs() % colors.length];
-
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: color,
+      decoration: const BoxDecoration(
+        color: AppColors.divider,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
       child: Text(
-        initials,
+        _initial,
         style: GoogleFonts.plusJakartaSans(
-          color: Colors.white,
-          fontSize: size * 0.4,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
+          fontSize: size * 0.42,
+          color: AppColors.textSecondary,
         ),
       ),
     );

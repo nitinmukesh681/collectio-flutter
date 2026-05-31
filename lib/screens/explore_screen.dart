@@ -115,8 +115,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
           _trendingCollections = trending;
           _topLikedCollections = topLiked;
         });
-        // Backfill missing search keywords in the background for active public collections
-        _firestoreService.backfillKeywordsIfEmpty(allCollections);
       }
     } catch (e) {
       debugPrint('Error loading explore data: $e');
@@ -157,7 +155,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
     
     try {
       if (_selectedTab == _SearchTab.collections) {
-        final results = await _firestoreService.searchCollections(query);
+        final results = await _firestoreService.searchCollections(
+          query,
+          supplementalCollections: _allPublicCollections,
+        );
         setState(() => _searchResults = results);
       } else {
         final results = await _firestoreService.searchUsers(query);
