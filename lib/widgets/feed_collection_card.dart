@@ -132,18 +132,14 @@ class FeedCollectionCard extends StatelessWidget {
 
                 // Numbered items
                 StreamBuilder<List<CollectionItemEntity>>(
-                  stream: svc.getCollectionItemsPreviewStream(collection.id, limit: 3),
+                  stream: svc.getCollectionItemsPreviewStream(
+                    collection.id,
+                    limit: itemCount > 3 ? 4 : 3,
+                  ),
                   builder: (context, snapshot) {
                     final items = snapshot.data ?? [];
                     if (items.isEmpty) return const SizedBox.shrink();
-                    return Column(
-                      children: [
-                        for (int i = 0; i < items.length; i++) ...[
-                          _itemRow(items[i], i + 1),
-                          if (i < items.length - 1) const SizedBox(height: 10),
-                        ],
-                      ],
-                    );
+                    return _buildItemsPreview(items, itemCount);
                   },
                 ),
 
@@ -243,15 +239,76 @@ class FeedCollectionCard extends StatelessWidget {
 
   Widget _avatar() => AvatarFallback(name: collection.userName, size: 44);
 
+  static const double _itemRowHeight = 48;
+  static const double _itemGap = 10;
+  static const double _fourthItemPeek = 40;
+
+  Widget _buildItemsPreview(List<CollectionItemEntity> items, int itemCount) {
+    final showPeek = itemCount > 3 && items.length > 3;
+
+    final list = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < items.length; i++) ...[
+          _itemRow(items[i], i + 1),
+          if (i < items.length - 1) const SizedBox(height: _itemGap),
+        ],
+      ],
+    );
+
+    if (!showPeek) return list;
+
+    final peekHeight = _itemRowHeight * 3 + _itemGap * 2 + _fourthItemPeek;
+
+    return SizedBox(
+      height: peekHeight,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          ClipRect(
+            child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              child: list,
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 32,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withValues(alpha: 0),
+                      Colors.white.withValues(alpha: 0.65),
+                      Colors.white,
+                    ],
+                    stops: const [0.0, 0.45, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _itemRow(CollectionItemEntity item, int rank) {
     return Container(
+      height: _itemRowHeight,
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: AppColors.backgroundSurface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             rank.toString().padLeft(2, '0'),
@@ -270,7 +327,7 @@ class FeedCollectionCard extends StatelessWidget {
                 fontWeight: FontWeight.w500,
                 color: AppColors.textPrimary,
               ),
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
