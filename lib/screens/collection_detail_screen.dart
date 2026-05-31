@@ -1684,7 +1684,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 },
                 itemBuilder: (context) => [
                   if (canEdit) PopupMenuItem(value: 'edit', child: Text('Edit', style: GoogleFonts.plusJakartaSans())),
-                  if (_isOwner) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
+                  if (canEdit) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
                   PopupMenuItem(value: 'add_to_collections', child: Text('Add to collection', style: GoogleFonts.plusJakartaSans())),
                 ],
               ),

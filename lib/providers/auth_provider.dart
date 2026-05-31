@@ -21,6 +21,7 @@ class AuthProvider extends ChangeNotifier {
   bool _needsUsername = false;
   bool _firebaseReady = false;
   bool _userProfileLoaded = false;
+  bool _initialAuthChecked = false;
 
   // Getters
   User? get firebaseUser => _firebaseUser;
@@ -33,6 +34,7 @@ class AuthProvider extends ChangeNotifier {
   bool get userProfileLoaded => _userProfileLoaded;
   String get userId => _firebaseUser?.uid ?? '';
   bool get firebaseReady => _firebaseReady;
+  bool get initialAuthChecked => _initialAuthChecked;
 
   /// Best available display username for denormalized fields (collections, comments).
   String get resolvedUserName {
@@ -78,6 +80,7 @@ class AuthProvider extends ChangeNotifier {
           _needsUsername = false;
           _userProfileLoaded = false;
         }
+        _initialAuthChecked = true;
         notifyListeners();
       });
     } catch (e) {

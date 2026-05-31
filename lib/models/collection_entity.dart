@@ -57,6 +57,49 @@ class CollectionEntity {
   final int updatedAt;
   final List<String> searchKeywords;
 
+  static List<String> generateKeywords({
+    required String title,
+    String? description,
+    required List<String> tags,
+    required String category,
+    required String userName,
+  }) {
+    final Set<String> keywords = {};
+
+    void addWordPrefixes(String word) {
+      final cleaned = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
+      if (cleaned.isEmpty) return;
+      
+      for (int i = 1; i <= cleaned.length; i++) {
+        keywords.add(cleaned.substring(0, i));
+      }
+    }
+
+    void processText(String text) {
+      final words = text.toLowerCase().split(RegExp(r'[\s!@#\$%^&*()_\-+={[}\]|\\:;"<,>.?/~`’“”]+'));
+      for (final word in words) {
+        addWordPrefixes(word);
+      }
+    }
+
+    processText(title);
+
+    if (description != null && description.isNotEmpty) {
+      // Index only the first 10 words of the description to avoid bloating the index
+      final descWords = description.split(RegExp(r'\s+')).take(10).join(' ');
+      processText(descWords);
+    }
+
+    for (final tag in tags) {
+      processText(tag);
+    }
+
+    processText(category);
+    processText(userName);
+
+    return keywords.toList();
+  }
+
   CollectionEntity({
     required this.id,
     required this.userId,
@@ -90,10 +133,17 @@ class CollectionEntity {
     this.collaborators = const [],
     this.editors = const [],
     this.viewers = const [],
-    this.searchKeywords = const [],
+    List<String>? searchKeywords,
     int? createdAt,
     int? updatedAt,
-  })  : createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
+  })  : searchKeywords = searchKeywords ?? generateKeywords(
+          title: title,
+          description: description,
+          tags: tags,
+          category: category.name,
+          userName: userName,
+        ),
+        createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
         updatedAt = updatedAt ?? createdAt ?? DateTime.now().millisecondsSinceEpoch;
 
   /// Latest activity on this collection (items, comments, edits).
@@ -150,7 +200,9 @@ class CollectionEntity {
           const [],
       editors: List<String>.from(map['editors'] ?? []),
       viewers: List<String>.from(map['viewers'] ?? []),
-      searchKeywords: List<String>.from(map['searchKeywords'] ?? []),
+      searchKeywords: (map['searchKeywords'] != null && (map['searchKeywords'] as List).isNotEmpty)
+          ? List<String>.from(map['searchKeywords'])
+          : null,
       createdAt: _timestampToInt(map['createdAt']),
       updatedAt: map['updatedAt'] != null
           ? _timestampToInt(map['updatedAt'])
@@ -274,7 +326,13 @@ class CollectionEntity {
       collaborators: collaborators ?? this.collaborators,
       editors: editors ?? this.editors,
       viewers: viewers ?? this.viewers,
-      searchKeywords: searchKeywords ?? this.searchKeywords,
+      searchKeywords: searchKeywords ?? generateKeywords(
+        title: title ?? this.title,
+        description: description ?? this.description,
+        tags: tags ?? this.tags,
+        category: (category ?? this.category).name,
+        userName: userName ?? this.userName,
+      ),
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

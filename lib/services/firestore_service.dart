@@ -41,12 +41,14 @@ class FirestoreService {
   Stream<List<CommentEntity>> getCommentsStream(String collectionId) {
     return _commentsRef
         .where('collectionId', isEqualTo: collectionId)
-        .orderBy('createdAt', descending: false)
         .snapshots()
-        .handleError((e) {
-          debugPrint('Comments stream error (may need Firestore index): $e');
-        })
-        .map((snap) => snap.docs.map((d) => CommentEntity.fromMap(d.data() as Map<String, dynamic>, d.id)).toList());
+        .map((snap) {
+          final list = snap.docs
+              .map((d) => CommentEntity.fromMap(d.data() as Map<String, dynamic>, d.id))
+              .toList();
+          list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          return list;
+        });
   }
 
   Future<String> addComment({
@@ -240,12 +242,18 @@ class FirestoreService {
 
   /// Create or update user
   Future<void> saveUser(UserEntity user) async {
-    await _usersRef.doc(user.id).set(user.toMap(), SetOptions(merge: true));
+    await _usersRef.doc(user.id).set({
+      ...user.toMap(),
+      'usernameLower': user.username.toLowerCase(),
+    }, SetOptions(merge: true));
   }
 
   /// Update username
   Future<void> updateUsername(String userId, String username) async {
-    await _usersRef.doc(userId).update({'username': username});
+    await _usersRef.doc(userId).update({
+      'username': username,
+      'usernameLower': username.toLowerCase(),
+    });
   }
 
   /// Get user email by username
@@ -1206,6 +1214,31 @@ class FirestoreService {
     }
   }
 
+  /// Safely backfill search keywords for public collections in the background
+  Future<void> backfillKeywordsIfEmpty(List<CollectionEntity> collections) async {
+    for (final collection in collections) {
+      if (collection.searchKeywords.isEmpty) {
+        try {
+          final keywords = CollectionEntity.generateKeywords(
+            title: collection.title,
+            description: collection.description,
+            tags: collection.tags,
+            category: collection.category.name,
+            userName: collection.userName,
+          );
+          if (keywords.isNotEmpty) {
+            await _collectionsRef.doc(collection.id).update({
+              'searchKeywords': keywords,
+            });
+            debugPrint('Backfilled keywords for collection ${collection.id}: $keywords');
+          }
+        } catch (e) {
+          debugPrint('Failed to backfill keywords for ${collection.id}: $e');
+        }
+      }
+    }
+  }
+
 
   // ==================== SEARCH OPERATIONS ====================
 
@@ -1628,15 +1661,48 @@ class FirestoreService {
     if (query.isEmpty) return [];
     
     final lowerQuery = query.toLowerCase();
-    final snapshot = await _usersRef
-        .orderBy('username')
-        .startAt([lowerQuery])
-        .endAt(['$lowerQuery\uf8ff'])
-        .limit(20)
-        .get();
 
-    return snapshot.docs
+    // 1. Try case-insensitive indexed query using usernameLower
+    try {
+      final snapshot = await _usersRef
+          .orderBy('usernameLower')
+          .startAt([lowerQuery])
+          .endAt(['$lowerQuery\uf8ff'])
+          .limit(20)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        return snapshot.docs
+            .map((doc) => UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('Search by usernameLower failed or not indexed: $e');
+    }
+
+    // 2. Fallback: Fetch a larger batch, filter case-insensitively in memory, and backfill missing fields in background
+    final fallbackSnapshot = await _usersRef.limit(100).get();
+    
+    // Asynchronously backfill usernameLower for loaded users
+    for (final doc in fallbackSnapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['usernameLower'] == null) {
+        final username = data['username'] ?? '';
+        if (username.isNotEmpty) {
+          doc.reference.update({'usernameLower': username.toLowerCase()}).catchError((e) {
+            debugPrint('Failed to backfill usernameLower for user ${doc.id}: $e');
+          });
+        }
+      }
+    }
+
+    final allUsers = fallbackSnapshot.docs
         .map((doc) => UserEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+    
+    return allUsers
+        .where((u) => u.username.toLowerCase().startsWith(lowerQuery))
+        .take(20)
         .toList();
   }
 

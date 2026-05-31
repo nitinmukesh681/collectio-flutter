@@ -56,6 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   void _setupRealtimeStreams({bool isInitial = false}) {
+    if (!mounted) return;
     _cancelSubscriptions();
 
     final auth = context.read<AuthProvider>();
@@ -143,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       context,
       MaterialPageRoute(builder: (context) => const EditProfileScreen()),
     );
-    if (result == true) {
+    if (result == true && mounted) {
       _refreshStreams();
     }
   }
