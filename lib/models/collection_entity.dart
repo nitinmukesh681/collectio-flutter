@@ -127,8 +127,8 @@ class CollectionEntity {
         createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
         updatedAt = updatedAt ?? createdAt ?? DateTime.now().millisecondsSinceEpoch;
 
-  /// Latest activity on this collection (items, comments, edits).
-  int get lastActivityAt =>
+  /// Latest content change (items, title, description, cover, etc.).
+  int get lastContentActivityAt =>
       updatedAt > 0 ? updatedAt : createdAt;
 
   /// Create from Firestore document
@@ -169,8 +169,12 @@ class CollectionEntity {
       likes: map['likes'] ?? 0,
       likedBy: List<String>.from(map['likedBy'] ?? []),
       saveCount: map['saveCount'] ?? 0,
-      savedAt: (map['savedAt'] is Map) 
-          ? Map<String, int>.from((map['savedAt'] as Map).map((k, v) => MapEntry(k.toString(), (v is int) ? v : 0)))
+      savedAt: (map['savedAt'] is Map)
+          ? Map<String, int>.from(
+              (map['savedAt'] as Map).map(
+                (k, v) => MapEntry(k.toString(), _timestampToInt(v)),
+              ),
+            )
           : const {},
       inspiredBy: map['inspiredBy'],
       inspiredByUserId: map['inspiredByUserId'],

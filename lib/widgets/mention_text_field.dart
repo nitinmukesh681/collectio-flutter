@@ -19,6 +19,7 @@ class MentionTextField extends StatefulWidget {
   final bool dense;
   final EdgeInsetsGeometry? contentPadding;
   final FirestoreService firestoreService;
+  final Color? accentColor;
   final Widget Function(Widget textField)? surroundBuilder;
 
   const MentionTextField({
@@ -32,6 +33,7 @@ class MentionTextField extends StatefulWidget {
     this.filled = false,
     this.dense = false,
     this.contentPadding,
+    this.accentColor,
     this.surroundBuilder,
   });
 
@@ -327,6 +329,8 @@ class _MentionTextFieldState extends State<MentionTextField> {
     );
   }
 
+  Color get _accentColor => widget.accentColor ?? AppColors.primary;
+
   InputDecoration _fieldDecoration() {
     return InputDecoration(
       isDense: widget.dense,
@@ -336,9 +340,9 @@ class _MentionTextFieldState extends State<MentionTextField> {
       border: widget.filled ? null : InputBorder.none,
       enabledBorder: widget.filled ? null : InputBorder.none,
       focusedBorder: widget.filled
-          ? const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+          ? OutlineInputBorder(
+              borderRadius: const BorderRadius.all(Radius.circular(10)),
+              borderSide: BorderSide(color: _accentColor, width: 1.5),
             )
           : InputBorder.none,
       filled: widget.filled,
@@ -354,7 +358,7 @@ class _MentionTextFieldState extends State<MentionTextField> {
       controller: widget.controller,
       focusNode: widget.focusNode,
       style: _baseTextStyle.copyWith(color: textColor ?? AppColors.textPrimary),
-      cursorColor: AppColors.primary,
+      cursorColor: _accentColor,
       keyboardType: isMultiline ? TextInputType.multiline : TextInputType.text,
       textInputAction: isMultiline ? TextInputAction.newline : TextInputAction.done,
       textAlignVertical:

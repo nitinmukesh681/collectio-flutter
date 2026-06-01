@@ -66,6 +66,19 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   static const int _maxCommentDepth = 2;
   final Map<String, ({bool isLiked, int likes})> _optimisticCommentLikes = {};
 
+  Color get _accentColor =>
+      AppColors.categoryLabelColor(_collection?.category.name ?? 'other');
+
+  Color get _accentSurfaceColor => _accentColor.withValues(alpha: 0.12);
+
+  List<Color> _accentHeroGradient() {
+    final hsl = HSLColor.fromColor(_accentColor);
+    return [
+      hsl.withLightness((hsl.lightness - 0.08).clamp(0.18, 0.88)).toColor(),
+      hsl.withLightness((hsl.lightness + 0.14).clamp(0.22, 0.94)).toColor(),
+    ];
+  }
+
   StreamSubscription<CollectionEntity?>? _collectionSubscription;
   Stream<List<CollectionItemEntity>>? _itemsStream;
 
@@ -380,7 +393,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       '@$username',
                       style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
+                        color: _accentColor,
                       ),
                     ),
                     if (subtitle != null) ...[
@@ -505,7 +518,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 '@${item.userName}',
                 style: GoogleFonts.plusJakartaSans(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
+                  color: _accentColor,
                 ),
               ),
             ),
@@ -842,7 +855,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPurple),
+            style: ElevatedButton.styleFrom(backgroundColor: _accentColor),
             child: Text('Copy', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
           ),
         ],
@@ -1049,8 +1062,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     }
 
     final hasCoverImage = isValidCoverUrl(collection.coverImageUrl);
-    final gradientColors = AppColors.categoryGradients[collection.category.name] ?? 
-        AppColors.categoryGradients['other']!;
+    final gradientColors = hasCoverImage
+        ? (AppColors.categoryGradients[collection.category.name] ??
+            AppColors.categoryGradients['other']!)
+        : _accentHeroGradient();
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -1220,13 +1235,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                     fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
                     fontSize: 13,
                     letterSpacing: 0.6,
-                    color: isSelected ? AppColors.primary : AppColors.textMuted,
+                    color: isSelected ? _accentColor : AppColors.textMuted,
                   ),
                 ),
               ),
               Container(
                 height: 2,
-                color: isSelected ? AppColors.primary : Colors.transparent,
+                color: isSelected ? _accentColor : Colors.transparent,
               ),
             ],
           ),
@@ -1243,6 +1258,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   static const double _heroTagVerticalPadding = 6;
   static const double _heroOpenPillHorizontalPadding = 18;
   static const double _heroOpenPillVerticalPadding = 7;
+  static const double _heroCategoryPillHorizontalPadding = 14;
+  static const double _heroCategoryPillVerticalPadding = 8;
+  static const double _heroCategoryPillRadius = 8;
   static const double _heroStatsOpticalInset = 4;
   static const double _heroCircleButtonSize = 36;
   static const Color _heroTagFill = Color(0x1FFFFFFF);
@@ -1531,27 +1549,26 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             child: Text(collection.description!),
           ),
         ],
-        if (collection.tags.isNotEmpty || collection.isOpenForContribution) ...[
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: _heroInlineGap,
-            runSpacing: _heroInlineGap,
-            alignment: WrapAlignment.start,
-            runAlignment: WrapAlignment.start,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ...collection.tags.map(_buildHeroTag),
-              if (collection.isOpenForContribution)
-                _buildHeroPill(
-                  label: 'OPEN',
-                  backgroundColor: AppColors.primary,
-                  fontWeight: FontWeight.w800,
-                  horizontalPadding: _heroOpenPillHorizontalPadding,
-                  verticalPadding: _heroOpenPillVerticalPadding,
-                ),
-            ],
-          ),
-        ],
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: _heroInlineGap,
+          runSpacing: _heroInlineGap,
+          alignment: WrapAlignment.start,
+          runAlignment: WrapAlignment.start,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ...collection.tags.map(_buildHeroTag),
+            if (collection.isOpenForContribution)
+              _buildHeroPill(
+                label: 'OPEN',
+                backgroundColor: _accentColor,
+                fontWeight: FontWeight.w800,
+                horizontalPadding: _heroOpenPillHorizontalPadding,
+                verticalPadding: _heroOpenPillVerticalPadding,
+              ),
+            _buildHeroCategoryPill(collection),
+          ],
+        ),
       ],
     );
   }
@@ -1729,6 +1746,32 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
+  Widget _buildHeroCategoryPill(CollectionEntity collection) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _accentColor,
+        borderRadius: BorderRadius.circular(_heroCategoryPillRadius),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: _heroCategoryPillHorizontalPadding,
+          vertical: _heroCategoryPillVerticalPadding,
+        ),
+        child: Text(
+          collection.category.displayName.toUpperCase(),
+          style: GoogleFonts.plusJakartaSans(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+            height: 1.0,
+          ),
+          textHeightBehavior: _heroTextHeightBehavior,
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeroStat(String value, String label) {
     const statValueStyle = TextStyle(
       fontSize: 22,
@@ -1775,7 +1818,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     Color iconColor = Colors.white,
   }) {
     final bg = backgroundColor ??
-        (isPrimary ? AppColors.primary : _heroSecondaryButtonFill);
+        (isPrimary ? _accentColor : _heroSecondaryButtonFill);
 
     return Material(
       color: Colors.transparent,
@@ -1851,7 +1894,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: isPrimary ? AppColors.primaryPurple : Colors.transparent,
+          color: isPrimary ? _accentColor : Colors.transparent,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
@@ -1878,6 +1921,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       controller: _commentController,
       focusNode: _commentFocusNode,
       firestoreService: _firestoreService,
+      accentColor: _accentColor,
       hintText: 'Add a comment... (@ to tag)',
       minLines: 1,
       maxLines: 6,
@@ -1929,6 +1973,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                     );
                   },
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: _accentColor,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 18),
                     minimumSize: const Size(0, 36),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -2047,13 +2093,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.subdirectory_arrow_right_rounded, size: 16, color: AppColors.primary),
+            Icon(Icons.subdirectory_arrow_right_rounded, size: 16, color: _accentColor),
             const SizedBox(width: 6),
             Text(
               'View $count ${count == 1 ? 'reply' : 'replies'}',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
-                color: AppColors.primary,
+                color: _accentColor,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -2196,6 +2242,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           controller: _replyController,
           focusNode: _replyFocusNode,
           firestoreService: _firestoreService,
+          accentColor: _accentColor,
           hintText: 'Reply to ${targetComment.userName}... (@ to tag)',
           filled: true,
           minLines: 1,
@@ -2224,6 +2271,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             ElevatedButton(
               onPressed: () => _postReply(targetComment, commentsById),
               style: ElevatedButton.styleFrom(
+                backgroundColor: _accentColor,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -2258,7 +2307,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: _accentColor,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -2336,6 +2385,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 text: comment.text,
                 mentions: comment.mentions,
                 onMentionTap: _navigateToUserProfile,
+                mentionColor: _accentColor,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: depth == 0 ? 15 : 14,
                   color: AppColors.textPrimary,
@@ -2351,14 +2401,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       Icon(
                         isLiked ? Icons.thumb_up_rounded : Icons.thumb_up_alt_outlined,
                         size: 15,
-                        color: isLiked ? AppColors.primary : AppColors.textMuted,
+                        color: isLiked ? _accentColor : AppColors.textMuted,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '$likeCount',
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 13,
-                          color: isLiked ? AppColors.primary : AppColors.textSecondary,
+                          color: isLiked ? _accentColor : AppColors.textSecondary,
                         ),
                       ),
                     ]),
@@ -2371,14 +2421,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         Icon(
                           Icons.chat_bubble_outline_rounded,
                           size: 14,
-                          color: isReplying ? AppColors.primary : AppColors.textMuted,
+                          color: isReplying ? _accentColor : AppColors.textMuted,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           'Reply',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 13,
-                            color: isReplying ? AppColors.primary : AppColors.textSecondary,
+                            color: isReplying ? _accentColor : AppColors.textSecondary,
                             fontWeight: isReplying ? FontWeight.w700 : FontWeight.w500,
                           ),
                         ),
@@ -2619,8 +2669,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   Container(
                     width: _itemRankSize,
                     height: _itemRankSize,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEEF2FF),
+                    decoration: BoxDecoration(
+                      color: _accentSurfaceColor,
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
@@ -2629,7 +2679,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w800,
                         fontSize: 13,
-                        color: AppColors.primary,
+                        color: _accentColor,
                       ),
                     ),
                   ),
@@ -2708,9 +2758,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
                       },
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.language_rounded, size: 16, color: AppColors.primary),
+                        Icon(Icons.language_rounded, size: 16, color: _accentColor),
                         const SizedBox(width: 4),
-                        Text('Website', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                        Text('Website', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: _accentColor)),
                       ]),
                     ),
                   if (hasWebsite && hasLocation) const SizedBox(width: 24),
@@ -2721,9 +2771,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
                       },
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
+                        Icon(Icons.location_on_outlined, size: 16, color: _accentColor),
                         const SizedBox(width: 4),
-                        Text('Location', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                        Text('Location', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: _accentColor)),
                       ]),
                     ),
                 ],

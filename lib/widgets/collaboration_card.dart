@@ -17,8 +17,8 @@ class CollaborationCard extends StatefulWidget {
 }
 
 class _CollaborationCardState extends State<CollaborationCard> {
-  static const double _cardRadius = 14;
-  static const double _buttonRadius = 12;
+  static const double _cardRadius = 16;
+  static const double _buttonRadius = 14;
 
   late Future<String?> _coverUrlFuture;
 

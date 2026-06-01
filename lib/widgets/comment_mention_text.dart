@@ -9,6 +9,7 @@ class CommentMentionText extends StatefulWidget {
   final List<CommentMention> mentions;
   final void Function(String userId) onMentionTap;
   final TextStyle? style;
+  final Color? mentionColor;
 
   const CommentMentionText({
     super.key,
@@ -16,6 +17,7 @@ class CommentMentionText extends StatefulWidget {
     required this.mentions,
     required this.onMentionTap,
     this.style,
+    this.mentionColor,
   });
 
   @override
@@ -47,7 +49,7 @@ class _CommentMentionTextState extends State<CommentMentionText> {
           height: 1.45,
         );
     final mentionStyle = style.copyWith(
-      color: AppColors.primary,
+      color: widget.mentionColor ?? AppColors.primary,
       fontWeight: FontWeight.w700,
     );
 

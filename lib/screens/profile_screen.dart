@@ -193,7 +193,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             !ownedIds.contains(c.id) &&
             c.editors.contains(userId))
         .toList();
-    return [..._myCollections, ...collaborated];
+    final merged = [..._myCollections, ...collaborated];
+    merged.sort(
+      (a, b) => b.lastContentActivityAt.compareTo(a.lastContentActivityAt),
+    );
+    return merged;
   }
 
   @override

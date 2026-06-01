@@ -22,13 +22,13 @@ class FirestoreService {
   CollectionReference get _collectionsRef => _firestore.collection('collections');
   CollectionReference get _collectionItemsRef => _firestore.collection('collectionItems');
 
-  /// Sorts user collections by most recent activity (updatedAt, then createdAt).
-  void _sortCollectionsByLastActivity(List<CollectionEntity> collections) {
-    collections.sort((a, b) => b.lastActivityAt.compareTo(a.lastActivityAt));
+  /// Sorts collections by most recent content change (items, title, description, etc.).
+  void _sortCollectionsByContentActivity(List<CollectionEntity> collections) {
+    collections.sort((a, b) => b.lastContentActivityAt.compareTo(a.lastContentActivityAt));
   }
 
   /// Bumps collection `updatedAt` when items or other collection content changes.
-  Future<void> _touchCollectionUpdatedAt(String collectionId) async {
+  Future<void> _touchCollectionContentUpdatedAt(String collectionId) async {
     try {
       await _collectionsRef.doc(collectionId).update({
         'updatedAt': FieldValue.serverTimestamp(),
@@ -116,7 +116,6 @@ class FirestoreService {
       debugPrint('Comment notification error: $e');
     }
 
-    await _touchCollectionUpdatedAt(collectionId);
     return docRef.id;
   }
 
@@ -299,14 +298,7 @@ class FirestoreService {
   }
 
   Future<void> deleteComment(String commentId) async {
-    final snap = await _commentsRef.doc(commentId).get();
-    final collectionId = snap.data() != null
-        ? (snap.data() as Map<String, dynamic>)['collectionId'] as String?
-        : null;
     await _commentsRef.doc(commentId).delete();
-    if (collectionId != null && collectionId.isNotEmpty) {
-      await _touchCollectionUpdatedAt(collectionId);
-    }
   }
 
   Future<String> _getUsername(String userId) async {
@@ -610,7 +602,7 @@ class FirestoreService {
               .map((doc) => CollectionEntity.fromMap(
                   doc.data() as Map<String, dynamic>, doc.id))
               .toList();
-          _sortCollectionsByLastActivity(collections);
+          _sortCollectionsByContentActivity(collections);
           return collections;
         });
   }
@@ -624,8 +616,12 @@ class FirestoreService {
         .map((doc) => CollectionEntity.fromMap(
             doc.data() as Map<String, dynamic>, doc.id))
         .toList();
-    _sortCollectionsByLastActivity(collections);
+    _sortCollectionsByContentActivity(collections);
     return collections;
+  }
+
+  int _savedAtForUser(CollectionEntity collection, String userId) {
+    return collection.savedAt[userId] ?? 0;
   }
 
   /// Get saved collections for a user
@@ -638,17 +634,16 @@ class FirestoreService {
         .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
     
-    // Sort by when the user saved them (savedAt timestamp), not when they were created
-    collections.sort((a, b) {
-      final aSavedAt = a.savedAt[userId] ?? 0;
-      final bSavedAt = b.savedAt[userId] ?? 0;
-      // If no savedAt timestamp, fall back to createdAt
-      final aTime = aSavedAt > 0 ? aSavedAt : a.createdAt;
-      final bTime = bSavedAt > 0 ? bSavedAt : b.createdAt;
-      return bTime.compareTo(aTime); // descending (most recently saved first)
-    });
-    
+    _sortSavedCollections(collections, userId);
     return collections;
+  }
+
+  void _sortSavedCollections(List<CollectionEntity> collections, String userId) {
+    collections.sort((a, b) {
+      final aTime = _savedAtForUser(a, userId);
+      final bTime = _savedAtForUser(b, userId);
+      return bTime.compareTo(aTime);
+    });
   }
 
   /// Get saved collections for a user (Stream)
@@ -661,16 +656,7 @@ class FirestoreService {
               .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
               .toList();
           
-          // Sort by when the user saved them (savedAt timestamp), not when they were created
-          collections.sort((a, b) {
-            final aSavedAt = a.savedAt[userId] ?? 0;
-            final bSavedAt = b.savedAt[userId] ?? 0;
-            // If no savedAt timestamp, fall back to createdAt
-            final aTime = aSavedAt > 0 ? aSavedAt : a.createdAt;
-            final bTime = bSavedAt > 0 ? bSavedAt : b.createdAt;
-            return bTime.compareTo(aTime); // descending (most recently saved first)
-          });
-          
+          _sortSavedCollections(collections, userId);
           return collections;
         });
   }
@@ -723,7 +709,7 @@ class FirestoreService {
         .map((doc) => CollectionEntity.fromMap(
             doc.data() as Map<String, dynamic>, doc.id))
         .toList();
-    _sortCollectionsByLastActivity(collections);
+    _sortCollectionsByContentActivity(collections);
     return collections.take(50).toList();
   }
 
@@ -952,6 +938,7 @@ class FirestoreService {
     batch.update(_collectionsRef.doc(collectionId), {
       'savedBy': FieldValue.arrayUnion([userId]),
       'saveCount': FieldValue.increment(1),
+      'savedAt.$userId': FieldValue.serverTimestamp(),
     });
     await batch.commit();
   }
@@ -984,11 +971,13 @@ class FirestoreService {
         await collectionRef.update({
           'savedBy': FieldValue.arrayRemove([userId]),
           'saveCount': FieldValue.increment(-1),
+          'savedAt.$userId': FieldValue.delete(),
         });
       } else {
         await collectionRef.update({
           'savedBy': FieldValue.arrayUnion([userId]),
           'saveCount': FieldValue.increment(1),
+          'savedAt.$userId': FieldValue.serverTimestamp(),
         });
       }
     } catch (e) {
@@ -1005,6 +994,7 @@ class FirestoreService {
     batch.update(_collectionsRef.doc(collectionId), {
       'savedBy': FieldValue.arrayRemove([userId]),
       'saveCount': FieldValue.increment(-1),
+      'savedAt.$userId': FieldValue.delete(),
     });
     await batch.commit();
   }
@@ -1049,7 +1039,6 @@ class FirestoreService {
 
       final updates = <String, dynamic>{
         'collaborators': collaborators,
-        'updatedAt': FieldValue.serverTimestamp(),
       };
 
       if (normalizedRole == 'EDITOR') {
@@ -1293,7 +1282,7 @@ class FirestoreService {
       ...item.toMap(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    await _touchCollectionUpdatedAt(collectionId);
+    await _touchCollectionContentUpdatedAt(collectionId);
     await _refreshCollectionSearchKeywords(collectionId);
   }
 
@@ -1394,7 +1383,7 @@ class FirestoreService {
       });
     }
     await batch.commit();
-    await _touchCollectionUpdatedAt(collectionId);
+    await _touchCollectionContentUpdatedAt(collectionId);
   }
 
   /// Duplicate a collection with all its items
@@ -2017,7 +2006,7 @@ class FirestoreService {
           .where((c) => c.userId != userId && !c.isOpenForContribution)
           .toList();
 
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _sortCollectionsByContentActivity(list);
       return list;
     } catch (e) {
       debugPrint('Error loading collaborations for user $userId: $e');
@@ -2036,7 +2025,7 @@ class FirestoreService {
           .where((c) => c.userId != userId && !c.isOpenForContribution)
           .toList();
 
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _sortCollectionsByContentActivity(list);
       return list;
     });
   }
