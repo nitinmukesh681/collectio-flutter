@@ -17,6 +17,9 @@ class CollaborationCard extends StatefulWidget {
 }
 
 class _CollaborationCardState extends State<CollaborationCard> {
+  static const double _cardRadius = 20;
+  static const double _buttonRadius = 24;
+
   late Future<String?> _coverUrlFuture;
 
   @override
@@ -78,7 +81,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
         margin: const EdgeInsets.only(right: 14),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(AppColors.radiusCard),
+          borderRadius: BorderRadius.circular(_cardRadius),
           border: Border.all(color: AppColors.divider, width: 1),
         ),
         child: Column(
@@ -86,7 +89,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppColors.radiusCard)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(_cardRadius)),
               child: SizedBox(
                 height: 150,
                 width: double.infinity,
@@ -134,7 +137,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: Text('Contribute', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14)),
