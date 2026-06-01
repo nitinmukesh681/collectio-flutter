@@ -2027,7 +2027,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Start the conversation below',
+                    'Start the conversation',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 14,
