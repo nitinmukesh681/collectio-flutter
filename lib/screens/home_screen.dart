@@ -292,7 +292,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           (context, index) {
                             final raw = _feedCollections[index];
                             final isLiked = raw.likedBy.contains(auth.userId);
-                            final isSaved = raw.savedBy.contains(auth.userId);
+                            final isSaved = _firestoreService.isCollectionSavedByUser(
+                              collection: raw,
+                              userId: auth.userId,
+                              userSavedCollectionIds:
+                                  auth.userEntity?.savedCollections,
+                            );
                             final collection = raw.copyWith(
                               isLiked: isLiked,
                               isSaved: isSaved,
@@ -346,7 +351,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               },
                               onSave: () async {
                                 final current = _feedCollections[index];
-                                final wasSaved = current.savedBy.contains(auth.userId);
+                                final wasSaved =
+                                    _firestoreService.isCollectionSavedByUser(
+                                  collection: current,
+                                  userId: auth.userId,
+                                  userSavedCollectionIds:
+                                      auth.userEntity?.savedCollections,
+                                );
 
                                 // Optimistic UI
                                 setState(() {

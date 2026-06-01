@@ -17,6 +17,8 @@ class UserEntity {
   final List<String> following;
   final List<String> followRequests;
   final List<String> savedCollections;
+  /// When each collection was saved by this user (collectionId → millis).
+  final Map<String, int> savedCollectionsAt;
   final int createdAt;
 
   UserEntity({
@@ -34,6 +36,7 @@ class UserEntity {
     this.following = const [],
     this.followRequests = const [],
     this.savedCollections = const [],
+    this.savedCollectionsAt = const {},
     int? createdAt,
   }) : username = UsernameUtils.normalize(username),
        createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch;
@@ -56,6 +59,7 @@ class UserEntity {
     List<String>? following,
     List<String>? followRequests,
     List<String>? savedCollections,
+    Map<String, int>? savedCollectionsAt,
     int? createdAt,
   }) {
     return UserEntity(
@@ -75,6 +79,7 @@ class UserEntity {
       following: following ?? this.following,
       followRequests: followRequests ?? this.followRequests,
       savedCollections: savedCollections ?? this.savedCollections,
+      savedCollectionsAt: savedCollectionsAt ?? this.savedCollectionsAt,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -124,6 +129,18 @@ class UserEntity {
       following: followingList,
       followRequests: followRequestsList,
       savedCollections: List<String>.from(map['savedCollections'] ?? []),
+      savedCollectionsAt: (map['savedCollectionsAt'] is Map)
+          ? Map<String, int>.from(
+              (map['savedCollectionsAt'] as Map).map(
+                (k, v) => MapEntry(
+                  k.toString(),
+                  v is Timestamp
+                      ? v.millisecondsSinceEpoch
+                      : (v is int ? v : 0),
+                ),
+              ),
+            )
+          : const {},
       createdAt: createdAtValue,
     );
   }
@@ -144,6 +161,7 @@ class UserEntity {
       'following': following,
       'followRequests': followRequests,
       'savedCollections': savedCollections,
+      if (savedCollectionsAt.isNotEmpty) 'savedCollectionsAt': savedCollectionsAt,
       'createdAt': createdAt,
     };
   }

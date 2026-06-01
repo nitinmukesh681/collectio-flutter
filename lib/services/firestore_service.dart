@@ -620,45 +620,95 @@ class FirestoreService {
     return collections;
   }
 
-  int _savedAtForUser(CollectionEntity collection, String userId) {
+  int _savedAtForUser(
+    CollectionEntity collection,
+    String userId, {
+    Map<String, int>? userSavedAt,
+  }) {
+    final fromUser = userSavedAt?[collection.id];
+    if (fromUser != null && fromUser > 0) return fromUser;
     return collection.savedAt[userId] ?? 0;
+  }
+
+  /// Whether [userId] has saved [collection] (user doc is source of truth).
+  bool isCollectionSavedByUser({
+    required CollectionEntity collection,
+    required String userId,
+    List<String>? userSavedCollectionIds,
+  }) {
+    if (userSavedCollectionIds != null &&
+        userSavedCollectionIds.contains(collection.id)) {
+      return true;
+    }
+    return collection.savedBy.contains(userId);
+  }
+
+  Future<List<CollectionEntity>> _fetchCollectionsByIds(List<String> ids) async {
+    final uniqueIds = ids.where((id) => id.trim().isNotEmpty).toSet().toList();
+    if (uniqueIds.isEmpty) return [];
+
+    final byId = <String, CollectionEntity>{};
+    for (final chunk in _chunk(uniqueIds, 10)) {
+      final snapshot = await _collectionsRef
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      for (final doc in snapshot.docs) {
+        byId[doc.id] = CollectionEntity.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
+      }
+    }
+
+    return uniqueIds
+        .map((id) => byId[id])
+        .whereType<CollectionEntity>()
+        .toList();
   }
 
   /// Get saved collections for a user
   Future<List<CollectionEntity>> getSavedCollections(String userId) async {
-    final snapshot = await _collectionsRef
-        .where('savedBy', arrayContains: userId)
-        .get();
+    final user = await getUser(userId);
+    if (user == null || user.savedCollections.isEmpty) {
+      return [];
+    }
 
-    final collections = snapshot.docs
-        .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-        .toList();
-    
-    _sortSavedCollections(collections, userId);
+    final collections = await _fetchCollectionsByIds(user.savedCollections);
+    _sortSavedCollections(
+      collections,
+      userId,
+      userSavedAt: user.savedCollectionsAt,
+    );
     return collections;
   }
 
-  void _sortSavedCollections(List<CollectionEntity> collections, String userId) {
+  void _sortSavedCollections(
+    List<CollectionEntity> collections,
+    String userId, {
+    Map<String, int>? userSavedAt,
+  }) {
     collections.sort((a, b) {
-      final aTime = _savedAtForUser(a, userId);
-      final bTime = _savedAtForUser(b, userId);
+      final aTime = _savedAtForUser(a, userId, userSavedAt: userSavedAt);
+      final bTime = _savedAtForUser(b, userId, userSavedAt: userSavedAt);
       return bTime.compareTo(aTime);
     });
   }
 
   /// Get saved collections for a user (Stream)
   Stream<List<CollectionEntity>> getSavedCollectionsStream(String userId) {
-    return _collectionsRef
-        .where('savedBy', arrayContains: userId)
-        .snapshots()
-        .map((snapshot) {
-          final collections = snapshot.docs
-              .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-              .toList();
-          
-          _sortSavedCollections(collections, userId);
-          return collections;
-        });
+    return getUserStream(userId).asyncMap((user) async {
+      if (user == null || user.savedCollections.isEmpty) {
+        return <CollectionEntity>[];
+      }
+
+      final collections = await _fetchCollectionsByIds(user.savedCollections);
+      _sortSavedCollections(
+        collections,
+        userId,
+        userSavedAt: user.savedCollectionsAt,
+      );
+      return collections;
+    });
   }
 
   /// Get public collections feed
@@ -929,43 +979,54 @@ class FirestoreService {
     }
   }
 
-  /// Save a collection
+  /// Save a collection (user doc is source of truth; collection doc is best-effort).
   Future<void> saveCollection(String collectionId, String userId) async {
-    final batch = _firestore.batch();
-    batch.update(_usersRef.doc(userId), {
+    await _usersRef.doc(userId).update({
       'savedCollections': FieldValue.arrayUnion([collectionId]),
+      'savedCollectionsAt.$collectionId': FieldValue.serverTimestamp(),
     });
-    batch.update(_collectionsRef.doc(collectionId), {
-      'savedBy': FieldValue.arrayUnion([userId]),
-      'saveCount': FieldValue.increment(1),
-      'savedAt.$userId': FieldValue.serverTimestamp(),
-    });
-    await batch.commit();
+
+    try {
+      await _collectionsRef.doc(collectionId).update({
+        'savedBy': FieldValue.arrayUnion([userId]),
+        'saveCount': FieldValue.increment(1),
+        'savedAt.$userId': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Could not update collection savedBy (permission): $e');
+    }
   }
 
   Future<void> toggleCollectionSave(String collectionId, String userId) async {
     final collectionRef = _collectionsRef.doc(collectionId);
     final userRef = _usersRef.doc(userId);
 
-    // Read current state
-    final snap = await collectionRef.get();
-    if (!snap.exists) return;
-    final data = snap.data() as Map<String, dynamic>;
-    final savedBy = List<String>.from(data['savedBy'] ?? const <String>[]);
-    final isSaved = savedBy.contains(userId);
+    final userSnap = await userRef.get();
+    final userData = userSnap.data() as Map<String, dynamic>?;
+    final userSaved = List<String>.from(userData?['savedCollections'] ?? const <String>[]);
+    var isSaved = userSaved.contains(collectionId);
 
-    // Always update user's own document first (user has permission on their own doc)
+    if (!isSaved) {
+      final collectionSnap = await collectionRef.get();
+      if (collectionSnap.exists) {
+        final data = collectionSnap.data() as Map<String, dynamic>;
+        final savedBy = List<String>.from(data['savedBy'] ?? const <String>[]);
+        isSaved = savedBy.contains(userId);
+      }
+    }
+
     if (isSaved) {
       await userRef.update({
         'savedCollections': FieldValue.arrayRemove([collectionId]),
+        'savedCollectionsAt.$collectionId': FieldValue.delete(),
       });
     } else {
       await userRef.update({
         'savedCollections': FieldValue.arrayUnion([collectionId]),
+        'savedCollectionsAt.$collectionId': FieldValue.serverTimestamp(),
       });
     }
 
-    // Best-effort update of collection document (may fail if user is not owner)
     try {
       if (isSaved) {
         await collectionRef.update({
@@ -987,16 +1048,20 @@ class FirestoreService {
 
   /// Unsave a collection
   Future<void> unsaveCollection(String collectionId, String userId) async {
-    final batch = _firestore.batch();
-    batch.update(_usersRef.doc(userId), {
+    await _usersRef.doc(userId).update({
       'savedCollections': FieldValue.arrayRemove([collectionId]),
+      'savedCollectionsAt.$collectionId': FieldValue.delete(),
     });
-    batch.update(_collectionsRef.doc(collectionId), {
-      'savedBy': FieldValue.arrayRemove([userId]),
-      'saveCount': FieldValue.increment(-1),
-      'savedAt.$userId': FieldValue.delete(),
-    });
-    await batch.commit();
+
+    try {
+      await _collectionsRef.doc(collectionId).update({
+        'savedBy': FieldValue.arrayRemove([userId]),
+        'saveCount': FieldValue.increment(-1),
+        'savedAt.$userId': FieldValue.delete(),
+      });
+    } catch (e) {
+      debugPrint('Could not update collection savedBy (permission): $e');
+    }
   }
 
   // ==================== COLLABORATOR OPERATIONS ====================

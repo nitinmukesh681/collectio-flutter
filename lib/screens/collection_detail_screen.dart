@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +11,7 @@ import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
 import '../models/comment_entity.dart';
 import '../models/user_entity.dart';
+import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
@@ -111,19 +113,28 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             return;
           }
           
+          final userSavedIds =
+              context.read<AuthProvider>().userEntity?.savedCollections ??
+                  const <String>[];
+
           final isFollowing = await _firestoreService.isFollowing(
             widget.currentUserId, 
             collection.userId
           );
 
+          if (!mounted) return;
+
           final isOwner = collection.userId == widget.currentUserId;
           final isEditor = collection.editors.contains(widget.currentUserId);
           final canView = _canViewCollection(collection, isOwner: isOwner, isFollowing: isFollowing);
-          
           setState(() {
             _collection = collection.copyWith(
               isLiked: collection.likedBy.contains(widget.currentUserId),
-              isSaved: collection.savedBy.contains(widget.currentUserId),
+              isSaved: _firestoreService.isCollectionSavedByUser(
+                collection: collection,
+                userId: widget.currentUserId,
+                userSavedCollectionIds: userSavedIds,
+              ),
             );
             _isOwner = isOwner;
             _isEditor = isEditor;
