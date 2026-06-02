@@ -3,8 +3,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
-import '../models/category_type.dart';
 import '../theme/app_theme.dart';
+import '../utils/collection_cover_placeholder.dart';
+import '../utils/category_icons.dart';
 
 /// Collection card widget for displaying collections in lists
 class CollectionCard extends StatelessWidget {
@@ -16,46 +17,6 @@ class CollectionCard extends StatelessWidget {
     required this.collection,
     this.onTap,
   });
-
-  IconData _categoryIcon() {
-    switch (collection.category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
-
-  }
 
   static const List<Shadow> _coverTextShadow = [
     Shadow(color: Color(0x99000000), blurRadius: 10, offset: Offset(0, 1)),
@@ -114,21 +75,15 @@ class CollectionCard extends StatelessWidget {
                       builder: (context, snap) {
                         final url = snap.data;
                         if (url == null || url.isEmpty) {
-                          return Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: gradientColors,
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
+                          return CollectionCoverPlaceholder(
+                            category: collection.category,
+                            seed: collectionCoverSeed(
+                              collectionId: collection.id,
+                              title: collection.title,
                             ),
-                            child: Center(
-                              child: Icon(
-                                _categoryIcon(),
-                                size: 48,
-                                color: Colors.white.withOpacity(0.9),
-                              ),
-                            ),
+                            gradientColors: gradientColors,
+                            iconSize: 48,
+                            iconOpacity: 0.9,
                           );
                         }
 
@@ -144,21 +99,15 @@ class CollectionCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          errorWidget: (context, _, __) => Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: gradientColors,
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
+                          errorWidget: (context, _, __) => CollectionCoverPlaceholder(
+                            category: collection.category,
+                            seed: collectionCoverSeed(
+                              collectionId: collection.id,
+                              title: collection.title,
                             ),
-                            child: Center(
-                              child: Icon(
-                                _categoryIcon(),
-                                size: 48,
-                                color: Colors.white.withOpacity(0.9),
-                              ),
-                            ),
+                            gradientColors: gradientColors,
+                            iconSize: 48,
+                            iconOpacity: 0.9,
                           ),
                         );
                       },

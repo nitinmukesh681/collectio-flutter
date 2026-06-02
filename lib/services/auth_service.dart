@@ -10,10 +10,17 @@ class AuthService {
 
   AuthService() {
     String? clientId;
+    String? serverClientId;
     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS)) {
       clientId = DefaultFirebaseOptions.ios.iosClientId;
     }
-    _googleSignIn = GoogleSignIn(clientId: clientId);
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      serverClientId = DefaultFirebaseOptions.androidGoogleWebClientId;
+    }
+    _googleSignIn = GoogleSignIn(
+      clientId: clientId,
+      serverClientId: serverClientId,
+    );
   }
 
   /// Current user stream

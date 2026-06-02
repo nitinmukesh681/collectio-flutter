@@ -63,6 +63,11 @@ class DefaultFirebaseOptions {
     storageBucket: 'collectio-b6b15.firebasestorage.app',
   );
 
+  /// Web OAuth client from `google-services.json` (client_type 3).
+  /// Used as [GoogleSignIn.serverClientId] on Android so Firebase receives an id token.
+  static const String androidGoogleWebClientId =
+      '887681374750-8je7omg0bvr3be8bs1ur908s6260ag6p.apps.googleusercontent.com';
+
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC2YdAv9J0FwLaLGp_Mr8Li1qpo1K7kXVk',
     appId: '1:887681374750:ios:4ad111185996f45365ec0f',

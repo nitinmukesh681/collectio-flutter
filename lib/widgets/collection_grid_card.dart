@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
 import '../theme/app_theme.dart';
+import '../utils/collection_cover_placeholder.dart';
 import '../utils/category_icons.dart';
 
 /// Profile grid card: full-bleed cover image with title overlay.
@@ -177,21 +178,14 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
   }
 
   Widget _fallbackCover(List<Color> colors) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+    return CollectionCoverPlaceholder(
+      category: widget.collection.category,
+      seed: collectionCoverSeed(
+        collectionId: widget.collection.id,
+        title: widget.collection.title,
       ),
-      child: Center(
-        child: Icon(
-          categoryIcon(widget.collection.category),
-          size: 40,
-          color: Colors.white.withValues(alpha: 0.55),
-        ),
-      ),
+      gradientColors: colors,
+      iconSize: 40,
     );
   }
 }

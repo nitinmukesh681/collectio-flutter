@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
 import '../theme/app_theme.dart';
+import '../utils/collection_cover_placeholder.dart';
 import '../utils/category_icons.dart';
 import '../screens/collection_detail_screen.dart';
 
@@ -82,21 +83,15 @@ class CollectionListCard extends StatelessWidget {
   }
 
   Widget _defaultCover(List<Color> gradientColors) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+    return CollectionCoverPlaceholder(
+      category: collection.category,
+      seed: collectionCoverSeed(
+        collectionId: collection.id,
+        title: collection.title,
       ),
-      child: Center(
-        child: Icon(
-          categoryIcon(collection.category),
-          size: 32,
-          color: Colors.white.withValues(alpha: 0.9),
-        ),
-      ),
+      gradientColors: gradientColors,
+      iconSize: 32,
+      iconOpacity: 0.9,
     );
   }
 

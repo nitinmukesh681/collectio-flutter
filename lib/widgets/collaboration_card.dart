@@ -3,7 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_entity.dart';
-import '../models/category_type.dart';
+import '../utils/collection_cover_placeholder.dart';
+import '../utils/category_icons.dart';
 import '../theme/app_theme.dart';
 
 class CollaborationCard extends StatefulWidget {
@@ -54,43 +55,16 @@ class _CollaborationCardState extends State<CollaborationCard> {
     return null;
   }
 
-  IconData _categoryIcon() {
-    switch (widget.collection.category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
+  Widget _fallbackCover(List<Color> gradientColors) {
+    return CollectionCoverPlaceholder(
+      category: widget.collection.category,
+      seed: collectionCoverSeed(
+        collectionId: widget.collection.id,
+        title: widget.collection.title,
+      ),
+      gradientColors: gradientColors,
+      iconSize: 36,
+    );
   }
 
   String? _locationLabel(CollectionEntity collection) {
@@ -232,21 +206,6 @@ class _CollaborationCardState extends State<CollaborationCard> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _fallbackCover(List<Color> gradientColors) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Icon(_categoryIcon(), size: 36, color: Colors.white.withValues(alpha: 0.5)),
       ),
     );
   }

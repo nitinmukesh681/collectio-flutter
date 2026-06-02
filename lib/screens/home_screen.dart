@@ -171,90 +171,12 @@ class _HomeScreenState extends State<HomeScreen> {
               },
               child: CustomScrollView(
                 slivers: [
-                  // App bar
                   SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
-                      child: SizedBox(
-                        height: 44,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              'FINDS',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                                letterSpacing: 1.0,
-                                height: 1.0,
-                              ),
-                            ),
-                            const Spacer(),
-                            _buildHeaderAction(
-                              onTap: () => setState(() => _selectedIndex = 1),
-                              child: const Icon(
-                                Icons.search_rounded,
-                                color: AppColors.textPrimary,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            _buildHeaderAction(
-                              onTap: () => setState(() => _selectedIndex = 4),
-                              child: UserAvatar(
-                                userId: auth.userId,
-                                avatarUrl: auth.userEntity?.avatarUrl,
-                                name: auth.resolvedUserName,
-                                size: 28,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    child: _buildFeedPageHeader(auth),
                   ),
 
                   // Collaborate section
                   if (!_isLoadingCollabs && _collabCollections.isNotEmpty) ...[
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
-                        child: Row(
-                          children: [
-                            Text(
-                              'Collaborate',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textPrimary,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const OpenCollaborationsScreen(),
-                                  ),
-                                );
-                              },
-                              child: Text(
-                                'VIEW ALL',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                     SliverToBoxAdapter(
                       child: SizedBox(
                         height: 260,
@@ -272,13 +194,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
                   ],
 
                   // Your Feed section
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
                       child: Text(
                         'Your Feed',
                         style: GoogleFonts.plusJakartaSans(
@@ -506,21 +428,130 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   static const Color _navIconColor = Color(0xFF475569);
-  static const double _headerActionSize = 36;
+  static const double _headerSquircleSize = 36;
+  static const double _headerSquircleRadius = 10;
 
-  Widget _buildHeaderAction({
+  Widget _buildFeedPageHeader(AuthProvider auth) {
+    final showCollaborate =
+        !_isLoadingCollabs && _collabCollections.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'FINDS',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.8,
+                    height: 1.0,
+                  ),
+                ),
+                const Spacer(),
+                _buildHeaderSquircle(
+                  onTap: () => setState(() => _selectedIndex = 1),
+                  backgroundColor: AppColors.chipBg,
+                  child: const Icon(
+                    Icons.search_rounded,
+                    color: AppColors.textPrimary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _buildHeaderSquircle(
+                  onTap: () => setState(() => _selectedIndex = 4),
+                  backgroundColor: AppColors.chipBg,
+                  padding: EdgeInsets.zero,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(_headerSquircleRadius),
+                    child: UserAvatar(
+                      userId: auth.userId,
+                      avatarUrl: auth.userEntity?.avatarUrl,
+                      name: auth.resolvedUserName,
+                      size: _headerSquircleSize,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ),
+        if (showCollaborate) ...[
+            const Divider(height: 1, thickness: 1, color: AppColors.divider),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+              child: Row(
+                children: [
+                  Text(
+                    'Collaborate',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const OpenCollaborationsScreen(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      'VIEW ALL',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+    );
+  }
+
+  Widget _buildHeaderSquircle({
     required VoidCallback onTap,
     required Widget child,
+    Color backgroundColor = AppColors.chipBg,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(8),
   }) {
-    return SizedBox(
-      width: _headerActionSize,
-      height: _headerActionSize,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Center(child: child),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(_headerSquircleRadius),
+        child: Ink(
+          width: _headerSquircleSize,
+          height: _headerSquircleSize,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(_headerSquircleRadius),
+          ),
+          child: Padding(
+            padding: padding,
+            child: Center(child: child),
+          ),
         ),
       ),
     );

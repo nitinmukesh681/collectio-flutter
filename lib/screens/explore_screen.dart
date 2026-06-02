@@ -12,6 +12,8 @@ import '../providers/auth_provider.dart';
 import '../widgets/collection_card.dart';
 import '../widgets/collection_list_card.dart';
 import '../widgets/user_avatar.dart';
+import '../utils/category_icons.dart';
+import '../utils/collection_cover_placeholder.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
@@ -199,7 +201,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       MaterialPageRoute(
         builder: (context) => _CollectionsListScreen(
           title: 'Trending now',
-          icon: Icons.local_fire_department,
+          icon: trendingCoverIcon,
           loader: () async {
             final all = await _firestoreService.getPublicCollectionsList(limit: 50);
             return _computeTrending(all, limit: 50);
@@ -255,45 +257,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return scored.take(limit).map((e) => e.key).toList();
   }
 
-  static IconData _categoryIcon(CategoryType category) {
-    switch (category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
-  }
-
   void _navigateToCollection(String collectionId) {
     Navigator.push(
       context,
@@ -312,7 +275,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       MaterialPageRoute(
         builder: (context) => _CollectionsListScreen(
           title: category.displayName,
-          icon: _categoryIcon(category),
+          icon: categoryIcon(category),
           accentColor: AppColors.categoryLabelColor(category.name),
           currentUserId: widget.currentUserId,
           emptyMessage: 'No collections in ${category.displayName} yet',
@@ -588,7 +551,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
             Container(
               width: 44, height: 44,
               decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              child: Icon(_categoryIcon(category), size: 20, color: Colors.white),
+              child: CategoryPhosphorIcon(
+                category: category,
+                size: 20,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 6),
             Text(category.displayName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
@@ -674,14 +641,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     final url = snap.data;
                     if (url != null && url.isNotEmpty) {
                       return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Container(
-                          decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
-                          child: Center(child: Icon(_categoryIcon(collection.category), size: 40, color: Colors.white70)),
+                        errorWidget: (_, __, ___) => CollectionCoverPlaceholder(
+                          category: collection.category,
+                          seed: collectionCoverSeed(
+                            collectionId: collection.id,
+                            title: collection.title,
+                          ),
+                          gradientColors: gradientColors,
+                          iconSize: 40,
+                          iconOpacity: 0.7,
                         ));
                     }
-                    return Container(
-                      decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors)),
-                      child: Center(child: Icon(_categoryIcon(collection.category), size: 40, color: Colors.white70)),
+                    return CollectionCoverPlaceholder(
+                      category: collection.category,
+                      seed: collectionCoverSeed(
+                        collectionId: collection.id,
+                        title: collection.title,
+                      ),
+                      gradientColors: gradientColors,
+                      iconSize: 40,
+                      iconOpacity: 0.7,
                     );
                   },
                 ),
@@ -1138,45 +1117,6 @@ class _BrowseCategoriesScreen extends StatelessWidget {
     required this.categoryCounts,
   });
 
-  static IconData _iconForCategory(CategoryType category) {
-    switch (category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final categories = CategoryType.values.where((c) => c != CategoryType.other).toList();
@@ -1229,7 +1169,11 @@ class _BrowseCategoriesScreen extends StatelessWidget {
                     Container(
                       width: 48, height: 48,
                       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                      child: Icon(_iconForCategory(category), size: 22, color: Colors.white),
+                      child: CategoryPhosphorIcon(
+                        category: category,
+                        size: 22,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(category.displayName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),

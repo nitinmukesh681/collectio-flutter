@@ -1,0 +1,5 @@
+{
+  "dart.env": {
+    "PATH": "/opt/homebrew/bin:/opt/homebrew/sbin:${env:PATH}"
+  }
+}

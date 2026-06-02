@@ -6,7 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../models/collection_entity.dart';
-import '../models/category_type.dart';
+import '../utils/collection_cover_placeholder.dart';
+import '../utils/category_icons.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
 import 'user_avatar.dart';
@@ -92,43 +93,15 @@ class FeedCollectionCard extends StatelessWidget {
     return null;
   }
 
-  IconData _categoryIcon() {
-    switch (collection.category) {
-      case CategoryType.food:
-        return Icons.restaurant;
-      case CategoryType.finance:
-        return Icons.attach_money;
-      case CategoryType.wellness:
-        return Icons.spa;
-      case CategoryType.career:
-        return Icons.work_outline;
-      case CategoryType.home:
-        return Icons.home_outlined;
-      case CategoryType.travel:
-        return Icons.flight_takeoff;
-      case CategoryType.tech:
-        return Icons.computer;
-      case CategoryType.gaming:
-        return Icons.sports_esports;
-      case CategoryType.entertainment:
-        return Icons.movie_outlined;
-      case CategoryType.shopping:
-        return Icons.shopping_bag_outlined;
-      case CategoryType.style:
-        return Icons.checkroom;
-      case CategoryType.books:
-        return Icons.menu_book;
-      case CategoryType.growth:
-        return Icons.trending_up;
-      case CategoryType.projects:
-        return Icons.build;
-      case CategoryType.creativity:
-        return Icons.brush;
-      case CategoryType.sports:
-        return Icons.sports_soccer;
-      case CategoryType.other:
-        return Icons.category_outlined;
-    }
+  Widget _fallbackCover(List<Color> gradientColors) {
+    return CollectionCoverPlaceholder(
+      category: collection.category,
+      seed: collectionCoverSeed(
+        collectionId: collection.id,
+        title: collection.title,
+      ),
+      gradientColors: gradientColors,
+    );
   }
 
   @override
@@ -152,7 +125,7 @@ class FeedCollectionCard extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               boxShadow: AppColors.cardShadow,
             ),
             child: Column(
@@ -251,7 +224,7 @@ class FeedCollectionCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(14),
                     child: AspectRatio(
                     aspectRatio: 16 / 10,
                     child: FutureBuilder<String?>(
@@ -344,20 +317,6 @@ class FeedCollectionCard extends StatelessWidget {
     );
   }
 
-  Widget _fallbackCover(List<Color> gradientColors) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Icon(_categoryIcon(), size: 44, color: Colors.white.withValues(alpha: 0.55)),
-      ),
-    );
-  }
 
   Widget _buildStatColumn(String value, String label) {
     return Column(
