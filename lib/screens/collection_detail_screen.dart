@@ -1483,10 +1483,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
               userId: collection.userId,
               avatarUrl: collection.userAvatarUrl,
               name: collection.userName,
-              size: 32,
+              size: 28,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -1502,7 +1502,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,
                       height: 1.2,
                     ),
