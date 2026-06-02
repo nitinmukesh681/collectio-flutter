@@ -62,9 +62,7 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
     return Icons.public_rounded;
   }
 
-  static const List<Shadow> _coverTextShadow = [
-    Shadow(color: Color(0xB3000000), blurRadius: 12, offset: Offset(0, 1)),
-  ];
+  static const List<Shadow> _coverTextShadow = AppColors.collectionCoverTextShadow;
 
   @override
   Widget build(BuildContext context) {
@@ -103,16 +101,7 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
               ),
               const DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Color(0x26000000),
-                      Color(0xCC000000),
-                    ],
-                    stops: [0.35, 0.6, 1.0],
-                  ),
+                  gradient: AppColors.collectionCoverTextScrim,
                 ),
               ),
               Positioned(

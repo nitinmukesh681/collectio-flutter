@@ -224,22 +224,60 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  Widget _buildProfileTopBar({required bool isOwnProfile}) {
+    return SizedBox(
+      height: 44,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => Navigator.pop(context),
+              borderRadius: BorderRadius.circular(20),
+              child: const SizedBox(
+                width: 40,
+                height: 40,
+                child: Center(
+                  child: Icon(
+                    Icons.arrow_back,
+                    size: 22,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          _buildTopBarActions(isOwnProfile: isOwnProfile),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTopBarActions({required bool isOwnProfile}) {
     if (isOwnProfile) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
             icon: const Icon(
               Icons.edit_outlined,
+              size: 22,
               color: AppColors.collectionDescription,
             ),
             tooltip: 'Edit profile',
             onPressed: _navigateToEditProfile,
           ),
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
             icon: const Icon(
               Icons.settings_outlined,
+              size: 22,
               color: AppColors.collectionDescription,
             ),
             tooltip: 'Settings',
@@ -320,27 +358,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.only(left: 4, right: 4),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.arrow_back,
-                                  color: AppColors.textPrimary,
-                                ),
-                                onPressed: () => Navigator.pop(context),
-                              ),
-                              const Spacer(),
-                              if (!isOwnProfile)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 4),
-                                  child: _buildTopBarActions(isOwnProfile: false),
-                                )
-                              else
-                                _buildTopBarActions(isOwnProfile: true),
-                            ],
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: _buildProfileTopBar(isOwnProfile: isOwnProfile),
                         ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),

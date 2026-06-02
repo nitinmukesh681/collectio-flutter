@@ -49,6 +49,7 @@ class FirestoreService {
     }
   }
   CollectionReference get _commentsRef => _firestore.collection('comments');
+  CollectionReference get _reportsRef => _firestore.collection('reports');
 
   // ==================== COMMENTS ====================
 
@@ -2323,6 +2324,24 @@ class FirestoreService {
       print('Error uploading image: $e');
       return null;
     }
+  }
+
+  /// Submits a user report for a collection (moderation queue).
+  Future<void> reportCollection({
+    required String collectionId,
+    required String reporterUserId,
+    required String collectionOwnerId,
+    required String collectionTitle,
+  }) async {
+    await _reportsRef.add({
+      'type': 'collection',
+      'collectionId': collectionId,
+      'collectionOwnerId': collectionOwnerId,
+      'collectionTitle': collectionTitle,
+      'reporterUserId': reporterUserId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 }
 

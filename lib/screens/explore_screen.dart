@@ -11,7 +11,7 @@ import '../models/user_entity.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/collection_card.dart';
 import '../widgets/collection_list_card.dart';
-import '../widgets/avatar_fallback.dart';
+import '../widgets/user_avatar.dart';
 import 'collection_detail_screen.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
@@ -336,44 +336,76 @@ class _ExploreScreenState extends State<ExploreScreen> {
             // Search bar
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
-                child: TextField(
-                  controller: _searchController,
-                  focusNode: _searchFocus,
-                  decoration: InputDecoration(
-                    hintText: 'Search curated collections, items, or creators...',
-                    hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontWeight: FontWeight.w600),
-                    prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                                _searchResults = [];
-                              });
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: const BorderSide(color: AppColors.divider),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: const BorderSide(color: AppColors.divider),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: const BorderSide(color: AppColors.primaryPurple, width: 2),
-                    ),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0F000000),
+                        blurRadius: 16,
+                        offset: Offset(0, 4),
+                      ),
+                      BoxShadow(
+                        color: Color(0x06000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
                   ),
-                   onChanged: _onSearchChanged,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (value) => _performSearch(value),
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Search curated collections, items,',
+                      hintStyle: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textMuted,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Icon(
+                          Icons.search_rounded,
+                          color: AppColors.textMuted.withValues(alpha: 0.85),
+                          size: 22,
+                        ),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(
+                                Icons.close_rounded,
+                                size: 20,
+                                color: AppColors.textMuted.withValues(alpha: 0.85),
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                  _searchResults = [];
+                                });
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+                      isDense: true,
+                    ),
+                    onChanged: _onSearchChanged,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (value) => _performSearch(value),
+                  ),
                 ),
               ),
             ),
@@ -872,12 +904,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final user = _userResults[index];
-            return ListTile(
+
+            return GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
@@ -889,32 +922,40 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   ),
                 );
               },
-              leading: SizedBox(
-                width: 48,
-                height: 48,
-                child: ClipOval(
-                  child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-                      ? CachedNetworkImage(
-                          imageUrl: user.avatarUrl!,
-                          fit: BoxFit.cover,
-                          errorWidget: (context, url, error) =>
-                              AvatarFallback(name: user.userName, size: 48),
-                        )
-                      : AvatarFallback(name: user.userName, size: 48),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+                  boxShadow: AppColors.cardShadow,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    UserAvatar(
+                      userId: user.id,
+                      avatarUrl: user.avatarUrl,
+                      name: user.userName,
+                      size: 36,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '@${user.userName}',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: AppColors.textPrimary,
+                          height: 1.0,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              title: Text(
-                '@${user.userName}',
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-              ),
-              subtitle: user.bio != null && user.bio!.isNotEmpty
-                  ? Text(
-                      user.bio!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(),
-                    )
-                  : null,
             );
           },
           childCount: _userResults.length,

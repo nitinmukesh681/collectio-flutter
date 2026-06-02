@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
 import '../widgets/feed_collection_card.dart';
 import '../widgets/collaboration_card.dart';
+import '../widgets/user_avatar.dart';
 import 'collection_detail_screen.dart';
 import 'explore_screen.dart';
 import 'create_collection_screen.dart';
@@ -173,30 +174,43 @@ class _HomeScreenState extends State<HomeScreen> {
                   // App bar
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => setState(() => _selectedIndex = 4),
-                            icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 26),
-                          ),
-                          Expanded(
-                            child: Text(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
+                      child: SizedBox(
+                        height: 44,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
                               'FINDS',
-                              textAlign: TextAlign.center,
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.textPrimary,
-                                letterSpacing: 1.2,
+                                letterSpacing: 1.0,
+                                height: 1.0,
                               ),
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () => setState(() => _selectedIndex = 1),
-                            icon: const Icon(Icons.search_rounded, color: AppColors.textPrimary, size: 26),
-                          ),
-                        ],
+                            const Spacer(),
+                            _buildHeaderAction(
+                              onTap: () => setState(() => _selectedIndex = 1),
+                              child: const Icon(
+                                Icons.search_rounded,
+                                color: AppColors.textPrimary,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            _buildHeaderAction(
+                              onTap: () => setState(() => _selectedIndex = 4),
+                              child: UserAvatar(
+                                userId: auth.userId,
+                                avatarUrl: auth.userEntity?.avatarUrl,
+                                name: auth.resolvedUserName,
+                                size: 28,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -320,6 +334,30 @@ class _HomeScreenState extends State<HomeScreen> {
                               collection: collection,
                               onTap: () => _navigateToCollection(collection.id, auth.userId),
                               onUserTap: () => _navigateToUserProfile(collection.userId, auth.userId),
+                              isOwnCollection: collection.userId == auth.userId,
+                              onReport: () async {
+                                try {
+                                  await _firestoreService.reportCollection(
+                                    collectionId: collection.id,
+                                    reporterUserId: auth.userId,
+                                    collectionOwnerId: collection.userId,
+                                    collectionTitle: collection.title,
+                                  );
+                                  if (context.mounted) {
+                                    SnackBarUtils.showSuccessSnackBar(
+                                      context,
+                                      'Report submitted. Thank you.',
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    SnackBarUtils.showErrorSnackBar(
+                                      context,
+                                      'Could not submit report: $e',
+                                    );
+                                  }
+                                }
+                              },
                               onLike: () async {
                                 final current = _feedCollections[index];
                                 final wasLiked = current.likedBy.contains(auth.userId);
@@ -456,9 +494,9 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildNavItem(0, Icons.home_outlined, Icons.home_rounded),
               _buildNavItem(1, Icons.explore_outlined, Icons.explore_rounded),
-              _buildNavItem(2, Icons.add_circle_outline_rounded, Icons.add_circle_rounded, isSpecial: true, onSpecialTap: () => _navigateToCreate(auth)),
+              _buildNavItem(2, Icons.add_circle_outline, Icons.add_circle, isSpecial: true, onSpecialTap: () => _navigateToCreate(auth)),
               _buildActivityNavItem(3, auth),
-              _buildNavItem(4, Icons.person_outline_rounded, Icons.person_rounded),
+              _buildNavItem(4, Icons.account_circle_outlined, Icons.account_circle),
             ],
           ),
         ),
@@ -467,7 +505,34 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, IconData selectedIcon, {bool isSpecial = false, VoidCallback? onSpecialTap}) {
+  static const Color _navIconColor = Color(0xFF475569);
+  static const double _headerActionSize = 36;
+
+  Widget _buildHeaderAction({
+    required VoidCallback onTap,
+    required Widget child,
+  }) {
+    return SizedBox(
+      width: _headerActionSize,
+      height: _headerActionSize,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Center(child: child),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(
+    int index,
+    IconData outlineIcon,
+    IconData filledIcon, {
+    bool isSpecial = false,
+    VoidCallback? onSpecialTap,
+  }) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
@@ -485,9 +550,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: AppColors.primary,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(selectedIcon, color: Colors.white, size: 22),
+                  child: Icon(filledIcon, color: Colors.white, size: 22),
                 )
-              : Icon(icon, color: AppColors.collectionDescription, size: 26),
+              : Icon(outlineIcon, color: _navIconColor, size: 24),
         ),
       ),
     );
@@ -517,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 22),
                     )
-                  : const Icon(Icons.notifications_none_rounded, color: AppColors.collectionDescription, size: 26);
+                  : const Icon(Icons.notifications_outlined, color: _navIconColor, size: 24);
               return Badge(
                 isLabelVisible: count > 0,
                 label: Text(count > 9 ? '9+' : '$count', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700)),

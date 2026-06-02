@@ -325,9 +325,24 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
-  void _showCollaboratorsDialog(CollectionEntity collection) {
-    final editors = _editorCollaborators(collection);
-    if (editors.isEmpty) return;
+  Future<void> _showCollaboratorsDialog(CollectionEntity collection) async {
+    var collaborators = _editorCollaborators(collection);
+    if (collaborators.isEmpty) {
+      final editorIds = _editorUserIdsExcludingOwner(collection);
+      if (editorIds.isEmpty) return;
+
+      try {
+        final users = await _firestoreService.getUsersByIds(editorIds);
+        collaborators = users
+            .map((u) => {'userId': u.id, 'username': u.userName})
+            .toList();
+      } catch (e) {
+        debugPrint('Error loading collaborators: $e');
+        return;
+      }
+    }
+
+    if (!mounted || collaborators.isEmpty) return;
 
     showDialog(
       context: context,
@@ -345,13 +360,15 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 avatarUrl: collection.userAvatarUrl,
                 subtitle: 'Owner',
               ),
-              ...editors.map((collab) {
+              ...collaborators.map((collab) {
                 final userId = collab['userId'] as String? ?? '';
                 final username = collab['username'] as String? ?? 'User';
+                final isEditor = collection.editors.contains(userId);
                 return _buildPeopleDialogRow(
                   dialogContext: dialogContext,
                   userId: userId,
                   username: username,
+                  subtitle: isEditor ? 'Editor' : 'Collaborator',
                 );
               }),
             ],
@@ -1352,6 +1369,173 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
+  List<String> _openCollectionAdditionalContributorIds(CollectionEntity collection) {
+    final itemAuthorIds = _items
+        .map((item) => item.userId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    // Only show when more than one person has added items.
+    if (itemAuthorIds.length <= 1) return const [];
+
+    return itemAuthorIds.where((id) => id != collection.userId).toList();
+  }
+
+  List<String> _editorUserIdsExcludingOwner(CollectionEntity collection) {
+    return collection.editors
+        .where((id) => id.isNotEmpty && id != collection.userId)
+        .toList();
+  }
+
+  ({int count, String label, VoidCallback onTap})? _heroPeopleExtras(
+    CollectionEntity collection,
+  ) {
+    if (collection.isOpenForContribution) {
+      final additionalIds = _openCollectionAdditionalContributorIds(collection);
+      if (additionalIds.isEmpty) return null;
+
+      final count = additionalIds.length;
+      return (
+        count: count,
+        label: count == 1 ? 'contributor' : 'contributors',
+        onTap: () => _showOpenContributorsDialog(collection, additionalIds),
+      );
+    }
+
+    final editorIds = _editorUserIdsExcludingOwner(collection);
+    if (editorIds.isEmpty) return null;
+
+    final count = editorIds.length;
+    return (
+      count: count,
+      label: count == 1 ? 'collaborator' : 'collaborators',
+      onTap: () => _showCollaboratorsDialog(collection),
+    );
+  }
+
+  Future<void> _showOpenContributorsDialog(
+    CollectionEntity collection,
+    List<String> contributorIds,
+  ) async {
+    if (contributorIds.isEmpty) return;
+
+    var users = _contributorUsers.where((u) => contributorIds.contains(u.id)).toList();
+    if (users.length < contributorIds.length) {
+      try {
+        users = await _firestoreService.getUsersByIds(contributorIds);
+      } catch (e) {
+        debugPrint('Error loading open contributors: $e');
+      }
+    }
+
+    if (!mounted || users.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Contributors', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPeopleDialogRow(
+                dialogContext: dialogContext,
+                userId: collection.userId,
+                username: collection.userName,
+                avatarUrl: collection.userAvatarUrl,
+                subtitle: 'Owner',
+              ),
+              ...users.map(
+                (user) => _buildPeopleDialogRow(
+                  dialogContext: dialogContext,
+                  userId: user.id,
+                  username: user.userName,
+                  avatarUrl: user.avatarUrl,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroPeopleRow(CollectionEntity collection) {
+    final extras = _heroPeopleExtras(collection);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: () => _navigateToUserProfile(collection.userId),
+            behavior: HitTestBehavior.opaque,
+            child: UserAvatar(
+              userId: collection.userId,
+              avatarUrl: collection.userAvatarUrl,
+              name: collection.userName,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                GestureDetector(
+                  onTap: () => _navigateToUserProfile(collection.userId),
+                  behavior: HitTestBehavior.opaque,
+                  child: Text(
+                    collection.userName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+                if (extras != null)
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: extras.onTap,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Text(
+                          '+ ${extras.count} ${extras.label}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _accentColor,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static const TextStyle _heroDescriptionStyle = TextStyle(
     fontSize: 15,
     fontWeight: FontWeight.w500,
@@ -1510,6 +1694,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _buildHeroPeopleRow(collection),
         _buildHeroTitle(collection.title),
         if (collection.description != null && collection.description!.isNotEmpty) ...[
           const SizedBox(height: 10),

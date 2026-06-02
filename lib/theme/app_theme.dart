@@ -58,8 +58,26 @@ class AppColors {
   ];
   /// Soft shadow around collection cover cards (all sides).
   static const List<BoxShadow> collectionCoverShadow = [
-    BoxShadow(color: Color(0x1F000000), blurRadius: 16, spreadRadius: 0, offset: Offset.zero),
-    BoxShadow(color: Color(0x0A000000), blurRadius: 6, spreadRadius: 1, offset: Offset.zero),
+    BoxShadow(color: Color(0x26000000), blurRadius: 18, spreadRadius: 0, offset: Offset.zero),
+    BoxShadow(color: Color(0x0D000000), blurRadius: 8, spreadRadius: 1, offset: Offset.zero),
+  ];
+
+  /// Bottom scrim on full-bleed collection covers for title legibility.
+  static const LinearGradient collectionCoverTextScrim = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Colors.transparent,
+      Color(0x4D000000),
+      Color(0xB3000000),
+      Color(0xF0000000),
+    ],
+    stops: [0.15, 0.45, 0.72, 1.0],
+  );
+
+  static const List<Shadow> collectionCoverTextShadow = [
+    Shadow(color: Color(0xE6000000), blurRadius: 16, offset: Offset(0, 2)),
+    Shadow(color: Color(0x99000000), blurRadius: 6, offset: Offset(0, 1)),
   ];
 
   // Radii

@@ -8,6 +8,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../models/collection_entity.dart';
 import '../models/category_type.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_utils.dart';
 import 'user_avatar.dart';
 
 class FeedCollectionCard extends StatelessWidget {
@@ -16,6 +17,8 @@ class FeedCollectionCard extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onSave;
   final VoidCallback? onUserTap;
+  final VoidCallback? onReport;
+  final bool isOwnCollection;
 
   const FeedCollectionCard({
     super.key,
@@ -24,7 +27,53 @@ class FeedCollectionCard extends StatelessWidget {
     required this.onLike,
     required this.onSave,
     this.onUserTap,
+    this.onReport,
+    this.isOwnCollection = false,
   });
+
+  static const Color _reportColor = AppColors.heartSalmon;
+
+  void _showReportDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          'Report collection?',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'This collection will be reviewed by our team. Thank you for helping keep the community safe.',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+            height: 1.45,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              onReport?.call();
+            },
+            child: Text(
+              'Report',
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700,
+                color: _reportColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<String?> _resolveCoverUrl() async {
     final c = collection;
@@ -153,13 +202,48 @@ class FeedCollectionCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      IconButton(
-                        onPressed: () => Share.share(
-                          'Check out ${collection.title} on Finds: https://collectio-b6b15.web.app/collection/${collection.id}',
-                        ),
-                        icon: const Icon(Icons.more_horiz, color: AppColors.textPrimary),
+                      PopupMenuButton<String>(
                         padding: EdgeInsets.zero,
+                        offset: const Offset(0, 40),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        icon: const Icon(Icons.more_horiz, color: AppColors.textPrimary),
                         constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                        onSelected: (value) {
+                          if (value != 'report') return;
+                          if (isOwnCollection) {
+                            SnackBarUtils.showInfoSnackBar(
+                              context,
+                              "You can't report your own collection",
+                            );
+                            return;
+                          }
+                          if (onReport != null) {
+                            _showReportDialog(context);
+                          } else {
+                            SnackBarUtils.showInfoSnackBar(
+                              context,
+                              'Sign in to report this collection',
+                            );
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem<String>(
+                            value: 'report',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.flag_outlined, color: _reportColor, size: 20),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Report',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

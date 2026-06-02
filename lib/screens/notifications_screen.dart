@@ -161,7 +161,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
               child: Row(
                 children: [
                   Expanded(
@@ -170,15 +170,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       children: [
                         Text('Activity', 
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 28, 
+                            fontSize: 24, 
                             fontWeight: FontWeight.w800, 
                             color: AppColors.textPrimary,
-                            letterSpacing: -0.5,
+                            letterSpacing: -0.4,
+                            height: 1.15,
                           )
                         ),
                         const SizedBox(height: 4),
                         Text('Updates from your curated community', 
-                          style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w600)
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
+                          ),
                         ),
                       ],
                     ),
@@ -256,7 +262,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, _bottomNavClearance),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, _bottomNavClearance),
             children: [
               if (today.isNotEmpty) ...[
                 Padding(
@@ -275,7 +281,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ],
               if (earlier.isNotEmpty) ...[
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 10, top: 28),
+                  padding: EdgeInsets.only(bottom: 10, top: today.isNotEmpty ? 24 : 18),
                   child: Text('EARLIER', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.textSecondary, letterSpacing: 1)),
                 ),
                 Container(

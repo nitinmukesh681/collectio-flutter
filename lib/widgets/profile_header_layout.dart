@@ -105,41 +105,44 @@ class ProfileHeaderLayout extends StatelessWidget {
   }) {
     final textColor = filled ? Colors.white : AppColors.textPrimary;
 
-    return OutlinedButton(
-      onPressed: isLoading ? null : onPressed,
-      style: OutlinedButton.styleFrom(
-        backgroundColor: filled ? AppColors.primary : Colors.white,
-        foregroundColor: textColor,
-        side: BorderSide(
-          color: filled ? AppColors.primary : hairline,
-          width: 1,
-        ),
-        minimumSize: const Size(0, 38),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isLoading ? null : onPressed,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: filled ? AppColors.primary : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: filled ? AppColors.primary : hairline,
+            ),
+          ),
+          child: Center(
+            child: isLoading
+                ? SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: textColor,
+                    ),
+                  )
+                : Text(
+                    label,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      letterSpacing: 0.5,
+                      height: 1.0,
+                      color: textColor,
+                    ),
+                  ),
+          ),
         ),
       ),
-      child: isLoading
-          ? SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: textColor,
-              ),
-            )
-          : Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-                letterSpacing: 0.8,
-                color: textColor,
-              ),
-            ),
     );
   }
 
