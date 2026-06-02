@@ -2500,7 +2500,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 onMentionTap: _navigateToUserProfile,
                 mentionColor: _accentColor,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: depth == 0 ? 15 : 14,
+                  fontSize: 14,
                   color: AppColors.textPrimary,
                   height: 1.45,
                 ),

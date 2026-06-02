@@ -120,7 +120,7 @@ class CommentMentions {
   }) {
     final style = baseStyle ??
         GoogleFonts.plusJakartaSans(
-          fontSize: 15,
+          fontSize: 14,
           color: AppColors.textPrimary,
           height: 1.45,
         );

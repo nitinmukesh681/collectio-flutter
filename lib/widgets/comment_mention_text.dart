@@ -44,7 +44,7 @@ class _CommentMentionTextState extends State<CommentMentionText> {
 
     final style = widget.style ??
         GoogleFonts.plusJakartaSans(
-          fontSize: 15,
+          fontSize: 14,
           color: AppColors.textPrimary,
           height: 1.45,
         );
