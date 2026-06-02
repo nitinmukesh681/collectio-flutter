@@ -11,12 +11,14 @@ class CollectionListCard extends StatelessWidget {
   final CollectionEntity collection;
   final String currentUserId;
   final bool profileStyle;
+  final bool collaborationStyle;
 
   const CollectionListCard({
     super.key,
     required this.collection,
     required this.currentUserId,
     this.profileStyle = false,
+    this.collaborationStyle = false,
   });
 
   Future<String?> _resolveCover() async {
@@ -49,13 +51,14 @@ class CollectionListCard extends StatelessWidget {
   }
 
   Widget _buildCoverThumbnail(List<Color> gradientColors, {double size = 88}) {
+    final thumbRadius = collaborationStyle ? 14.0 : 10.0;
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: AppColors.collectionCoverShadow,
+        borderRadius: BorderRadius.circular(thumbRadius),
+        boxShadow: collaborationStyle ? null : AppColors.collectionCoverShadow,
       ),
       child: ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(thumbRadius),
       child: SizedBox(
         width: size,
         height: size,
@@ -169,55 +172,63 @@ class CollectionListCard extends StatelessWidget {
     final gradientColors = AppColors.categoryGradients[collection.category.name] ??
         AppColors.categoryGradients['other']!;
     final description = collection.description?.trim();
+    final thumbSize = collaborationStyle ? 80.0 : 88.0;
 
     return GestureDetector(
       onTap: () => _openDetail(context),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
+        margin: EdgeInsets.only(bottom: collaborationStyle ? 12 : 16),
+        padding: EdgeInsets.all(collaborationStyle ? 14 : 16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+          borderRadius: BorderRadius.circular(collaborationStyle ? 16 : AppColors.radiusLarge),
           boxShadow: AppColors.cardShadow,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildCoverThumbnail(gradientColors),
-            const SizedBox(width: 16),
+            _buildCoverThumbnail(gradientColors, size: thumbSize),
+            SizedBox(width: collaborationStyle ? 14 : 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildCategoryLabel(),
-                  const SizedBox(height: 6),
+                  SizedBox(height: collaborationStyle ? 4 : 6),
                   Text(
                     collection.title,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 19,
+                      fontSize: collaborationStyle ? 18 : 19,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                       height: 1.15,
                       letterSpacing: -0.35,
                     ),
-                    maxLines: 2,
+                    maxLines: collaborationStyle ? 1 : 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (description != null && description.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                    SizedBox(height: collaborationStyle ? 4 : 6),
                     Text(
                       description,
-                      style: AppTextStyles.collectionDescription(fontSize: 14, height: 1.4),
-                      maxLines: 2,
+                      style: AppTextStyles.collectionDescription(
+                        fontSize: collaborationStyle ? 13 : 14,
+                        height: 1.4,
+                      ),
+                      maxLines: collaborationStyle ? 1 : 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.chevron_right_rounded, size: 24, color: AppColors.textMuted),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: collaborationStyle ? 22 : 24,
+              color: AppColors.textMuted,
+            ),
           ],
         ),
       ),

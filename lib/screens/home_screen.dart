@@ -150,10 +150,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     // Get current user details from provider
     final auth = context.watch<AuthProvider>();
-    final user = auth.userEntity;
-    final userName = user?.userName.split(' ').first ?? 'Curator';
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       extendBody: true,
       body: SafeArea(
         bottom: false,
@@ -174,52 +173,68 @@ class _HomeScreenState extends State<HomeScreen> {
                   // App bar
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
                       child: Row(
                         children: [
-                          Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
-                          const SizedBox(width: 5),
-                          Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
-                          const SizedBox(width: 8),
-                          Text('finds', 
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 18, 
-                              fontWeight: FontWeight.w800, 
-                              color: AppColors.primary, 
-                              letterSpacing: -0.5
-                            )
+                          IconButton(
+                            onPressed: () => setState(() => _selectedIndex = 4),
+                            icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 26),
                           ),
-                          const Spacer(),
+                          Expanded(
+                            child: Text(
+                              'FINDS',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => setState(() => _selectedIndex = 1),
+                            icon: const Icon(Icons.search_rounded, color: AppColors.textPrimary, size: 26),
+                          ),
                         ],
                       ),
                     ),
                   ),
 
-                  // Open Collaborations Section
+                  // Collaborate section
                   if (!_isLoadingCollabs && _collabCollections.isNotEmpty) ...[
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Open Collaborations', 
+                            Text(
+                              'Collaborate',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 26, 
-                                fontWeight: FontWeight.w800, 
-                                color: AppColors.textPrimary, 
-                                letterSpacing: -0.5
-                              )
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                                letterSpacing: -0.5,
+                              ),
                             ),
+                            const Spacer(),
                             TextButton(
                               onPressed: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const OpenCollaborationsScreen()));
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const OpenCollaborationsScreen(),
+                                  ),
+                                );
                               },
-                              child: Text('View All', 
+                              child: Text(
+                                'VIEW ALL',
                                 style: GoogleFonts.plusJakartaSans(
-                                  color: AppColors.primary, 
-                                  fontWeight: FontWeight.w700
-                                )
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                  letterSpacing: 0.8,
+                                ),
                               ),
                             ),
                           ],
@@ -228,9 +243,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 265,
+                        height: 260,
                         child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.only(left: 16),
                           scrollDirection: Axis.horizontal,
                           itemCount: _collabCollections.length,
                           itemBuilder: (context, index) {
@@ -243,25 +258,24 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
                   ],
 
-                  // 3. Main Feed Section Title
+                  // Your Feed section
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                      child: Text('Your Feed', 
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                      child: Text(
+                        'Your Feed',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 26, 
-                          fontWeight: FontWeight.w800, 
-                          color: AppColors.textPrimary, 
-                          letterSpacing: -0.5
-                        )
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.5,
+                        ),
                       ),
                     ),
                   ),
-
-                  // 4. Feed Items
                   if (_isLoadingFeed)
                     const SliverFillRemaining(
                       hasScrollBody: false,

@@ -57,6 +57,10 @@ class CollectionCard extends StatelessWidget {
 
   }
 
+  static const List<Shadow> _coverTextShadow = [
+    Shadow(color: Color(0x99000000), blurRadius: 10, offset: Offset(0, 1)),
+  ];
+
   Future<String?> _resolveCoverUrl() async {
     final candidate = (collection.coverImageUrl != null && collection.coverImageUrl!.isNotEmpty)
         ? collection.coverImageUrl!.trim()
@@ -159,19 +163,6 @@ class CollectionCard extends StatelessWidget {
                         );
                       },
                     ),
-                    // Bottom gradient overlay for legibility
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.72),
-                          ],
-                        ),
-                      ),
-                    ),
                     // Category pill (top-left)
                     Positioned(
                       left: 12,
@@ -239,6 +230,7 @@ class CollectionCard extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                               height: 1.1,
+                              shadows: _coverTextShadow,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -252,6 +244,7 @@ class CollectionCard extends StatelessWidget {
                                   fontSize: 12,
                                   color: Colors.white.withOpacity(0.85),
                                   fontWeight: FontWeight.w600,
+                                  shadows: _coverTextShadow,
                                 ),
                               ),
                             ],

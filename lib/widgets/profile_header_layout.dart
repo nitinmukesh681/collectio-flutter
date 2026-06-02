@@ -9,7 +9,7 @@ import 'avatar_fallback.dart';
 /// Centered profile header: avatar, identity, bio, stats, action button.
 class ProfileHeaderLayout extends StatelessWidget {
   // Reference-matched profile chrome
-  static const Color hairline = Color(0xFFF0F2F5);
+  static const Color hairline = AppColors.divider;
   static const Color statLabelColor = AppColors.textMuted;
 
   static const double avatarSize = 100;
@@ -17,13 +17,15 @@ class ProfileHeaderLayout extends StatelessWidget {
   static const double spacingNameToUsername = 4;
   static const double spacingUsernameToBio = 18;
   static const double spacingBioToStats = 28;
-  static const double statsBandPadding = 14;
+  static const double statsBandPadding = 12;
+  static const double statsBandPaddingLarge = 16;
   static const double spacingStatsToButton = 12;
 
   final UserEntity user;
   final Widget? actionButton;
   final Widget statsRow;
   final bool showAvatarEditBadge;
+  final bool emphasizeStats;
   final VoidCallback? onAvatarTap;
 
   const ProfileHeaderLayout({
@@ -32,6 +34,7 @@ class ProfileHeaderLayout extends StatelessWidget {
     required this.statsRow,
     this.actionButton,
     this.showAvatarEditBadge = false,
+    this.emphasizeStats = false,
     this.onAvatarTap,
   });
 
@@ -49,36 +52,94 @@ class ProfileHeaderLayout extends StatelessWidget {
     required VoidCallback? onPressed,
     bool isLoading = false,
     bool filled = false,
+    bool expandWidth = false,
+    bool compact = false,
   }) {
-    return SizedBox(
-      width: 220,
-      child: OutlinedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: filled ? AppColors.primary : Colors.white,
-          foregroundColor: filled ? Colors.white : AppColors.textPrimary,
-          side: BorderSide(
-            color: filled ? AppColors.primary : hairline,
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
+    final button = OutlinedButton(
+      onPressed: isLoading ? null : onPressed,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: filled ? AppColors.primary : Colors.white,
+        foregroundColor: filled ? Colors.white : AppColors.textPrimary,
+        side: BorderSide(
+          color: filled ? AppColors.primary : hairline,
         ),
-        child: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(
-                label,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
-              ),
+        padding: EdgeInsets.symmetric(
+          vertical: compact ? 8 : 14,
+          horizontal: compact ? 16 : 24,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(28),
+        ),
       ),
+      child: isLoading
+          ? SizedBox(
+              width: compact ? 16 : 20,
+              height: compact ? 16 : 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: filled ? Colors.white : AppColors.primary,
+              ),
+            )
+          : Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700,
+                fontSize: compact ? 11 : 15,
+                letterSpacing: compact ? 0.5 : 0,
+              ),
+            ),
+    );
+
+    if (expandWidth) {
+      return SizedBox(width: double.infinity, child: button);
+    }
+    return SizedBox(width: compact ? 150 : 220, child: button);
+  }
+
+  /// Follow / following control for other-user profile top bars.
+  static Widget buildProfileFollowButton({
+    required String label,
+    required VoidCallback? onPressed,
+    bool isLoading = false,
+    bool filled = false,
+  }) {
+    final textColor = filled ? Colors.white : AppColors.textPrimary;
+
+    return OutlinedButton(
+      onPressed: isLoading ? null : onPressed,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: filled ? AppColors.primary : Colors.white,
+        foregroundColor: textColor,
+        side: BorderSide(
+          color: filled ? AppColors.primary : hairline,
+          width: 1,
+        ),
+        minimumSize: const Size(0, 38),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+        ),
+      ),
+      child: isLoading
+          ? SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: textColor,
+              ),
+            )
+          : Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                letterSpacing: 0.8,
+                color: textColor,
+              ),
+            ),
     );
   }
 
@@ -99,13 +160,19 @@ class ProfileHeaderLayout extends StatelessWidget {
         const SizedBox(height: spacingBioToStats),
         hairlineDivider(),
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: statsBandPadding),
+          padding: EdgeInsets.symmetric(
+            vertical: emphasizeStats ? statsBandPaddingLarge : statsBandPadding,
+          ),
           child: statsRow,
         ),
-        hairlineDivider(),
         if (actionButton != null) ...[
+          hairlineDivider(),
           const SizedBox(height: spacingStatsToButton),
-          actionButton!,
+          Align(
+            alignment: Alignment.center,
+            widthFactor: 1,
+            child: actionButton!,
+          ),
         ],
       ],
     );
@@ -153,7 +220,7 @@ class ProfileHeaderLayout extends StatelessWidget {
         style: AppTextStyles.collectionDescription(
           fontSize: 14,
           height: 1.55,
-        ),
+        ).copyWith(fontStyle: FontStyle.italic),
       ),
     );
   }
@@ -218,7 +285,13 @@ class ProfileHeaderLayout extends StatelessWidget {
     );
   }
 
-  static Widget buildStat(String count, String label, {VoidCallback? onTap}) {
+  static Widget buildStat(
+    String count,
+    String label, {
+    VoidCallback? onTap,
+    double countFontSize = 22,
+    double labelFontSize = 10,
+  }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -229,7 +302,7 @@ class ProfileHeaderLayout extends StatelessWidget {
             count,
             style: GoogleFonts.plusJakartaSans(
               color: AppColors.textPrimary,
-              fontSize: 26,
+              fontSize: countFontSize,
               fontWeight: FontWeight.w800,
               height: 1,
               letterSpacing: -0.5,
@@ -240,8 +313,8 @@ class ProfileHeaderLayout extends StatelessWidget {
             label,
             style: GoogleFonts.plusJakartaSans(
               color: statLabelColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontSize: labelFontSize,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
             ),
           ),
@@ -256,13 +329,20 @@ class ProfileHeaderLayout extends StatelessWidget {
     required String followingCount,
     VoidCallback? onFollowersTap,
     VoidCallback? onFollowingTap,
+    double countFontSize = 22,
+    double labelFontSize = 10,
   }) {
     return IntrinsicHeight(
       child: Row(
         children: [
           Expanded(
             child: Center(
-              child: buildStat(collectionsCount, 'COLLECTIONS'),
+              child: buildStat(
+                collectionsCount,
+                'COLLECTIONS',
+                countFontSize: countFontSize,
+                labelFontSize: labelFontSize,
+              ),
             ),
           ),
           _statsVerticalDivider(),
@@ -272,6 +352,8 @@ class ProfileHeaderLayout extends StatelessWidget {
                 followersCount,
                 'FOLLOWERS',
                 onTap: onFollowersTap,
+                countFontSize: countFontSize,
+                labelFontSize: labelFontSize,
               ),
             ),
           ),
@@ -282,6 +364,8 @@ class ProfileHeaderLayout extends StatelessWidget {
                 followingCount,
                 'FOLLOWING',
                 onTap: onFollowingTap,
+                countFontSize: countFontSize,
+                labelFontSize: labelFontSize,
               ),
             ),
           ),
@@ -293,7 +377,7 @@ class ProfileHeaderLayout extends StatelessWidget {
   static Widget _statsVerticalDivider() {
     return Container(
       width: 1,
-      margin: const EdgeInsets.symmetric(vertical: 10),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       color: hairline,
     );
   }

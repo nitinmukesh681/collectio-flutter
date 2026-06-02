@@ -22,6 +22,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   static const double _bottomNavClearance = 120;
+  static const double _profileHeaderShadowGap = 6;
+  static const double _profileSectionGap = 16;
 
   late TabController _tabController;
   final FirestoreService _firestoreService = FirestoreService();
@@ -178,13 +180,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     return '$count';
   }
 
-  Widget _buildEditProfileButton() {
-    return ProfileHeaderLayout.buildOutlinedActionButton(
-      label: 'Edit Profile',
-      onPressed: _navigateToEditProfile,
-    );
-  }
-
   List<CollectionEntity> _mergedMyCollections(String userId) {
     final ownedIds = _myCollections.map((c) => c.id).toSet();
     final collaborated = _collaborationCollections
@@ -208,7 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
         if (user == null) {
           return const Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: AppColors.backgroundSurface,
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -231,28 +226,53 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(
-                  child: ColoredBox(
-                    color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: _profileHeaderShadowGap),
+                    child: Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(36),
+                        bottomRight: Radius.circular(36),
+                      ),
+                      boxShadow: AppColors.profileHeaderShadow,
+                    ),
                     child: SafeArea(
                       bottom: false,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.settings_outlined,
-                                color: AppColors.collectionDescription,
-                              ),
-                              onPressed: _navigateToSettings,
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4, right: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Spacer(),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    color: AppColors.collectionDescription,
+                                  ),
+                                  tooltip: 'Edit profile',
+                                  onPressed: _navigateToEditProfile,
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.settings_outlined,
+                                    color: AppColors.collectionDescription,
+                                  ),
+                                  tooltip: 'Settings',
+                                  onPressed: _navigateToSettings,
+                                ),
+                              ],
                             ),
                           ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
                             child: ProfileHeaderLayout(
                               user: user,
-                              actionButton: _buildEditProfileButton(),
+                              emphasizeStats: true,
                               statsRow: ProfileHeaderLayout.buildStatsRow(
                                 collectionsCount: _formatCount(mergedCollections.length),
                                 followersCount: _formatCount(user.followers.length),
@@ -261,6 +281,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                     _navigateToFollowers(auth.userId, showFollowers: true),
                                 onFollowingTap: () =>
                                     _navigateToFollowers(auth.userId, showFollowers: false),
+                                countFontSize: 24,
+                                labelFontSize: 10,
                               ),
                             ),
                           ),
@@ -268,35 +290,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       ),
                     ),
                   ),
-                ),
-                SliverToBoxAdapter(
-                  child: ColoredBox(
-                    color: Colors.white,
-                    child: TabBar(
-                      controller: _tabController,
-                      labelColor: AppColors.primary,
-                      unselectedLabelColor: AppColors.textSecondary,
-                      indicatorColor: AppColors.primary,
-                      indicatorWeight: 3,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      dividerColor: Colors.transparent,
-                      labelStyle: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        letterSpacing: 0.6,
-                      ),
-                      unselectedLabelStyle: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        letterSpacing: 0.6,
-                      ),
-                      tabs: const [
-                        Tab(text: 'COLLECTIONS'),
-                        Tab(text: 'SAVED'),
-                      ],
-                    ),
                   ),
                 ),
+                SliverToBoxAdapter(child: _buildProfileTabBar()),
                 ..._buildCollectionsSlivers(
                   activeCollections,
                   auth.userId,
@@ -308,6 +304,107 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           ),
         );
       },
+    );
+  }
+
+  Widget _buildProfileTabBar() {
+    final selectedIndex = _tabController.index;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        _profileSectionGap - _profileHeaderShadowGap,
+        16,
+        _profileSectionGap - _profileHeaderShadowGap,
+      ),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.all(4),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.chipBg,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final segmentWidth = constraints.maxWidth / 2;
+            final thumbRadius = BorderRadius.circular((constraints.maxHeight) / 2);
+            return Stack(
+              children: [
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeInOut,
+                  left: selectedIndex * segmentWidth,
+                  width: segmentWidth,
+                  top: 0,
+                  bottom: 0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: thumbRadius,
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 6,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    _buildProfileSegment(
+                      label: 'COLLECTIONS',
+                      index: 0,
+                      selectedIndex: selectedIndex,
+                    ),
+                    _buildProfileSegment(
+                      label: 'SAVED',
+                      index: 1,
+                      selectedIndex: selectedIndex,
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileSegment({
+    required String label,
+    required int index,
+    required int selectedIndex,
+  }) {
+    final isSelected = index == selectedIndex;
+
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            if (_tabController.index != index) {
+              _tabController.index = index;
+            }
+          },
+          child: Center(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                fontSize: 13,
+                letterSpacing: 0.5,
+                color: isSelected ? AppColors.textPrimary : AppColors.textMuted,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -351,7 +448,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
     return [
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          _profileSectionGap - _profileHeaderShadowGap,
+          16,
+          0,
+        ),
         sliver: SliverGrid(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,

@@ -17,13 +17,13 @@ class AppColors {
   static const Color coralPrimary = Color(0xFFFF6B6B);
   static const Color tealSecondary = Color(0xFF4ECDC4);
 
-  // Backgrounds
-  static const Color backgroundSurface = Color(0xFFF8FAFC);
+  // Backgrounds — neutral off-white (cleaner than slate-tinted grays)
+  static const Color backgroundSurface = Color(0xFFFAFAFA);
   static const Color backgroundLight = Colors.white;
   static const Color surfaceLight = Colors.white;
-  static const Color surfaceMuted = Color(0xFFF1F5F9);
-  static const Color divider = Color(0xFFE2E8F0);
-  static const Color chipBg = Color(0xFFF1F5F9);
+  static const Color surfaceMuted = Color(0xFFF5F5F5);
+  static const Color divider = Color(0xFFE8E8E8);
+  static const Color chipBg = Color(0xFFF5F5F5);
 
   // Text
   static const Color textPrimary = Color(0xFF0F172A);
@@ -50,6 +50,11 @@ class AppColors {
   ];
   static const List<BoxShadow> elevatedShadow = [
     BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, 4)),
+  ];
+  /// Profile header sheet — separates white block from page background.
+  static const List<BoxShadow> profileHeaderShadow = [
+    BoxShadow(color: Color(0x10000000), blurRadius: 20, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x06000000), blurRadius: 1, offset: Offset(0, 1)),
   ];
   /// Soft shadow around collection cover cards (all sides).
   static const List<BoxShadow> collectionCoverShadow = [

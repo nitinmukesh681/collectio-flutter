@@ -17,8 +17,9 @@ class CollaborationCard extends StatefulWidget {
 }
 
 class _CollaborationCardState extends State<CollaborationCard> {
-  static const double _cardRadius = 16;
-  static const double _buttonRadius = 14;
+  static const double _cardWidth = 220;
+  static const double _cardHeight = 260;
+  static const double _cardRadius = 18;
 
   late Future<String?> _coverUrlFuture;
 
@@ -31,7 +32,9 @@ class _CollaborationCardState extends State<CollaborationCard> {
   @override
   void didUpdateWidget(CollaborationCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.collection.id != widget.collection.id) _coverUrlFuture = _resolveCoverUrl();
+    if (oldWidget.collection.id != widget.collection.id) {
+      _coverUrlFuture = _resolveCoverUrl();
+    }
   }
 
   Future<String?> _resolveCoverUrl() async {
@@ -41,7 +44,11 @@ class _CollaborationCardState extends State<CollaborationCard> {
         : (c.previewImageUrls.isNotEmpty ? c.previewImageUrls.first.trim() : '');
     if (candidate.isEmpty) return null;
     if (candidate.startsWith('gs://')) {
-      try { return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL(); } catch (_) { return null; }
+      try {
+        return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL();
+      } catch (_) {
+        return null;
+      }
     }
     if (candidate.startsWith('http')) return candidate;
     return null;
@@ -49,104 +56,181 @@ class _CollaborationCardState extends State<CollaborationCard> {
 
   IconData _categoryIcon() {
     switch (widget.collection.category) {
-      case CategoryType.food: return Icons.restaurant;
-      case CategoryType.finance: return Icons.attach_money;
-      case CategoryType.wellness: return Icons.spa;
-      case CategoryType.career: return Icons.work_outline;
-      case CategoryType.home: return Icons.home_outlined;
-      case CategoryType.travel: return Icons.flight_takeoff;
-      case CategoryType.tech: return Icons.computer;
-      case CategoryType.gaming: return Icons.sports_esports;
-      case CategoryType.entertainment: return Icons.movie_outlined;
-      case CategoryType.shopping: return Icons.shopping_bag_outlined;
-      case CategoryType.style: return Icons.checkroom;
-      case CategoryType.books: return Icons.menu_book;
-      case CategoryType.growth: return Icons.trending_up;
-      case CategoryType.projects: return Icons.build;
-      case CategoryType.creativity: return Icons.brush;
-      case CategoryType.sports: return Icons.sports_soccer;
-      case CategoryType.other: return Icons.category_outlined;
+      case CategoryType.food:
+        return Icons.restaurant;
+      case CategoryType.finance:
+        return Icons.attach_money;
+      case CategoryType.wellness:
+        return Icons.spa;
+      case CategoryType.career:
+        return Icons.work_outline;
+      case CategoryType.home:
+        return Icons.home_outlined;
+      case CategoryType.travel:
+        return Icons.flight_takeoff;
+      case CategoryType.tech:
+        return Icons.computer;
+      case CategoryType.gaming:
+        return Icons.sports_esports;
+      case CategoryType.entertainment:
+        return Icons.movie_outlined;
+      case CategoryType.shopping:
+        return Icons.shopping_bag_outlined;
+      case CategoryType.style:
+        return Icons.checkroom;
+      case CategoryType.books:
+        return Icons.menu_book;
+      case CategoryType.growth:
+        return Icons.trending_up;
+      case CategoryType.projects:
+        return Icons.build;
+      case CategoryType.creativity:
+        return Icons.brush;
+      case CategoryType.sports:
+        return Icons.sports_soccer;
+      case CategoryType.other:
+        return Icons.category_outlined;
     }
+  }
+
+  String? _locationLabel(CollectionEntity collection) {
+    final raw = collection.googleMapsUrl?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.contains('query=')) {
+      try {
+        final query = Uri.parse(raw).queryParameters['query'];
+        if (query != null && query.isNotEmpty) {
+          return Uri.decodeComponent(query.replaceAll('+', ' '));
+        }
+      } catch (_) {}
+    }
+    final placeMatch = RegExp(r'/place/([^/]+)').firstMatch(raw);
+    if (placeMatch != null) {
+      return Uri.decodeComponent(placeMatch.group(1)!).replaceAll('+', ' ');
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final collection = widget.collection;
-    final gradientColors = AppColors.categoryGradients[collection.category.name] ?? AppColors.categoryGradients['other']!;
+    final gradientColors =
+        AppColors.categoryGradients[collection.category.name] ??
+        AppColors.categoryGradients['other']!;
+    final location = _locationLabel(collection);
 
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
-        width: 260,
-        margin: const EdgeInsets.only(right: 14),
+        width: _cardWidth,
+        height: _cardHeight,
+        margin: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
-          color: Colors.white,
           borderRadius: BorderRadius.circular(_cardRadius),
-          border: Border.all(color: AppColors.divider, width: 1),
+          boxShadow: AppColors.collectionCoverShadow,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(_cardRadius)),
-              child: SizedBox(
-                height: 150,
-                width: double.infinity,
-                child: FutureBuilder<String?>(
-                  future: _coverUrlFuture,
-                  builder: (context, snap) {
-                    final url = snap.data;
-                    if (url != null && url.isNotEmpty) {
-                      return CachedNetworkImage(
-                        imageUrl: url, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _fallbackCover(gradientColors),
-                      );
-                    }
-                    return _fallbackCover(gradientColors);
-                  },
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(_cardRadius),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              FutureBuilder<String?>(
+                future: _coverUrlFuture,
+                builder: (context, snap) {
+                  final url = snap.data;
+                  if (url != null && url.isNotEmpty) {
+                    return CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _fallbackCover(gradientColors),
+                    );
+                  }
+                  return _fallbackCover(gradientColors);
+                },
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.08),
+                      Colors.black.withValues(alpha: 0.72),
+                    ],
+                    stops: const [0.45, 0.72, 1.0],
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    collection.title,
-                    style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.2),
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
+              Positioned(
+                top: 10,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  if (collection.description != null && collection.description!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                  child: Text(
+                    'COLLECTING',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      collection.description!,
-                      style: AppTextStyles.collectionDescription(fontSize: 13, height: 1.3),
-                      maxLines: 1,
+                      collection.title,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.15,
+                        letterSpacing: -0.35,
+                      ),
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: widget.onTap,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                    if (location != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Transform.translate(
+                            offset: const Offset(-2, 0),
+                            child: const Icon(Icons.location_on, size: 14, color: Colors.white),
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Text(
+                              location,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.92),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Text('Contribute', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14)),
-                    ),
-                  ),
-                ],
+                    ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -154,8 +238,16 @@ class _CollaborationCardState extends State<CollaborationCard> {
 
   Widget _fallbackCover(List<Color> gradientColors) {
     return Container(
-      decoration: BoxDecoration(gradient: LinearGradient(colors: gradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight)),
-      child: Center(child: Icon(_categoryIcon(), size: 48, color: Colors.white.withOpacity(0.5))),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(_categoryIcon(), size: 36, color: Colors.white.withValues(alpha: 0.5)),
+      ),
     );
   }
 }

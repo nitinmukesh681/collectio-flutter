@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/category_type.dart';
 import '../theme/app_theme.dart';
 import '../services/firestore_service.dart';
 import '../utils/snackbar_utils.dart';
@@ -23,6 +24,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   String _currentUsername = '';
   final Map<String, bool> _isFollowingCache = <String, bool>{};
+  final Map<String, String> _collectionCategoryCache = <String, String>{};
 
   @override
   void initState() {
@@ -84,6 +86,56 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         'Follow Back',
         style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13),
       ),
+    );
+  }
+
+  Future<String> _resolveCollectionCategoryName(
+    String? collectionId,
+    Map<String, dynamic> data,
+  ) async {
+    final stored = data['collectionCategory'] as String?;
+    if (stored != null && stored.trim().isNotEmpty) {
+      return CategoryType.fromString(stored).name;
+    }
+
+    if (collectionId == null || collectionId.isEmpty) {
+      return CategoryType.other.name;
+    }
+
+    final cached = _collectionCategoryCache[collectionId];
+    if (cached != null) return cached;
+
+    final categoryName = await _firestoreService.getCollectionCategoryName(collectionId);
+    _collectionCategoryCache[collectionId] = categoryName;
+    return categoryName;
+  }
+
+  Widget _buildCollectionTitleLabel({
+    required String title,
+    required String? collectionId,
+    required Map<String, dynamic> data,
+    required VoidCallback? onTap,
+  }) {
+    return FutureBuilder<String>(
+      future: _resolveCollectionCategoryName(collectionId, data),
+      builder: (context, snapshot) {
+        final categoryName = snapshot.data ?? CategoryType.other.name;
+        final color = AppColors.categoryLabelColor(categoryName);
+
+        return GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Text(
+            title,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 14,
+              height: 1.45,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -435,23 +487,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           WidgetSpan(
                             alignment: PlaceholderAlignment.baseline,
                             baseline: TextBaseline.alphabetic,
-                            child: GestureDetector(
+                            child: _buildCollectionTitleLabel(
+                              title: subtitle,
+                              collectionId: collectionId,
+                              data: data,
                               onTap: collectionId != null && collectionId.isNotEmpty
                                   ? () {
                                       _markAsRead(id);
                                       _navigateToCollection(collectionId);
                                     }
                                   : null,
-                              behavior: HitTestBehavior.opaque,
-                              child: Text(
-                                subtitle,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 14,
-                                  height: 1.45,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                ),
-                              ),
                             ),
                           ),
                         ],

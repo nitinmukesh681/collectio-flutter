@@ -28,7 +28,6 @@ class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
   Future<void> _loadCollections() async {
     setState(() => _isLoading = true);
     try {
-      // Fetch more items for the "See All" screen
       final collections = await _firestoreService.getOpenCollaborationCollections(limit: 50);
       if (mounted) {
         setState(() {
@@ -42,56 +41,114 @@ class _OpenCollaborationsScreenState extends State<OpenCollaborationsScreen> {
     }
   }
 
+  Widget _buildBackButton() {
+    return InkWell(
+      onTap: () => Navigator.pop(context),
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: const Icon(Icons.arrow_back_rounded, size: 20, color: AppColors.textPrimary),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _buildBackButton(),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Open Collaborations',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.5,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Join shared lists from the community',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.backgroundSurface,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'Open Collaborations',
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w800,
-            color: Colors.black,
-            fontSize: 18,
-          ),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _collections.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.group_off_outlined, size: 64, color: AppColors.textMuted),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No open collaborations found',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                          itemCount: _collections.length,
+                          itemBuilder: (context, index) {
+                            final c = _collections[index];
+                            return CollectionListCard(
+                              collection: c,
+                              currentUserId: auth.userId,
+                              collaborationStyle: true,
+                            );
+                          },
+                        ),
+            ),
+          ],
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _collections.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.group_off_outlined, size: 64, color: AppColors.textMuted),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No open collaborations found',
-                        style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-                  itemCount: _collections.length,
-                  itemBuilder: (context, index) {
-                    final c = _collections[index];
-                    return CollectionListCard(
-                      collection: c,
-                      currentUserId: auth.userId,
-                    );
-                  },
-                ),
     );
   }
 }

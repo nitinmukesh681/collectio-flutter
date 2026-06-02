@@ -4,12 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
-import '../models/collection_entity.dart';
-import '../models/collection_item_entity.dart';
-import '../services/firestore_service.dart';
-import '../theme/app_theme.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import 'avatar_fallback.dart';
+import '../models/collection_entity.dart';
+import '../models/category_type.dart';
+import '../theme/app_theme.dart';
+import 'user_avatar.dart';
 
 class FeedCollectionCard extends StatelessWidget {
   final CollectionEntity collection;
@@ -19,215 +18,239 @@ class FeedCollectionCard extends StatelessWidget {
   final VoidCallback? onUserTap;
 
   const FeedCollectionCard({
-    super.key, required this.collection, required this.onTap,
-    required this.onLike, required this.onSave, this.onUserTap,
+    super.key,
+    required this.collection,
+    required this.onTap,
+    required this.onLike,
+    required this.onSave,
+    this.onUserTap,
   });
 
-  Future<String?> _resolveAvatarUrl() async {
-    final svc = FirestoreService();
-    String? raw = collection.userAvatarUrl;
-    if (raw == null || raw.trim().isEmpty) {
-      try { raw = (await svc.getUser(collection.userId))?.avatarUrl; } catch (_) {}
+  Future<String?> _resolveCoverUrl() async {
+    final c = collection;
+    final candidate = (c.coverImageUrl != null && c.coverImageUrl!.isNotEmpty)
+        ? c.coverImageUrl!.trim()
+        : (c.previewImageUrls.isNotEmpty ? c.previewImageUrls.first.trim() : '');
+    if (candidate.isEmpty) return null;
+    if (candidate.startsWith('gs://')) {
+      try {
+        return await FirebaseStorage.instance.refFromURL(candidate).getDownloadURL();
+      } catch (_) {
+        return null;
+      }
     }
-    if (raw == null || raw.isEmpty) return null;
-    final t = raw.trim();
-    if (t.startsWith('gs://')) { try { return await FirebaseStorage.instance.refFromURL(t).getDownloadURL(); } catch (_) { return null; } }
-    if (t.startsWith('http')) return t;
+    if (candidate.startsWith('http')) return candidate;
     return null;
+  }
+
+  IconData _categoryIcon() {
+    switch (collection.category) {
+      case CategoryType.food:
+        return Icons.restaurant;
+      case CategoryType.finance:
+        return Icons.attach_money;
+      case CategoryType.wellness:
+        return Icons.spa;
+      case CategoryType.career:
+        return Icons.work_outline;
+      case CategoryType.home:
+        return Icons.home_outlined;
+      case CategoryType.travel:
+        return Icons.flight_takeoff;
+      case CategoryType.tech:
+        return Icons.computer;
+      case CategoryType.gaming:
+        return Icons.sports_esports;
+      case CategoryType.entertainment:
+        return Icons.movie_outlined;
+      case CategoryType.shopping:
+        return Icons.shopping_bag_outlined;
+      case CategoryType.style:
+        return Icons.checkroom;
+      case CategoryType.books:
+        return Icons.menu_book;
+      case CategoryType.growth:
+        return Icons.trending_up;
+      case CategoryType.projects:
+        return Icons.build;
+      case CategoryType.creativity:
+        return Icons.brush;
+      case CategoryType.sports:
+        return Icons.sports_soccer;
+      case CategoryType.other:
+        return Icons.category_outlined;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final svc = FirestoreService();
+    final gradientColors =
+        AppColors.categoryGradients[collection.category.name] ??
+        AppColors.categoryGradients['other']!;
+    final description = collection.description?.trim();
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance.collection('collections').doc(collection.id).snapshots(),
       builder: (context, snap) {
         final remoteCount = snap.data?.data()?['itemCount'];
+        final remoteLikes = snap.data?.data()?['likes'];
         final itemCount = (remoteCount is int) ? remoteCount : collection.itemCount;
+        final likes = (remoteLikes is int) ? remoteLikes : collection.likes;
 
         return GestureDetector(
           onTap: onTap,
           child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0D000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
-              ],
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: AppColors.cardShadow,
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Avatar + name + save
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: onUserTap,
-                      child: SizedBox(
-                        width: 44, height: 44,
-                        child: ClipOval(
-                          child: FutureBuilder<String?>(
-                            future: _resolveAvatarUrl(),
-                            builder: (context, s) {
-                              final url = s.data;
-                              if (url != null && url.isNotEmpty) {
-                                return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                                  errorWidget: (_, __, ___) => _avatar());
-                              }
-                              return _avatar();
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GestureDetector(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 8, 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      GestureDetector(
                         onTap: onUserTap,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('@${collection.userName}',
-                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
-                            Text('Published ${timeago.format(DateTime.fromMillisecondsSinceEpoch(collection.createdAt))}',
-                              style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
-                          ],
+                        child: UserAvatar(
+                          userId: collection.userId,
+                          avatarUrl: collection.userAvatarUrl,
+                          name: collection.userName,
+                          size: 42,
                         ),
                       ),
-                    ),
-                    GestureDetector(
-                      onTap: onSave,
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 8, top: 2),
-                        child: Icon(
-                          collection.isSaved
-                              ? Icons.bookmark_rounded
-                              : Icons.bookmark_border_rounded,
-                          size: 24,
-                          color: collection.isSaved
-                              ? AppColors.primary
-                              : AppColors.textPrimary,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: onUserTap,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                collection.userName,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                timeago
+                                    .format(DateTime.fromMillisecondsSinceEpoch(collection.createdAt))
+                                    .toUpperCase(),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Title - Changed from w800 to w700 to be slightly less bold than main headers
-                Text(collection.title,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary, height: 1.2, letterSpacing: -0.3)),
-
-                const SizedBox(height: 16),
-
-                // Numbered items
-                StreamBuilder<List<CollectionItemEntity>>(
-                  stream: svc.getCollectionItemsPreviewStream(
-                    collection.id,
-                    limit: itemCount > 3 ? 4 : 3,
+                      IconButton(
+                        onPressed: () => Share.share(
+                          'Check out ${collection.title} on Finds: https://collectio-b6b15.web.app/collection/${collection.id}',
+                        ),
+                        icon: const Icon(Icons.more_horiz, color: AppColors.textPrimary),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                      ),
+                    ],
                   ),
-                  builder: (context, snapshot) {
-                    final items = snapshot.data ?? [];
-                    if (items.isEmpty) return const SizedBox.shrink();
-                    return _buildItemsPreview(items, itemCount);
-                  },
                 ),
-
-                const SizedBox(height: 18),
-
-                // Footer
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: onLike,
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(
-                          collection.isLiked
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          size: 22,
-                          color: collection.isLiked
-                              ? AppColors.heartSalmon
-                              : AppColors.textPrimary,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '${collection.likes}',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ]),
-                    ),
-                    const SizedBox(width: 20),
-                    StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('comments')
-                          .where('collectionId', isEqualTo: collection.id)
-                          .snapshots(),
-                      builder: (context, commentSnap) {
-                        final commentCount = commentSnap.data?.docs.length ?? 0;
-                        return Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            size: 22,
-                            color: AppColors.textPrimary,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            '$commentCount',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ]);
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: AspectRatio(
+                    aspectRatio: 16 / 10,
+                    child: FutureBuilder<String?>(
+                      future: _resolveCoverUrl(),
+                      builder: (context, coverSnap) {
+                        final url = coverSnap.data;
+                        if (url != null && url.isNotEmpty) {
+                          return CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _fallbackCover(gradientColors),
+                          );
+                        }
+                        return _fallbackCover(gradientColors);
                       },
                     ),
-                    const SizedBox(width: 20),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.inventory_2_outlined,
-                          size: 22,
+                  ),
+                ),
+              ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        collection.title,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
                           color: AppColors.textPrimary,
+                          height: 1.15,
+                          letterSpacing: -0.35,
                         ),
-                        const SizedBox(width: 5),
+                      ),
+                      if (description != null && description.isNotEmpty) ...[
+                        const SizedBox(height: 8),
                         Text(
-                          '$itemCount',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
+                          description,
+                          style: AppTextStyles.collectionDescription(
+                            fontSize: 14,
+                            height: 1.45,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => Share.share(
-                        'Check out ${collection.title} on Finds: https://collectio-b6b15.web.app/collection/${collection.id}',
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                  child: Row(
+                    children: [
+                      _buildStatColumn('$itemCount', 'ITEMS'),
+                      const SizedBox(width: 20),
+                      _buildStatColumn('$likes', 'LIKES'),
+                      const Spacer(),
+                      _buildActionButton(
+                        icon: Icons.share_outlined,
+                        onTap: () => Share.share(
+                          'Check out ${collection.title} on Finds: https://collectio-b6b15.web.app/collection/${collection.id}',
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.share_outlined,
-                        size: 22,
-                        color: AppColors.textPrimary,
+                      const SizedBox(width: 10),
+                      _buildActionButton(
+                        icon: collection.isSaved
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        onTap: onSave,
+                        filled: collection.isSaved,
+                        fillColor: AppColors.primary,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      _buildActionButton(
+                        icon: collection.isLiked
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        onTap: onLike,
+                        filled: collection.isLiked,
+                        fillColor: AppColors.heartSalmon,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -237,101 +260,71 @@ class FeedCollectionCard extends StatelessWidget {
     );
   }
 
-  Widget _avatar() => AvatarFallback(name: collection.userName, size: 44);
-
-  static const double _itemRowHeight = 48;
-  static const double _itemGap = 10;
-  static const double _fourthItemPeek = 40;
-
-  Widget _buildItemsPreview(List<CollectionItemEntity> items, int itemCount) {
-    final showPeek = itemCount > 3 && items.length > 3;
-
-    final list = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (int i = 0; i < items.length; i++) ...[
-          _itemRow(items[i], i + 1),
-          if (i < items.length - 1) const SizedBox(height: _itemGap),
-        ],
-      ],
-    );
-
-    if (!showPeek) return list;
-
-    final peekHeight = _itemRowHeight * 3 + _itemGap * 2 + _fourthItemPeek;
-
-    return SizedBox(
-      height: peekHeight,
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          ClipRect(
-            child: SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
-              child: list,
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 32,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white.withValues(alpha: 0),
-                      Colors.white.withValues(alpha: 0.65),
-                      Colors.white,
-                    ],
-                    stops: const [0.0, 0.45, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+  Widget _fallbackCover(List<Color> gradientColors) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(_categoryIcon(), size: 44, color: Colors.white.withValues(alpha: 0.55)),
       ),
     );
   }
 
-  Widget _itemRow(CollectionItemEntity item, int rank) {
-    return Container(
-      height: _itemRowHeight,
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSurface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            rank.toString().padLeft(2, '0'),
-            style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              color: AppColors.primary,
-            ),
+  Widget _buildStatColumn(String value, String label) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          value,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            height: 1.0,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              item.title,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMuted,
+            letterSpacing: 0.6,
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    bool filled = false,
+    Color? fillColor,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: filled ? (fillColor ?? AppColors.primary) : Colors.white,
+          shape: BoxShape.circle,
+          border: filled ? null : Border.all(color: AppColors.divider, width: 1.2),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: filled ? Colors.white : AppColors.textPrimary,
+        ),
       ),
     );
   }

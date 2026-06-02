@@ -336,7 +336,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             // Search bar
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
                 child: TextField(
                   controller: _searchController,
                   focusNode: _searchFocus,
@@ -382,7 +382,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             if (_searchQuery.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  padding: const EdgeInsets.fromLTRB(18, 0, 16, 8),
                   child: Row(
                     children: [
                       _buildSearchTab('Collections', _SearchTab.collections),
@@ -398,7 +398,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               _buildSearchResults(),
             ] else ...[
               // Browse by Category
-              _buildSectionHeader('Browse', onViewAll: _navigateToBrowseCategories),
+              _buildSectionHeader('Browse', onViewAll: _navigateToBrowseCategories, topPadding: 10),
               _buildCategoryGrid(),
 
               // Trending Now
@@ -478,10 +478,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, {IconData? icon, required VoidCallback onViewAll}) {
+  Widget _buildSectionHeader(
+    String title, {
+    IconData? icon,
+    required VoidCallback onViewAll,
+    double topPadding = 16,
+  }) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 10, 12),
+        padding: EdgeInsets.fromLTRB(16, topPadding, 10, 12),
         child: Row(
           children: [
             Text(title, 
@@ -841,19 +846,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return GestureDetector(
       onTap: () => _changeTab(tab),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primaryPurple : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.primaryPurple : AppColors.divider,
-          ),
+          borderRadius: BorderRadius.circular(18),
+          border: isSelected
+              ? null
+              : Border.all(color: AppColors.divider),
         ),
         child: Text(
           label,
           style: GoogleFonts.plusJakartaSans(
             color: isSelected ? Colors.white : AppColors.textPrimary,
             fontWeight: FontWeight.w700,
+            fontSize: 13,
           ),
         ),
       ),
@@ -866,7 +872,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
@@ -923,7 +929,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
@@ -931,6 +937,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             return CollectionListCard(
               collection: collection,
               currentUserId: widget.currentUserId,
+              collaborationStyle: true,
             );
           },
           childCount: _searchResults.length,
@@ -1070,6 +1077,7 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
                       return CollectionListCard(
                         collection: c,
                         currentUserId: widget.currentUserId,
+                        collaborationStyle: true,
                       );
                     },
                   ),

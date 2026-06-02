@@ -18,6 +18,9 @@ class MentionTextField extends StatefulWidget {
   final bool filled;
   final bool dense;
   final EdgeInsetsGeometry? contentPadding;
+  final TextStyle? textStyle;
+  final TextAlignVertical? textAlignVertical;
+  final bool collapseDecoration;
   final FirestoreService firestoreService;
   final Color? accentColor;
   final Widget Function(Widget textField)? surroundBuilder;
@@ -33,6 +36,9 @@ class MentionTextField extends StatefulWidget {
     this.filled = false,
     this.dense = false,
     this.contentPadding,
+    this.textStyle,
+    this.textAlignVertical,
+    this.collapseDecoration = false,
     this.accentColor,
     this.surroundBuilder,
   });
@@ -59,7 +65,9 @@ class _MentionTextFieldState extends State<MentionTextField> {
   double get _panelHeight =>
       math.min(_suggestions.length, _maxVisibleSuggestions) * _suggestionRowHeight;
 
-  TextStyle get _baseTextStyle => GoogleFonts.plusJakartaSans(
+  TextStyle get _baseTextStyle =>
+      widget.textStyle ??
+      GoogleFonts.plusJakartaSans(
         fontSize: 14,
         color: AppColors.textPrimary,
         height: 1.45,
@@ -331,12 +339,20 @@ class _MentionTextFieldState extends State<MentionTextField> {
 
   Color get _accentColor => widget.accentColor ?? AppColors.primary;
 
+  bool get _useCollapsedDecoration =>
+      widget.dense && (widget.collapseDecoration || widget.maxLines == 1);
+
   InputDecoration _fieldDecoration() {
     return InputDecoration(
       isDense: widget.dense,
-      isCollapsed: widget.dense && widget.maxLines == 1,
+      visualDensity: widget.dense ? VisualDensity.compact : VisualDensity.standard,
+      isCollapsed: _useCollapsedDecoration,
       hintText: widget.hintText,
-      hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 14),
+      hintStyle: GoogleFonts.plusJakartaSans(
+        color: AppColors.textMuted,
+        fontSize: _baseTextStyle.fontSize ?? 14,
+        height: _baseTextStyle.height,
+      ),
       border: widget.filled ? null : InputBorder.none,
       enabledBorder: widget.filled ? null : InputBorder.none,
       focusedBorder: widget.filled
@@ -361,8 +377,10 @@ class _MentionTextFieldState extends State<MentionTextField> {
       cursorColor: _accentColor,
       keyboardType: isMultiline ? TextInputType.multiline : TextInputType.text,
       textInputAction: isMultiline ? TextInputAction.newline : TextInputAction.done,
-      textAlignVertical:
-          widget.dense && widget.maxLines == 1 ? TextAlignVertical.center : TextAlignVertical.top,
+      textAlignVertical: widget.textAlignVertical ??
+          (widget.dense && widget.maxLines == 1
+              ? TextAlignVertical.center
+              : TextAlignVertical.top),
       minLines: widget.minLines,
       maxLines: widget.maxLines,
       decoration: _fieldDecoration(),

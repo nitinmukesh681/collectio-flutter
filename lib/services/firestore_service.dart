@@ -3,6 +3,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:async/async.dart';
 import 'dart:io';
+import '../models/category_type.dart';
 import '../models/collection_entity.dart';
 import '../models/collection_item_entity.dart';
 import '../models/user_entity.dart';
@@ -21,6 +22,16 @@ class FirestoreService {
   CollectionReference get _usersRef => _firestore.collection('users');
   CollectionReference get _collectionsRef => _firestore.collection('collections');
   CollectionReference get _collectionItemsRef => _firestore.collection('collectionItems');
+
+  String _collectionCategoryFromMap(Map<String, dynamic> data) =>
+      CategoryType.fromString(data['category'] as String?).name;
+
+  /// Resolves a collection's category name for activity notifications.
+  Future<String> getCollectionCategoryName(String collectionId) async {
+    final doc = await _collectionsRef.doc(collectionId).get();
+    if (!doc.exists) return CategoryType.other.name;
+    return _collectionCategoryFromMap(doc.data() as Map<String, dynamic>);
+  }
 
   /// Sorts collections by most recent content change (items, title, description, etc.).
   void _sortCollectionsByContentActivity(List<CollectionEntity> collections) {
@@ -90,10 +101,12 @@ class FirestoreService {
         final data = collectionSnap.data() as Map<String, dynamic>;
         final ownerId = data['userId'] as String? ?? '';
         final title = data['title'] as String? ?? '';
+        final collectionCategory = _collectionCategoryFromMap(data);
         await _sendCommentNotifications(
           commentId: docRef.id,
           collectionId: collectionId,
           collectionTitle: title,
+          collectionCategory: collectionCategory,
           ownerId: ownerId,
           userId: userId,
           userName: userName,
@@ -105,6 +118,7 @@ class FirestoreService {
           commentId: docRef.id,
           collectionId: collectionId,
           collectionTitle: title,
+          collectionCategory: collectionCategory,
           userId: userId,
           userName: userName,
           userAvatarUrl: userAvatarUrl,
@@ -129,6 +143,7 @@ class FirestoreService {
     required String commentId,
     required String collectionId,
     required String collectionTitle,
+    required String collectionCategory,
     required String ownerId,
     required String userId,
     required String userName,
@@ -155,6 +170,7 @@ class FirestoreService {
         'fromUserAvatarUrl': resolvedAvatarUrl,
         'collectionId': collectionId,
         'collectionTitle': collectionTitle,
+        'collectionCategory': collectionCategory,
         'commentId': commentId,
         'message': text,
         'isRead': false,
@@ -209,6 +225,7 @@ class FirestoreService {
     required String commentId,
     required String collectionId,
     required String collectionTitle,
+    required String collectionCategory,
     required String userId,
     required String userName,
     String? userAvatarUrl,
@@ -231,6 +248,7 @@ class FirestoreService {
         'fromUserAvatarUrl': resolvedAvatarUrl,
         'collectionId': collectionId,
         'collectionTitle': collectionTitle,
+        'collectionCategory': collectionCategory,
         'commentId': commentId,
         'message': text,
         'isRead': false,
@@ -268,11 +286,14 @@ class FirestoreService {
             final fromUsername = await _getUsername(userId);
             final fromUserAvatarUrl = await _getUserAvatarUrl(userId);
             String collectionTitle = '';
+            var collectionCategory = CategoryType.other.name;
             if (collectionId.isNotEmpty) {
               final collectionSnap = await _collectionsRef.doc(collectionId).get();
               if (collectionSnap.exists) {
-                collectionTitle =
-                    (collectionSnap.data() as Map<String, dynamic>)['title'] as String? ?? '';
+                final collectionData =
+                    collectionSnap.data() as Map<String, dynamic>;
+                collectionTitle = collectionData['title'] as String? ?? '';
+                collectionCategory = _collectionCategoryFromMap(collectionData);
               }
             }
             await _firestore.collection('notifications').add({
@@ -283,6 +304,7 @@ class FirestoreService {
               if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
               'collectionId': collectionId,
               'collectionTitle': collectionTitle,
+              'collectionCategory': collectionCategory,
               'commentId': commentId,
               'message': data['text'] ?? '',
               'isRead': false,
@@ -350,6 +372,7 @@ class FirestoreService {
       'fromUsername': UsernameUtils.normalize(fromUsername),
       'collectionId': collectionId,
       'collectionTitle': collectionTitle,
+      'collectionCategory': _collectionCategoryFromMap(c),
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     };
@@ -1078,6 +1101,7 @@ class FirestoreService {
   }) async {
     final collectionRef = _collectionsRef.doc(collectionId);
     final normalizedRole = role.toUpperCase();
+    var collectionCategory = CategoryType.other.name;
 
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(collectionRef);
@@ -1086,6 +1110,7 @@ class FirestoreService {
       }
 
       final data = snap.data() as Map<String, dynamic>;
+      collectionCategory = _collectionCategoryFromMap(data);
       final collaborators = (data['collaborators'] as List?)
               ?.map((entry) => Map<String, dynamic>.from(entry as Map))
               .toList() ??
@@ -1125,6 +1150,7 @@ class FirestoreService {
       if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
       'collectionId': collectionId,
       'collectionTitle': collectionTitle,
+      'collectionCategory': collectionCategory,
       'role': normalizedRole,
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),

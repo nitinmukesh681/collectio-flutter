@@ -6,7 +6,7 @@ import '../models/collection_entity.dart';
 import '../theme/app_theme.dart';
 import '../utils/category_icons.dart';
 
-/// Profile grid card: full-bleed cover image with bottom gradient overlay.
+/// Profile grid card: full-bleed cover image with title overlay.
 class CollectionGridCard extends StatefulWidget {
   final CollectionEntity collection;
   final VoidCallback? onTap;
@@ -62,16 +62,9 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
     return Icons.public_rounded;
   }
 
-  /// Category accent on the dark image overlay — same hue as [AppColors.categoryLabelColor],
-  /// lifted slightly when the base color is too dark to read on the gradient.
-  Color _categoryLabelOnOverlay(String categoryName) {
-    final base = AppColors.categoryLabelColor(categoryName);
-    final hsl = HSLColor.fromColor(base);
-    if (hsl.lightness < 0.55) {
-      return hsl.withLightness(0.68).toColor();
-    }
-    return base;
-  }
+  static const List<Shadow> _coverTextShadow = [
+    Shadow(color: Color(0xB3000000), blurRadius: 12, offset: Offset(0, 1)),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -108,17 +101,17 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
                   return _fallbackCover(gradientColors);
                 },
               ),
-              DecoratedBox(
+              const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    stops: const [0.35, 0.65, 1.0],
                     colors: [
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.35),
-                      Colors.black.withValues(alpha: 0.78),
+                      Color(0x26000000),
+                      Color(0xCC000000),
                     ],
+                    stops: [0.35, 0.6, 1.0],
                   ),
                 ),
               ),
@@ -135,8 +128,9 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: _categoryLabelOnOverlay(collection.category.name),
+                        color: Colors.white,
                         letterSpacing: 0.8,
+                        shadows: _coverTextShadow,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -148,6 +142,7 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
                         color: Colors.white,
                         height: 1.12,
                         letterSpacing: -0.35,
+                        shadows: _coverTextShadow,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -161,6 +156,7 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                             color: Colors.white.withValues(alpha: 0.92),
+                            shadows: _coverTextShadow,
                           ),
                         ),
                         Padding(

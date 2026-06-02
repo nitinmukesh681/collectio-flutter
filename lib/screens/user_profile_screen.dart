@@ -8,7 +8,9 @@ import '../theme/app_theme.dart';
 import '../widgets/collection_grid_card.dart';
 import 'collection_detail_screen.dart';
 import '../widgets/profile_header_layout.dart';
+import 'edit_profile_screen.dart';
 import 'followers_following_screen.dart';
+import 'settings_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -205,11 +207,50 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return '$count';
   }
 
-  Widget? _buildFollowButton(bool isOwnProfile) {
-    if (isOwnProfile) return null;
+  Future<void> _navigateToEditProfile() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+    );
+    if (result == true && mounted) {
+      _setupRealtimeStreams();
+    }
+  }
 
-    return ProfileHeaderLayout.buildOutlinedActionButton(
-      label: _isFollowing ? 'Following' : 'Follow',
+  void _navigateToSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsScreen()),
+    );
+  }
+
+  Widget _buildTopBarActions({required bool isOwnProfile}) {
+    if (isOwnProfile) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(
+              Icons.edit_outlined,
+              color: AppColors.collectionDescription,
+            ),
+            tooltip: 'Edit profile',
+            onPressed: _navigateToEditProfile,
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.settings_outlined,
+              color: AppColors.collectionDescription,
+            ),
+            tooltip: 'Settings',
+            onPressed: _navigateToSettings,
+          ),
+        ],
+      );
+    }
+
+    return ProfileHeaderLayout.buildProfileFollowButton(
+      label: _isFollowing ? 'FOLLOWING' : 'FOLLOW',
       onPressed: _toggleFollow,
       isLoading: _isFollowLoading,
       filled: !_isFollowing,
@@ -220,68 +261,113 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.backgroundSurface,
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_user == null) {
       return Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
+        backgroundColor: AppColors.backgroundSurface,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Text('User not found', style: GoogleFonts.plusJakartaSans()),
+                ),
+              ),
+            ],
+          ),
         ),
-        body: Center(child: Text('User not found', style: GoogleFonts.plusJakartaSans())),
       );
     }
 
     final user = _user!;
     final isOwnProfile = widget.userId == widget.currentUserId;
-    final followButton = _buildFollowButton(isOwnProfile);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundSurface,
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: ColoredBox(
-              color: Colors.white,
-              child: SafeArea(
-                bottom: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: ProfileHeaderLayout(
-                        user: user,
-                        actionButton: followButton,
-                        statsRow: ProfileHeaderLayout.buildStatsRow(
-                          collectionsCount: _formatCount(_collections.length),
-                          followersCount: _formatCount(user.followers.length),
-                          followingCount: _formatCount(user.following.length),
-                          onFollowersTap: () => _navigateToFollowers(showFollowers: true),
-                          onFollowingTap: () => _navigateToFollowers(showFollowers: false),
+      body: RefreshIndicator(
+        onRefresh: () async => _setupRealtimeStreams(),
+        color: AppColors.primary,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(36),
+                    bottomRight: Radius.circular(36),
+                  ),
+                  boxShadow: AppColors.profileHeaderShadow,
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, right: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.arrow_back,
+                                  color: AppColors.textPrimary,
+                                ),
+                                onPressed: () => Navigator.pop(context),
+                              ),
+                              const Spacer(),
+                              if (!isOwnProfile)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: _buildTopBarActions(isOwnProfile: false),
+                                )
+                              else
+                                _buildTopBarActions(isOwnProfile: true),
+                            ],
+                          ),
                         ),
-                      ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                          child: ProfileHeaderLayout(
+                            user: user,
+                            emphasizeStats: true,
+                            statsRow: ProfileHeaderLayout.buildStatsRow(
+                              collectionsCount: _formatCount(_collections.length),
+                              followersCount: _formatCount(user.followers.length),
+                              followingCount: _formatCount(user.following.length),
+                              onFollowersTap: () => _navigateToFollowers(showFollowers: true),
+                              onFollowingTap: () => _navigateToFollowers(showFollowers: false),
+                              countFontSize: 24,
+                              labelFontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-          ..._buildCollectionsSlivers(),
-          const SliverToBoxAdapter(child: SizedBox(height: _bottomNavClearance)),
-        ],
+            ..._buildCollectionsSlivers(),
+            const SliverToBoxAdapter(child: SizedBox(height: _bottomNavClearance)),
+          ],
+        ),
       ),
     );
   }
@@ -313,7 +399,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     return [
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
         sliver: SliverGrid(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
