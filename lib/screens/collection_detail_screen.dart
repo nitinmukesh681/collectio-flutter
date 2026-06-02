@@ -2623,9 +2623,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
   static const double _itemTitleFontSize = 17;
   static const double _itemTitleLineHeight = _itemTitleFontSize * 1.25;
-  static const double _itemSingleLineTitleYOffset = -1.5;
+  static const double _itemRatingBadgeHeight = 26;
   static const double _itemMenuButtonReservedWidth = 24;
   static const double _itemMetaRowTopGap = 4;
+  static const double _itemMetaRowAfterDescriptionGap = 8;
   static const double _itemImageThumbSize = 100;
   static const double _itemImagesTopGap = 12;
   static const TextHeightBehavior _itemTitleTextHeightBehavior = TextHeightBehavior(
@@ -2707,6 +2708,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final canEdit = _isOwner || item.userId == widget.currentUserId;
     final showGetInfo = collection != null && _collectionHasMultipleContributors(collection);
     final hasImages = item.imageUrls.isNotEmpty;
+    final hasDescription =
+        item.description != null && item.description!.trim().isNotEmpty;
     final hasLocation = (item.googleMapsUrl ?? '').trim().isNotEmpty;
     final hasWebsite = (item.websiteUrl ?? '').trim().isNotEmpty;
 
@@ -2733,6 +2736,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
               final isSingleLineTitle =
                   _isSingleLineItemTitle(context, item.title, titleMaxWidth);
 
+              final titleRowHeight =
+                  item.rating > 0 ? _itemRatingBadgeHeight : _itemTitleLineHeight;
+
               Widget buildTitleRow() {
                 return Row(
                   crossAxisAlignment: isSingleLineTitle
@@ -2740,19 +2746,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       : CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Transform.translate(
-                        offset: isSingleLineTitle
-                            ? const Offset(0, _itemSingleLineTitleYOffset)
-                            : Offset.zero,
-                        child: Text(
-                          item.title,
-                          style: _itemTitleStyle,
-                          textHeightBehavior: _itemTitleTextHeightBehavior,
-                        ),
+                      child: Text(
+                        item.title,
+                        style: _itemTitleStyle,
+                        textHeightBehavior: _itemTitleTextHeightBehavior,
                       ),
                     ),
                     SizedBox(
-                      height: _itemTitleLineHeight,
+                      height: isSingleLineTitle ? titleRowHeight : _itemTitleLineHeight,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -2764,7 +2765,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                               fontSize: 12,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
-                                vertical: 2,
+                                vertical: 4,
                               ),
                               borderRadius: 6,
                               iconGap: 4,
@@ -2784,13 +2785,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 children: [
                   if (isSingleLineTitle)
                     SizedBox(
-                      height: _itemTitleLineHeight,
+                      height: titleRowHeight,
                       child: buildTitleRow(),
                     )
                   else
                     buildTitleRow(),
-                  if (item.description != null &&
-                      item.description!.isNotEmpty) ...[
+                  if (hasDescription) ...[
                     const SizedBox(height: _itemMetaRowTopGap),
                     Padding(
                       padding: EdgeInsets.only(
@@ -2846,7 +2846,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           ],
 
           if (hasWebsite || hasLocation) ...[
-            SizedBox(height: hasImages ? 10 : _itemMetaRowTopGap),
+            SizedBox(
+              height: hasImages
+                  ? 10
+                  : (hasDescription
+                      ? _itemMetaRowAfterDescriptionGap
+                      : _itemMetaRowTopGap),
+            ),
             Row(
               children: [
                 if (hasWebsite)
