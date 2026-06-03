@@ -7,11 +7,13 @@ class UsernameLowercaseMigration {
   UsernameLowercaseMigration._();
 
   static const _usersMigrationId = 'username_lowercase_v1';
+  static const _usernameLowerBackfillId = 'username_lower_backfill_v2';
   static const _denormalizedMigrationId = 'denormalized_username_lowercase_v1';
   static const _metaDocPath = 'app_settings/migrations';
 
   static Future<void> runIfNeeded(FirebaseFirestore firestore) async {
     await _migrateUsers(firestore);
+    await _backfillUsernameLower(firestore);
     await _migrateDenormalizedUsernames(firestore);
   }
 
@@ -42,6 +44,37 @@ class UsernameLowercaseMigration {
     );
     debugPrint(
       '[Migration] User username migration complete ($updatedCount updated)',
+    );
+  }
+
+  /// Backfill [usernameLower] for users created before that field existed.
+  static Future<void> _backfillUsernameLower(FirebaseFirestore firestore) async {
+    if (await _isComplete(firestore, _usernameLowerBackfillId)) return;
+
+    debugPrint('[Migration] Backfilling usernameLower on user documents...');
+    final updatedCount = await _paginateCollection(
+      firestore: firestore,
+      collectionPath: 'users',
+      buildUpdates: (data) {
+        final raw =
+            (data['username'] ?? data['userName'] ?? '').toString().trim();
+        if (raw.isEmpty) return null;
+
+        final normalized = UsernameUtils.normalize(raw);
+        final storedLower = (data['usernameLower'] as String?)?.trim();
+        if (storedLower == normalized) return null;
+
+        return {'usernameLower': normalized};
+      },
+    );
+
+    await _markComplete(
+      firestore,
+      _usernameLowerBackfillId,
+      updatedCount,
+    );
+    debugPrint(
+      '[Migration] usernameLower backfill complete ($updatedCount updated)',
     );
   }
 

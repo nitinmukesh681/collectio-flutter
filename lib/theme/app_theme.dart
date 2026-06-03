@@ -90,7 +90,7 @@ class AppColors {
   static const Map<String, List<Color>> categoryGradients = {
     'food': [Color(0xFF4338CA), Color(0xFF6366F1)],       // deep indigo
     'finance': [Color(0xFF0F172A), Color(0xFF1E293B)],     // navy
-    'wellness': [Color(0xFF818CF8), Color(0xFFA5B4FC)],    // light indigo
+    'fitness': [Color(0xFF818CF8), Color(0xFFA5B4FC)],    // light indigo
     'career': [Color(0xFF0F172A), Color(0xFF334155)],      // navy
     'home': [Color(0xFF4338CA), Color(0xFF6366F1)],        // indigo
     'travel': [Color(0xFF0F172A), Color(0xFF1E293B)],      // navy
@@ -98,12 +98,21 @@ class AppColors {
     'gaming': [Color(0xFF4338CA), Color(0xFF6366F1)],      // indigo
     'entertainment': [Color(0xFF0F172A), Color(0xFF334155)], // navy
     'shopping': [Color(0xFFB95F00), Color(0xFFD97706)],    // brown/amber
-    'style': [Color(0xFF818CF8), Color(0xFFA5B4FC)],       // light indigo
+    'fashion': [Color(0xFF818CF8), Color(0xFFA5B4FC)],       // light indigo
     'books': [Color(0xFFB95F00), Color(0xFFD97706)],       // brown/amber
-    'growth': [Color(0xFF818CF8), Color(0xFFA5B4FC)],      // light indigo
-    'projects': [Color(0xFFB95F00), Color(0xFFD97706)],    // brown/amber
+    'diy': [Color(0xFFB95F00), Color(0xFFD97706)],    // brown/amber
     'creativity': [Color(0xFF4338CA), Color(0xFF6366F1)],  // indigo
     'sports': [Color(0xFF0F172A), Color(0xFF334155)],      // navy
+    'beauty': [Color(0xFF818CF8), Color(0xFFA5B4FC)],
+    'learning': [Color(0xFF4338CA), Color(0xFF6366F1)],
+    'business': [Color(0xFF0F172A), Color(0xFF334155)],
+    'events': [Color(0xFFB95F00), Color(0xFFD97706)],
+    'pets': [Color(0xFF4338CA), Color(0xFF6366F1)],
+    'gifting': [Color(0xFF818CF8), Color(0xFFA5B4FC)],
+    'music': [Color(0xFF0F172A), Color(0xFF1E293B)],
+    'photography': [Color(0xFF4338CA), Color(0xFF6366F1)],
+    'spirituality': [Color(0xFF818CF8), Color(0xFFA5B4FC)],
+    'random': [Color(0xFF94A3B8), Color(0xFFCBD5E1)],
     'other': [Color(0xFF94A3B8), Color(0xFFCBD5E1)],       // neutral grey
   };
 
@@ -114,17 +123,26 @@ class AppColors {
     'tech': lightIndigo,
     'shopping': tertiary,
     'finance': secondary,
-    'wellness': lightIndigo,
+    'fitness': lightIndigo,
     'career': secondary,
     'home': primary,
     'gaming': primary,
     'entertainment': secondary,
     'books': tertiary,
-    'growth': lightIndigo,
-    'projects': tertiary,
+    'diy': tertiary,
     'creativity': primary,
     'sports': secondary,
-    'style': lightIndigo,
+    'fashion': lightIndigo,
+    'beauty': lightIndigo,
+    'learning': primary,
+    'business': secondary,
+    'events': tertiary,
+    'pets': primary,
+    'gifting': lightIndigo,
+    'music': secondary,
+    'photography': primary,
+    'spirituality': lightIndigo,
+    'random': textMuted,
     'other': textMuted,
   };
 
@@ -190,7 +208,13 @@ class AppTheme {
       popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusSmall)),
+        elevation: 12,
+        shadowColor: Color(0x47000000),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        menuPadding: const EdgeInsets.symmetric(vertical: 4),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,

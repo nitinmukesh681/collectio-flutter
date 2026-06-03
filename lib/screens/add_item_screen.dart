@@ -11,6 +11,10 @@ import '../models/place_prediction.dart';
 import '../services/firestore_service.dart';
 import '../services/places_service.dart';
 import '../theme/app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+const double _kImageThumbSize = 88;
+const int _maxItemImages = 10;
 
 class AddItemScreen extends StatefulWidget {
   final String collectionId;
@@ -42,12 +46,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   double _rating = 0;
   final TextEditingController _ratingController = TextEditingController();
-  List<File> _images = [];
-  List<String> _existingImageUrls = [];
+  final List<_ImageItem> _imageItems = [];
   bool _isLoading = false;
   String? _selectedGoogleMapsUrl; // Store the actual URL
 
   bool get _isEditing => widget.existingItem != null;
+  bool get _canAddMoreImages => _imageItems.length < _maxItemImages;
+  int get _remainingImageSlots => _maxItemImages - _imageItems.length;
 
   @override
   void initState() {
@@ -84,7 +89,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
       _websiteUrlController.text = item.websiteUrl ?? '';
       _rating = item.rating;
       _ratingController.text = _rating > 0 ? _rating.toStringAsFixed(1) : '';
-      _existingImageUrls = List.from(item.imageUrls);
+      _imageItems.addAll(
+        item.imageUrls.map((url) => _ImageItem.network(url)),
+      );
     }
   }
 
@@ -141,6 +148,223 @@ class _AddItemScreenState extends State<AddItemScreen> {
     );
   }
 
+  TextStyle get _labelStyle => GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.w700,
+        fontSize: 14,
+        color: AppColors.textPrimary,
+      );
+
+  TextStyle get _sectionTitleStyle => GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.w800,
+        fontSize: 16,
+        color: AppColors.textPrimary,
+      );
+
+  Widget _fieldLabel(String text, {bool optional = false}) {
+    return Text(
+      optional ? '$text (Optional)' : text,
+      style: _labelStyle,
+    );
+  }
+
+  Widget _formCard({required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildPhotosSection(List<_ImageItem> allImages) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Photos', style: _sectionTitleStyle),
+        const SizedBox(height: 4),
+        Text(
+          'Upload from your library or search Unsplash (up to $_maxItemImages)',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondary,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _canAddMoreImages ? _pickImages : null,
+                icon: const Icon(Icons.photo_library_outlined, size: 20),
+                label: const Text('Upload'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.divider),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  textStyle: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _canAddMoreImages
+                    ? () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => UnsplashSearchDialog(
+                            onImageSelected: (imageUrl, attribution) {
+                              if (!_canAddMoreImages) {
+                                SnackBarUtils.showErrorSnackBar(
+                                  context,
+                                  'You can add up to $_maxItemImages photos per item',
+                                );
+                                return;
+                              }
+                              setState(() {
+                                _imageItems.add(_ImageItem.network(imageUrl));
+                              });
+                            },
+                          ),
+                        );
+                      }
+                    : null,
+                icon: const Icon(Icons.image_search_outlined, size: 20),
+                label: const Text('Unsplash'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.divider),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  textStyle: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (allImages.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            height: _kImageThumbSize,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: allImages.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) => _buildImagePreviewTile(
+                item: allImages[index],
+                onRemove: () => _removeImage(index),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildImagePreviewTile({
+    required _ImageItem item,
+    required VoidCallback onRemove,
+  }) {
+    return SizedBox(
+      width: _kImageThumbSize,
+      height: _kImageThumbSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.divider),
+              boxShadow: AppColors.cardShadow,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: SizedBox(
+                width: _kImageThumbSize,
+                height: _kImageThumbSize,
+                child: item.isNetwork
+                    ? CachedNetworkImage(
+                        imageUrl: item.url ?? '',
+                        width: _kImageThumbSize,
+                        height: _kImageThumbSize,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => ColoredBox(
+                          color: AppColors.surfaceMuted,
+                          child: Center(
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => ColoredBox(
+                          color: AppColors.surfaceMuted,
+                          child: const Icon(
+                            Icons.broken_image_outlined,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      )
+                    : Image.file(
+                        item.file!,
+                        width: _kImageThumbSize,
+                        height: _kImageThumbSize,
+                        fit: BoxFit.cover,
+                      ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.55),
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onRemove,
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close_rounded, color: Colors.white, size: 14),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -152,23 +376,37 @@ class _AddItemScreenState extends State<AddItemScreen> {
   }
 
   Future<void> _pickImages() async {
+    if (!_canAddMoreImages) {
+      SnackBarUtils.showErrorSnackBar(
+        context,
+        'You can add up to $_maxItemImages photos per item',
+      );
+      return;
+    }
+
     final picker = ImagePicker();
     final pickedFiles = await picker.pickMultiImage();
-    if (pickedFiles.isNotEmpty) {
-      setState(() {
-        _images.addAll(pickedFiles.map((f) => File(f.path)));
-      });
+    if (pickedFiles.isEmpty || !mounted) return;
+
+    final remaining = _remainingImageSlots;
+    final filesToAdd = pickedFiles.take(remaining);
+
+    setState(() {
+      _imageItems.addAll(
+        filesToAdd.map((f) => _ImageItem.file(File(f.path))),
+      );
+    });
+
+    if (pickedFiles.length > remaining) {
+      SnackBarUtils.showErrorSnackBar(
+        context,
+        'Only $remaining more photo${remaining == 1 ? '' : 's'} could be added (max $_maxItemImages).',
+      );
     }
   }
 
   void _removeImage(int index) {
-    setState(() {
-      if (index < _existingImageUrls.length) {
-        _existingImageUrls.removeAt(index);
-      } else {
-        _images.removeAt(index - _existingImageUrls.length);
-      }
-    });
+    setState(() => _imageItems.removeAt(index));
   }
 
   Future<void> _save() async {
@@ -177,15 +415,25 @@ class _AddItemScreenState extends State<AddItemScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Upload new images
-      List<String> imageUrls = List.from(_existingImageUrls);
-      for (final image in _images) {
-        final url = await _firestoreService.uploadImage(
-          image,
-          'items/${widget.collectionId}/${DateTime.now().millisecondsSinceEpoch}.jpg',
-        );
-        if (url != null) {
-          imageUrls.add(url);
+      // Preserve add order: upload local files inline, keep existing URLs as-is.
+      final imageUrls = <String>[];
+      final uploadBaseMs = DateTime.now().millisecondsSinceEpoch;
+      var uploadIndex = 0;
+      for (final image in _imageItems) {
+        if (image.isNetwork) {
+          final url = image.url?.trim();
+          if (url != null && url.isNotEmpty) {
+            imageUrls.add(url);
+          }
+        } else if (image.file != null) {
+          final url = await _firestoreService.uploadImage(
+            image.file!,
+            'items/${widget.collectionId}/${uploadBaseMs}_$uploadIndex.jpg',
+          );
+          uploadIndex++;
+          if (url != null) {
+            imageUrls.add(url);
+          }
         }
       }
 
@@ -265,304 +513,131 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allImages = [
-      ..._existingImageUrls.map((url) => _ImageItem.network(url)),
-      ..._images.map((file) => _ImageItem.file(file)),
-    ];
-
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
+        backgroundColor: AppColors.backgroundSurface,
+        scrolledUnderElevation: 0,
         title: Text(
           _isEditing ? 'Edit Item' : 'Add Item',
-          style: const TextStyle(fontWeight: FontWeight.w800),
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: AppColors.textPrimary,
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _save,
-            child: _isLoading
-                ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const SizedBox(
-                      width: 16,
-                      height: 16,
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton(
+              onPressed: _isLoading ? null : _save,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator.adaptive(
                         strokeWidth: 2.4,
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryPurple),
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                         strokeCap: StrokeCap.round,
                       ),
+                    )
+                  : Text(
+                      _isEditing ? 'Save' : 'Add',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
                     ),
-                  )
-                : Text(
-                    _isEditing ? 'Save' : 'Add',
-                    style: const TextStyle(
-                      color: AppColors.primaryPurple,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+            ),
           ),
         ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
-            // Images
-            const Text(
-              'Images',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 120,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  // Add image button
-                  GestureDetector(
-                    onTap: _pickImages,
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryPurple.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.add_photo_alternate,
-                            size: 32,
-                            color: AppColors.primaryPurple.withOpacity(0.75),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Add',
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+            _buildPhotosSection(_imageItems),
+            const SizedBox(height: 20),
+            _formCard(
+              children: [
+                Text('Details', style: _sectionTitleStyle),
+                const SizedBox(height: 18),
+                _fieldLabel('Title'),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _titleController,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    hintText: 'Name of the item',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a title';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 18),
+                _fieldLabel('Rating'),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _ratingController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          hintText: '0–10',
+                          prefixIcon: Icon(Icons.star_outline_rounded, size: 22),
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]*$')),
                         ],
+                        onChanged: _setRatingFromText,
+                        onEditingComplete: () {
+                          _setRatingFromText(_ratingController.text);
+                          _ratingController.text = _rating > 0
+                              ? ((_rating % 1 == 0)
+                                  ? _rating.toStringAsFixed(0)
+                                  : _rating.toStringAsFixed(1))
+                              : '';
+                          FocusScope.of(context).unfocus();
+                        },
                       ),
                     ),
+                    const SizedBox(width: 12),
+                    _buildRatingBadge(_rating),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _fieldLabel('Description', optional: true),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(
+                    hintText: 'Brief description of the item',
+                    alignLabelWithHint: true,
                   ),
-                  // Unsplash button
-                  GestureDetector(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => UnsplashSearchDialog(
-                          onImageSelected: (imageUrl, attribution) {
-                            setState(() {
-                              _existingImageUrls.add(imageUrl);
-                            });
-                          },
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceMuted,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.search,
-                            size: 32,
-                            color: Colors.black.withOpacity(0.45),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Unsplash',
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Existing images
-                  ...allImages.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    return Stack(
-                      children: [
-                        Container(
-                          width: 100,
-                          height: 100,
-                          margin: const EdgeInsets.only(right: 12),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            color: AppColors.surfaceMuted,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: item.isNetwork
-                                ? CachedNetworkImage(
-                                    imageUrl: item.url ?? '',
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) => Container(
-                                      color: AppColors.surfaceMuted,
-                                      child: const Center(
-                                        child: SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        ),
-                                      ),
-                                    ),
-                                    errorWidget: (context, url, error) => Container(
-                                      color: AppColors.surfaceMuted,
-                                      alignment: Alignment.center,
-                                      child: const Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
-                                    ),
-                                  )
-                                : Image.file(
-                                    item.file!,
-                                    fit: BoxFit.cover,
-                                  ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 4,
-                          right: 16,
-                          child: GestureDetector(
-                            onTap: () => _removeImage(index),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.close, color: Colors.white, size: 16),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
-                ],
-              ),
+                  maxLines: 4,
+                  minLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.divider),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 14,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Title',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(
-                      hintText: 'Name of the item',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter a title';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Rating',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _ratingController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: InputDecoration(
-                            hintText: '0-10',
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]*$')),
-                          ],
-                          onChanged: _setRatingFromText,
-                          onEditingComplete: () {
-                            _setRatingFromText(_ratingController.text);
-                            _ratingController.text = _rating > 0
-                                ? ((_rating % 1 == 0)
-                                    ? _rating.toStringAsFixed(0)
-                                    : _rating.toStringAsFixed(1))
-                                : '';
-                            FocusScope.of(context).unfocus();
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      _buildRatingBadge(_rating),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Description (Optional)',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      hintText: 'Brief description of the item',
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Links',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 12),
-
-                  const Text(
-                    'Location (Optional)',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  RawAutocomplete<PlacePrediction>(
+            const SizedBox(height: 16),
+            _formCard(
+              children: [
+                Text('Links', style: _sectionTitleStyle),
+                const SizedBox(height: 18),
+                _fieldLabel('Location', optional: true),
+                const SizedBox(height: 8),
+                RawAutocomplete<PlacePrediction>(
                     textEditingController: _mapsUrlController,
                     focusNode: FocusNode(),
                     optionsBuilder: (TextEditingValue textEditingValue) async {
@@ -594,12 +669,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                         decoration: InputDecoration(
                           hintText: 'Search for a place or paste URL',
                           prefixIcon: const Icon(Icons.place_outlined),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
                           suffixIcon: textEditingController.text.isNotEmpty
                               ? IconButton(
-                                  icon: const Icon(Icons.clear),
+                                  icon: const Icon(Icons.clear_rounded),
                                   onPressed: () {
                                     textEditingController.clear();
                                     _selectedGoogleMapsUrl = null;
@@ -652,24 +724,19 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Website (Optional)',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                const SizedBox(height: 18),
+                _fieldLabel('Website', optional: true),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _websiteUrlController,
+                  decoration: const InputDecoration(
+                    hintText: 'https://...',
+                    prefixIcon: Icon(Icons.link_rounded),
                   ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _websiteUrlController,
-                    decoration: const InputDecoration(
-                      hintText: 'https://...',
-                      prefixIcon: Icon(Icons.link),
-                    ),
-                    keyboardType: TextInputType.url,
-                  ),
-                ],
-              ),
+                  keyboardType: TextInputType.url,
+                ),
+              ],
             ),
-            const SizedBox(height: 32),
           ],
         ),
       ),

@@ -88,15 +88,19 @@ class CollectioApp extends StatelessWidget {
         themeMode: ThemeMode.light,
         builder: (context, child) {
           final mq = MediaQuery.of(context);
-          return MediaQuery(
-            data: mq.copyWith(
-              textScaler: const TextScaler.linear(0.9),
-              platformBrightness: Brightness.light,
+          return GestureDetector(
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            behavior: HitTestBehavior.translucent,
+            child: MediaQuery(
+              data: mq.copyWith(
+                textScaler: const TextScaler.linear(0.9),
+                platformBrightness: Brightness.light,
+              ),
+              child: child ??
+                  const SizedBox.expand(
+                    child: ColoredBox(color: AppColors.backgroundSurface),
+                  ),
             ),
-            child: child ??
-                const SizedBox.expand(
-                  child: ColoredBox(color: AppColors.backgroundSurface),
-                ),
           );
         },
         home: const AuthGate(),

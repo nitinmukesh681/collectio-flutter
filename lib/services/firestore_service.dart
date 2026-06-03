@@ -73,9 +73,13 @@ class FirestoreService {
     String? userAvatarUrl,
     required String text,
     String? parentCommentId,
+    List<CommentMention> confirmedMentions = const [],
   }) async {
     final normalizedParentId = _normalizeCommentParentId(parentCommentId);
-    final mentions = await _resolveCommentMentions(text);
+    final mentions = confirmedMentions
+        .where((mention) => mention.userId.isNotEmpty && mention.username.isNotEmpty)
+        .where((mention) => text.contains('@${mention.username}'))
+        .toList();
 
     final commentData = <String, dynamic>{
       'collectionId': collectionId,
@@ -570,6 +574,52 @@ class FirestoreService {
     });
   }
 
+  /// Finds a user document id whose username matches [lower] (already normalized).
+  Future<String?> findUserIdByNormalizedUsername(String lower) async {
+    if (lower.isEmpty) return null;
+
+    try {
+      final byLower = await _usersRef
+          .where('usernameLower', isEqualTo: lower)
+          .limit(1)
+          .get();
+      if (byLower.docs.isNotEmpty) return byLower.docs.first.id;
+    } catch (e) {
+      debugPrint('findUserIdByNormalizedUsername usernameLower failed: $e');
+    }
+
+    for (final field in ['username', 'userName']) {
+      try {
+        final snapshot = await _usersRef.where(field, isEqualTo: lower).limit(1).get();
+        if (snapshot.docs.isNotEmpty) return snapshot.docs.first.id;
+      } catch (e) {
+        debugPrint('findUserIdByNormalizedUsername $field failed: $e');
+      }
+    }
+
+    DocumentSnapshot? lastDoc;
+    while (true) {
+      var query = _usersRef.orderBy(FieldPath.documentId).limit(200);
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      final snapshot = await query.get();
+      if (snapshot.docs.isEmpty) return null;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        if (data is! Map<String, dynamic>) continue;
+        if (_normalizedUsernameFromMap(data) == lower) {
+          return doc.id;
+        }
+      }
+
+      if (snapshot.docs.length < 200) return null;
+      lastDoc = snapshot.docs.last;
+    }
+  }
+
   /// Returns true when [username] is not used by another user.
   Future<bool> isUsernameAvailable(
     String username, {
@@ -578,27 +628,9 @@ class FirestoreService {
     final lower = UsernameUtils.normalize(username);
     if (lower.isEmpty) return false;
 
-    try {
-      final snapshot = await _usersRef
-          .where('usernameLower', isEqualTo: lower)
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isEmpty) return true;
-      return snapshot.docs.first.id == excludeUserId;
-    } catch (e) {
-      debugPrint('isUsernameAvailable query failed: $e');
-    }
-
-    final fallbackSnapshot = await _usersRef.limit(200).get();
-    for (final doc in fallbackSnapshot.docs) {
-      if (doc.id == excludeUserId) continue;
-      final data = doc.data() as Map<String, dynamic>;
-      final storedLower = (data['usernameLower'] as String?) ??
-          (data['username'] as String?)?.toLowerCase();
-      if (storedLower == lower) return false;
-    }
-    return true;
+    final existingId = await findUserIdByNormalizedUsername(lower);
+    if (existingId == null) return true;
+    return existingId == excludeUserId;
   }
 
   /// Get user email by username
@@ -606,28 +638,12 @@ class FirestoreService {
     final lower = UsernameUtils.normalize(username);
     if (lower.isEmpty) return null;
 
-    try {
-      final querySnapshot = await _usersRef
-          .where('usernameLower', isEqualTo: lower)
-          .limit(1)
-          .get();
+    final userId = await findUserIdByNormalizedUsername(lower);
+    if (userId == null) return null;
 
-      if (querySnapshot.docs.isNotEmpty) {
-        return (querySnapshot.docs.first.data() as Map<String, dynamic>)['email']
-            as String?;
-      }
-    } catch (e) {
-      debugPrint('getUserEmailByUsername usernameLower query failed: $e');
-    }
-
-    final fallbackSnapshot = await _usersRef
-        .where('username', isEqualTo: lower)
-        .limit(1)
-        .get();
-
-    if (fallbackSnapshot.docs.isEmpty) return null;
-    return (fallbackSnapshot.docs.first.data() as Map<String, dynamic>)['email']
-        as String?;
+    final doc = await _usersRef.doc(userId).get();
+    if (!doc.exists) return null;
+    return (doc.data() as Map<String, dynamic>?)?['email'] as String?;
   }
 
   /// Follow a user
@@ -843,18 +859,37 @@ class FirestoreService {
 
   /// Get saved collections for a user (Stream)
   Stream<List<CollectionEntity>> getSavedCollectionsStream(String userId) {
-    return getUserStream(userId).asyncMap((user) async {
+    return getUserStream(userId).asyncExpand((user) {
       if (user == null || user.savedCollections.isEmpty) {
-        return <CollectionEntity>[];
+        return Stream.value(<CollectionEntity>[]);
       }
 
-      final collections = await _fetchCollectionsByIds(user.savedCollections);
-      _sortSavedCollections(
-        collections,
-        userId,
-        userSavedAt: user.savedCollectionsAt,
-      );
-      return collections;
+      final ids = user.savedCollections.where((id) => id.trim().isNotEmpty).toList();
+      if (ids.isEmpty) return Stream.value(<CollectionEntity>[]);
+
+      final streams = ids.map((id) {
+        return _collectionsRef.doc(id).snapshots().map((doc) {
+          if (!doc.exists) return null;
+          return CollectionEntity.fromMap(
+            doc.data() as Map<String, dynamic>,
+            doc.id,
+          );
+        });
+      }).toList();
+
+      return Rx.combineLatestList<CollectionEntity?>(streams).map((collections) {
+        final byId = <String, CollectionEntity>{
+          for (final c in collections)
+            if (c != null) c.id: c,
+        };
+        final ordered = ids.map((id) => byId[id]).whereType<CollectionEntity>().toList();
+        _sortSavedCollections(
+          ordered,
+          userId,
+          userSavedAt: user.savedCollectionsAt,
+        );
+        return ordered;
+      });
     });
   }
 
@@ -1225,132 +1260,7 @@ class FirestoreService {
 
   // ==================== COLLABORATOR OPERATIONS ====================
 
-  List<Map<String, dynamic>> _parseCollaboratorEntries(dynamic raw) {
-    return (raw is List)
-        ? raw
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList()
-        : <Map<String, dynamic>>[];
-  }
-
-  bool _collaboratorListHasUser(
-    List<Map<String, dynamic>> entries,
-    String userId,
-  ) {
-    return entries.any((e) => e['userId'] == userId);
-  }
-
-  Map<String, dynamic> _collaboratorUpdatesForActiveUser({
-    required Map<String, dynamic> data,
-    required String userId,
-    required String username,
-    required String normalizedRole,
-  }) {
-    final collaborators = _parseCollaboratorEntries(data['collaborators']);
-    if (!_collaboratorListHasUser(collaborators, userId)) {
-      collaborators.add({
-        'userId': userId,
-        'username': UsernameUtils.normalize(username),
-        'role': normalizedRole,
-        'addedAt': DateTime.now().millisecondsSinceEpoch,
-      });
-    }
-
-    final requests = _parseCollaboratorEntries(data['collaboratorRequests'])
-      ..removeWhere((c) => c['userId'] == userId);
-    final invites = _parseCollaboratorEntries(data['collaboratorInvites'])
-      ..removeWhere((c) => c['userId'] == userId);
-
-    final updates = <String, dynamic>{
-      'collaborators': collaborators,
-      'collaboratorRequests': requests,
-      'collaboratorInvites': invites,
-    };
-
-    if (normalizedRole == 'EDITOR') {
-      updates['editors'] = FieldValue.arrayUnion([userId]);
-      updates['viewers'] = FieldValue.arrayRemove([userId]);
-    } else {
-      updates['viewers'] = FieldValue.arrayUnion([userId]);
-      updates['editors'] = FieldValue.arrayRemove([userId]);
-    }
-
-    return updates;
-  }
-
-  /// User requests to collaborate on a collection (owner must accept or invite).
-  Future<void> requestCollaboratorAccess({
-    required String collectionId,
-    required String userId,
-    required String username,
-  }) async {
-    final collectionRef = _collectionsRef.doc(collectionId);
-    var ownerId = '';
-    var collectionTitle = '';
-    var collectionCategory = CategoryType.other.name;
-
-    await _firestore.runTransaction((tx) async {
-      final snap = await tx.get(collectionRef);
-      if (!snap.exists) throw Exception('Collection not found');
-
-      final data = snap.data() as Map<String, dynamic>;
-      ownerId = data['userId'] as String? ?? '';
-      collectionTitle = data['title'] as String? ?? '';
-      collectionCategory = _collectionCategoryFromMap(data);
-
-      if (ownerId == userId) {
-        throw Exception('You already own this collection');
-      }
-
-      final editors = List<String>.from(data['editors'] ?? []);
-      final viewers = List<String>.from(data['viewers'] ?? []);
-      if (editors.contains(userId) || viewers.contains(userId)) {
-        throw Exception('You are already a collaborator');
-      }
-
-      final collaborators = _parseCollaboratorEntries(data['collaborators']);
-      if (_collaboratorListHasUser(collaborators, userId)) {
-        throw Exception('You are already a collaborator');
-      }
-
-      final requests = _parseCollaboratorEntries(data['collaboratorRequests']);
-      if (_collaboratorListHasUser(requests, userId)) {
-        return;
-      }
-
-      final invites = _parseCollaboratorEntries(data['collaboratorInvites']);
-      if (_collaboratorListHasUser(invites, userId)) {
-        throw Exception('You already have a pending invite');
-      }
-
-      requests.add({
-        'userId': userId,
-        'username': UsernameUtils.normalize(username),
-        'requestedAt': DateTime.now().millisecondsSinceEpoch,
-      });
-
-      tx.update(collectionRef, {'collaboratorRequests': requests});
-    });
-
-    if (ownerId.isEmpty || ownerId == userId) return;
-
-    final fromUserAvatarUrl = await _getUserAvatarUrl(userId);
-    await _firestore.collection('notifications').add({
-      'type': 'COLLABORATION_REQUEST',
-      'toUserId': ownerId,
-      'fromUserId': userId,
-      'fromUsername': UsernameUtils.normalize(username),
-      if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
-      'collectionId': collectionId,
-      'collectionTitle': collectionTitle,
-      'collectionCategory': collectionCategory,
-      'isRead': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  /// Owner invites a user, or adds them immediately if they already requested.
+  /// Add a collaborator to a collection
   Future<void> addCollaborator({
     required String collectionId,
     required String userId,
@@ -1363,7 +1273,6 @@ class FirestoreService {
     final collectionRef = _collectionsRef.doc(collectionId);
     final normalizedRole = role.toUpperCase();
     var collectionCategory = CategoryType.other.name;
-    var addedDirectly = false;
 
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(collectionRef);
@@ -1373,63 +1282,37 @@ class FirestoreService {
 
       final data = snap.data() as Map<String, dynamic>;
       collectionCategory = _collectionCategoryFromMap(data);
+      final collaborators = (data['collaborators'] as List?)
+              ?.map((entry) => Map<String, dynamic>.from(entry as Map))
+              .toList() ??
+          <Map<String, dynamic>>[];
 
-      final collaborators = _parseCollaboratorEntries(data['collaborators']);
-      if (_collaboratorListHasUser(collaborators, userId)) {
+      if (collaborators.any((c) => c['userId'] == userId)) {
         return;
       }
 
-      final requests = _parseCollaboratorEntries(data['collaboratorRequests']);
-      final hadRequest = _collaboratorListHasUser(requests, userId);
-
-      if (hadRequest) {
-        addedDirectly = true;
-        tx.update(
-          collectionRef,
-          _collaboratorUpdatesForActiveUser(
-            data: data,
-            userId: userId,
-            username: username,
-            normalizedRole: normalizedRole,
-          ),
-        );
-        return;
-      }
-
-      final invites = _parseCollaboratorEntries(data['collaboratorInvites']);
-      if (_collaboratorListHasUser(invites, userId)) {
-        return;
-      }
-
-      invites.add({
+      collaborators.add({
         'userId': userId,
         'username': UsernameUtils.normalize(username),
         'role': normalizedRole,
-        'invitedAt': DateTime.now().millisecondsSinceEpoch,
-        'invitedBy': currentUserId,
+        'addedAt': DateTime.now().millisecondsSinceEpoch,
       });
 
-      tx.update(collectionRef, {'collaboratorInvites': invites});
+      final updates = <String, dynamic>{
+        'collaborators': collaborators,
+      };
+
+      if (normalizedRole == 'EDITOR') {
+        updates['editors'] = FieldValue.arrayUnion([userId]);
+      } else {
+        updates['viewers'] = FieldValue.arrayUnion([userId]);
+      }
+
+      tx.update(collectionRef, updates);
     });
 
+    // Create notification for the invited user
     final fromUserAvatarUrl = await _getUserAvatarUrl(currentUserId);
-    if (addedDirectly) {
-      await _firestore.collection('notifications').add({
-        'type': 'COLLABORATION_ACCEPTED',
-        'toUserId': userId,
-        'fromUserId': currentUserId,
-        'fromUsername': UsernameUtils.normalize(currentUsername),
-        if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
-        'collectionId': collectionId,
-        'collectionTitle': collectionTitle,
-        'collectionCategory': collectionCategory,
-        'role': normalizedRole,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      return;
-    }
-
     await _firestore.collection('notifications').add({
       'type': 'COLLABORATION_INVITE',
       'toUserId': userId,
@@ -1445,137 +1328,23 @@ class FirestoreService {
     });
   }
 
-  /// Owner accepts a user's collaboration request.
-  Future<void> acceptCollaboratorRequest({
-    required String collectionId,
-    required String requesterId,
-    required String requesterUsername,
-    required String role,
-    required String ownerId,
-    required String ownerUsername,
-  }) async {
-    await addCollaborator(
-      collectionId: collectionId,
-      userId: requesterId,
-      username: requesterUsername,
-      role: role,
-      currentUserId: ownerId,
-      currentUsername: ownerUsername,
-      collectionTitle: (await getCollection(collectionId))?.title ?? '',
-    );
-  }
-
-  /// Owner declines a collaboration request.
-  Future<void> declineCollaboratorRequest({
-    required String collectionId,
-    required String requesterId,
-  }) async {
-    final collectionRef = _collectionsRef.doc(collectionId);
-    await _firestore.runTransaction((tx) async {
-      final snap = await tx.get(collectionRef);
-      if (!snap.exists) return;
-
-      final data = snap.data() as Map<String, dynamic>;
-      final requests = _parseCollaboratorEntries(data['collaboratorRequests'])
-        ..removeWhere((c) => c['userId'] == requesterId);
-      tx.update(collectionRef, {'collaboratorRequests': requests});
-    });
-  }
-
-  /// Invitee accepts a pending collaboration invite.
-  Future<void> acceptCollaboratorInvite({
-    required String collectionId,
-    required String userId,
-    required String username,
-  }) async {
-    final collectionRef = _collectionsRef.doc(collectionId);
-
-    await _firestore.runTransaction((tx) async {
-      final snap = await tx.get(collectionRef);
-      if (!snap.exists) throw Exception('Collection not found');
-
-      final data = snap.data() as Map<String, dynamic>;
-      final invites = _parseCollaboratorEntries(data['collaboratorInvites']);
-      Map<String, dynamic>? invite;
-      for (final entry in invites) {
-        if (entry['userId'] == userId) {
-          invite = entry;
-          break;
-        }
-      }
-      if (invite == null) {
-        throw Exception('No pending invite found');
-      }
-
-      final role = (invite['role'] as String? ?? 'EDITOR').toUpperCase();
-      tx.update(
-        collectionRef,
-        _collaboratorUpdatesForActiveUser(
-          data: data,
-          userId: userId,
-          username: username,
-          normalizedRole: role,
-        ),
-      );
-    });
-  }
-
-  /// Invitee declines a pending collaboration invite.
-  Future<void> declineCollaboratorInvite({
-    required String collectionId,
-    required String userId,
-  }) async {
-    final collectionRef = _collectionsRef.doc(collectionId);
-    await _firestore.runTransaction((tx) async {
-      final snap = await tx.get(collectionRef);
-      if (!snap.exists) return;
-
-      final data = snap.data() as Map<String, dynamic>;
-      final invites = _parseCollaboratorEntries(data['collaboratorInvites'])
-        ..removeWhere((c) => c['userId'] == userId);
-      tx.update(collectionRef, {'collaboratorInvites': invites});
-    });
-  }
-
-  /// Owner cancels a pending invite they sent.
-  Future<void> cancelCollaboratorInvite({
-    required String collectionId,
-    required String userId,
-  }) async {
-    await declineCollaboratorInvite(collectionId: collectionId, userId: userId);
-  }
-
-  /// Requester withdraws their collaboration request.
-  Future<void> cancelCollaboratorRequest({
-    required String collectionId,
-    required String userId,
-  }) async {
-    await declineCollaboratorRequest(
-      collectionId: collectionId,
-      requesterId: userId,
-    );
-  }
-
   /// Remove a collaborator from a collection
   Future<void> removeCollaborator({
     required String collectionId,
     required String userId,
   }) async {
+    // Get current collaborators
     final doc = await _collectionsRef.doc(collectionId).get();
     if (!doc.exists) return;
 
     final data = doc.data() as Map<String, dynamic>;
-    final collaborators = _parseCollaboratorEntries(data['collaborators'])
-      ..removeWhere((c) => c['userId'] == userId);
-    final requests = _parseCollaboratorEntries(data['collaboratorRequests'])
-      ..removeWhere((c) => c['userId'] == userId);
-    final invites = _parseCollaboratorEntries(data['collaboratorInvites'])
-      ..removeWhere((c) => c['userId'] == userId);
-
+    final collaborators = List<Map<String, dynamic>>.from(data['collaborators'] ?? []);
+    
+    // Remove the collaborator
+    collaborators.removeWhere((c) => c['userId'] == userId);
+    
     await _collectionsRef.doc(collectionId).update({
       'collaborators': collaborators,
-      'collaboratorRequests': requests,
-      'collaboratorInvites': invites,
       'editors': FieldValue.arrayRemove([userId]),
       'viewers': FieldValue.arrayRemove([userId]),
     });
@@ -2319,34 +2088,63 @@ class FirestoreService {
   }
 
   Future<List<CollectionEntity>> getPublicCollectionsSince({required DateTime since, int limit = 50}) async {
-    Query query = _collectionsRef.where('isPublic', isEqualTo: true);
+    final sinceMs = since.millisecondsSinceEpoch;
+    final byId = <String, CollectionEntity>{};
+    final baseQuery = _collectionsRef.where('isPublic', isEqualTo: true);
 
-    try {
-      final snapshot = await query
-          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-          .orderBy('createdAt', descending: true)
-          .limit(limit)
-          .get();
-
-      return snapshot.docs
-          .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-          .toList();
-    } catch (e) {
-      debugPrint('getPublicCollectionsSince: Timestamp createdAt query failed: $e');
+    Future<void> mergeQueryResults(Query query, String label) async {
+      try {
+        final snapshot = await query.limit(limit).get();
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          if (data is! Map<String, dynamic>) continue;
+          byId[doc.id] = CollectionEntity.fromMap(data, doc.id);
+        }
+      } catch (e) {
+        debugPrint('getPublicCollectionsSince: $label query failed: $e');
+      }
     }
 
+    // Some docs store createdAt as Timestamp, others as int millis — query both.
+    await mergeQueryResults(
+      baseQuery
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+          .orderBy('createdAt', descending: true),
+      'Timestamp createdAt',
+    );
+    await mergeQueryResults(
+      baseQuery
+          .where('createdAt', isGreaterThanOrEqualTo: sinceMs)
+          .orderBy('createdAt', descending: true),
+      'int createdAt',
+    );
+
+    if (byId.isNotEmpty) {
+      final merged = byId.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return merged.take(limit).toList();
+    }
+
+    // Last resort: fetch recent public collections and filter client-side.
     try {
-      final snapshot = await query
-          .where('createdAt', isGreaterThanOrEqualTo: since.millisecondsSinceEpoch)
+      final snapshot = await baseQuery
           .orderBy('createdAt', descending: true)
-          .limit(limit)
+          .limit(limit * 4)
           .get();
 
-      return snapshot.docs
-          .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-          .toList();
+      final filtered = <CollectionEntity>[];
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        if (data is! Map<String, dynamic>) continue;
+        final collection = CollectionEntity.fromMap(data, doc.id);
+        if (collection.createdAt >= sinceMs) {
+          filtered.add(collection);
+        }
+        if (filtered.length >= limit) break;
+      }
+      return filtered;
     } catch (e) {
-      debugPrint('getPublicCollectionsSince: int createdAt query failed: $e');
+      debugPrint('getPublicCollectionsSince: client-side fallback failed: $e');
       rethrow;
     }
   }
@@ -2398,28 +2196,29 @@ class FirestoreService {
         }
       }
 
-      // 2. Chunk processing (Firestore limit of 10 for IN queries)
+      // 2. Fetch all public collections per followed user so older collections
+      // still appear when someone newly follows an existing creator.
       List<CollectionEntity> allCollections = [];
       const int batchSize = 10;
-      
-      for (int i = 0; i < following.length; i += batchSize) {
-        final end = (i + batchSize < following.length) ? i + batchSize : following.length;
-        final chunk = following.sublist(i, end);
-        
-        if (chunk.isEmpty) continue;
 
-        final snapshot = await _collectionsRef
-            .where('userId', whereIn: chunk)
-            .where('isPublic', isEqualTo: true)
-            .orderBy('createdAt', descending: true)
-            .limit(10) // Limit per chunk to avoid fetching too many
-            .get();
-            
-        final chunkCollections = snapshot.docs.map((doc) => 
-          CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id)
-        ).toList();
-        
-        allCollections.addAll(chunkCollections);
+      final publicSnapshots = await Future.wait(
+        following.map(
+          (followedUserId) => _collectionsRef
+              .where('userId', isEqualTo: followedUserId)
+              .where('isPublic', isEqualTo: true)
+              .get(),
+        ),
+      );
+
+      for (final snapshot in publicSnapshots) {
+        allCollections.addAll(
+          snapshot.docs.map(
+            (doc) => CollectionEntity.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            ),
+          ),
+        );
       }
 
       // 2b. Also include FOLLOWERS-visibility collections for accepted followers
@@ -2443,7 +2242,7 @@ class FirestoreService {
       }
       
       // 3. Sort merged results in memory
-      allCollections.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _sortCollectionsByContentActivity(allCollections);
       
       return allCollections;
     } catch (e) {
@@ -2457,32 +2256,35 @@ class FirestoreService {
   Stream<List<CollectionEntity>> getFollowingCollectionsStream(String userId) {
     return getUserStream(userId).asyncExpand((user) {
       if (user == null || user.following.isEmpty) {
-        return Stream.value([]);
+        return Stream.value(<CollectionEntity>[]);
       }
-      
-      final following = user.following;
-      if (following.isEmpty) return Stream.value([]);
 
-      try {
-        // Use snapshots() for real-time updates instead of get()
+      final following =
+          user.following.where((id) => id.trim().isNotEmpty).toList();
+      if (following.isEmpty) return Stream.value(<CollectionEntity>[]);
+
+      final streams = following.map((followedUserId) {
         return _collectionsRef
-            .where('userId', whereIn: following.take(10))
+            .where('userId', isEqualTo: followedUserId)
             .where('isPublic', isEqualTo: true)
-            .orderBy('createdAt', descending: true)
-            .limit(50)
             .snapshots()
-            .map((snapshot) {
-              final collections = snapshot.docs
-                  .map((doc) => CollectionEntity.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-                  .toList();
-              
-              collections.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-              return collections;
-            });
-      } catch (e) {
-        debugPrint('Error fetching following collections: $e');
-        return Stream.value([]);
-      }
+            .map((snapshot) => snapshot.docs
+                .map((doc) => CollectionEntity.fromMap(
+                    doc.data() as Map<String, dynamic>, doc.id))
+                .toList());
+      }).toList();
+
+      return Rx.combineLatestList<List<CollectionEntity>>(streams).map((batches) {
+        final byId = <String, CollectionEntity>{};
+        for (final batch in batches) {
+          for (final collection in batch) {
+            byId[collection.id] = collection;
+          }
+        }
+        final merged = byId.values.toList();
+        _sortCollectionsByContentActivity(merged);
+        return merged;
+      });
     });
   }
 
@@ -2798,6 +2600,28 @@ class Rx {
 
       if (hasA && hasB) {
         yield combiner(lastA!, lastB!);
+      }
+    }
+  }
+
+  static Stream<List<T>> combineLatestList<T>(List<Stream<T>> streams) async* {
+    if (streams.isEmpty) {
+      yield <T>[];
+      return;
+    }
+
+    final values = List<T?>.filled(streams.length, null);
+    final hasValue = List<bool>.filled(streams.length, false);
+
+    await for (final event in StreamGroup.merge(
+      streams.asMap().entries.map(
+        (entry) => entry.value.map((value) => _CombinedValue(entry.key, value)),
+      ),
+    )) {
+      values[event.index] = event.value as T;
+      hasValue[event.index] = true;
+      if (hasValue.every((ready) => ready)) {
+        yield values.cast<T>().toList();
       }
     }
   }

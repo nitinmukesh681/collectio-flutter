@@ -220,12 +220,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
         return Scaffold(
           backgroundColor: AppColors.backgroundSurface,
-          body: RefreshIndicator(
-            onRefresh: _refreshStreams,
-            color: AppColors.primary,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
+          body: CustomScrollView(
+            slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: _profileHeaderShadowGap),
@@ -302,7 +298,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 const SliverToBoxAdapter(child: SizedBox(height: _bottomNavClearance)),
               ],
             ),
-          ),
         );
       },
     );

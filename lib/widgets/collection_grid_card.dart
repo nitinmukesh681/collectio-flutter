@@ -27,11 +27,24 @@ class _CollectionGridCardState extends State<CollectionGridCard> {
     _coverUrlFuture = _resolveCoverUrl();
   }
 
+  bool _coverSourceChanged(CollectionEntity previous, CollectionEntity next) {
+    if (previous.coverImageUrl != next.coverImageUrl) return true;
+    if (previous.previewImageUrls.length != next.previewImageUrls.length) {
+      return true;
+    }
+    for (var i = 0; i < previous.previewImageUrls.length; i++) {
+      if (previous.previewImageUrls[i] != next.previewImageUrls[i]) return true;
+    }
+    return false;
+  }
+
   @override
   void didUpdateWidget(CollectionGridCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.collection.id != widget.collection.id) {
-      _coverUrlFuture = _resolveCoverUrl();
+    if (_coverSourceChanged(oldWidget.collection, widget.collection)) {
+      setState(() {
+        _coverUrlFuture = _resolveCoverUrl();
+      });
     }
   }
 

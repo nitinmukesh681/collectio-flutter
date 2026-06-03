@@ -18,6 +18,7 @@ import '../utils/snackbar_utils.dart';
 import '../utils/avatar_display_utils.dart';
 import '../widgets/avatar_fallback.dart';
 import '../widgets/user_avatar.dart';
+import '../utils/comment_mentions.dart';
 import '../widgets/mention_text_field.dart';
 import '../widgets/comment_mention_text.dart';
 import 'add_item_screen.dart';
@@ -27,6 +28,8 @@ import 'profile_screen.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import '../widgets/manage_collaborators_dialog.dart';
 import '../widgets/animated_segmented_tab_bar.dart';
+import '../widgets/resolved_network_image.dart';
+import '../utils/storage_image_url.dart';
 
 class CollectionDetailScreen extends StatefulWidget {
   final String collectionId;
@@ -54,6 +57,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   // ignore: unused_field
   final Set<String> _expandedItemIds = <String>{};
   bool _showSearch = false;
+  final TextEditingController _itemSearchController = TextEditingController();
+  final FocusNode _itemSearchFocusNode = FocusNode();
   String _currentUserName = '';
 
   bool _isFollowing = false;
@@ -66,6 +71,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   final TextEditingController _replyController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   final FocusNode _replyFocusNode = FocusNode();
+  List<CommentMention> _commentConfirmedMentions = const [];
+  List<CommentMention> _replyConfirmedMentions = const [];
   String? _replyingToCommentId; // specific comment whose Reply was tapped
   final Set<String> _expandedThreadIds = {};
   static const int _maxCommentDepth = 2;
@@ -89,10 +96,41 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
   void _onTabControllerChanged() {
     if (!mounted) return;
+    if (_tabController.index != 0 && _showSearch) {
+      _closeItemSearch();
+    }
     setState(() {});
     if (_tabController.index != 1) {
       _dismissDiscussionComposer();
     }
+  }
+
+  void _onItemSearchFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _dismissItemSearchKeyboard() {
+    _itemSearchFocusNode.unfocus();
+  }
+
+  void _openItemSearch() {
+    if (_tabController.index != 0) {
+      _tabController.index = 0;
+    }
+    setState(() => _showSearch = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _itemSearchFocusNode.requestFocus();
+    });
+  }
+
+  void _closeItemSearch() {
+    if (!_showSearch) return;
+    _itemSearchController.clear();
+    setState(() {
+      _showSearch = false;
+      _searchQuery = '';
+    });
+    _itemSearchFocusNode.unfocus();
   }
 
   @override
@@ -100,6 +138,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabControllerChanged);
+    _itemSearchFocusNode.addListener(_onItemSearchFocusChanged);
     _itemsStream = _firestoreService.getCollectionItems(widget.collectionId);
     _setupCollectionStream();
     _loadCurrentUserName();
@@ -261,6 +300,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     _replyController.dispose();
     _commentFocusNode.dispose();
     _replyFocusNode.dispose();
+    _itemSearchController.dispose();
+    _itemSearchFocusNode.removeListener(_onItemSearchFocusChanged);
+    _itemSearchFocusNode.dispose();
     super.dispose();
   }
 
@@ -346,149 +388,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
   bool _isPublicCollection(CollectionEntity collection) {
     return collection.isPublic || collection.visibility == CollectionVisibility.public;
-  }
-
-  bool _canRequestCollaboration(CollectionEntity collection) {
-    if (_isOwner) return false;
-    if (collection.userId == widget.currentUserId) return false;
-    if (collection.hasActiveCollaborator(widget.currentUserId)) return false;
-    if (collection.hasCollaboratorRequest(widget.currentUserId)) return false;
-    if (collection.hasCollaboratorInvite(widget.currentUserId)) return false;
-    return true;
-  }
-
-  bool _showRequestCollaborateMenuItem(CollectionEntity collection) {
-    if (_isOwner) return false;
-    if (collection.userId == widget.currentUserId) return false;
-    if (collection.hasActiveCollaborator(widget.currentUserId)) return false;
-    if (collection.hasCollaboratorInvite(widget.currentUserId)) return false;
-    return true;
-  }
-
-  /// Collection overflow menu: actions → get info → destructive.
-  List<PopupMenuEntry<String>> _buildCollectionOverflowMenuItems(
-    CollectionEntity? collection,
-  ) {
-    final items = <PopupMenuEntry<String>>[];
-
-    if (_isOwner) {
-      items.add(const PopupMenuItem(value: 'edit', child: Text('Edit collection')));
-      if (!(collection?.isOpenForContribution ?? false)) {
-        items.add(
-          const PopupMenuItem(value: 'collaborators', child: Text('Add collaborators')),
-        );
-      }
-    } else if (collection != null) {
-      if (_showRequestCollaborateMenuItem(collection)) {
-        final canRequest = _canRequestCollaboration(collection);
-        items.add(
-          PopupMenuItem(
-            value: 'request_collaborate',
-            enabled: canRequest,
-            child: Text(
-              'Request to collaborate',
-              style: GoogleFonts.plusJakartaSans(
-                color: canRequest ? AppColors.textPrimary : AppColors.textMuted,
-                fontWeight: canRequest ? FontWeight.w600 : FontWeight.w500,
-              ),
-            ),
-          ),
-        );
-      }
-      if (collection.hasCollaboratorRequest(widget.currentUserId)) {
-        items.add(
-          const PopupMenuItem(
-            value: 'cancel_request',
-            child: Text('Withdraw collaboration request'),
-          ),
-        );
-      }
-      items.add(
-        const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
-      );
-    }
-
-    items.add(const PopupMenuItem(value: 'get_info', child: Text('Get info')));
-
-    if (_isOwner) {
-      items.add(const PopupMenuItem(value: 'delete', child: Text('Delete')));
-    }
-
-    return items;
-  }
-
-  /// Item overflow menu: actions → get info → delete.
-  List<PopupMenuEntry<String>> _buildItemOverflowMenuItems({
-    required bool canEdit,
-    required bool showGetInfo,
-  }) {
-    final items = <PopupMenuEntry<String>>[];
-    final textStyle = GoogleFonts.plusJakartaSans();
-
-    if (canEdit) {
-      items.add(
-        PopupMenuItem(value: 'edit', child: Text('Edit', style: textStyle)),
-      );
-    }
-    items.add(
-      PopupMenuItem(
-        value: 'add_to_collections',
-        child: Text('Add to collection', style: textStyle),
-      ),
-    );
-    if (showGetInfo) {
-      items.add(
-        PopupMenuItem(
-          value: 'get_info',
-          child: Text('Get info', style: textStyle),
-        ),
-      );
-    }
-    if (canEdit) {
-      items.add(
-        PopupMenuItem(value: 'delete', child: Text('Delete', style: textStyle)),
-      );
-    }
-    return items;
-  }
-
-  Future<void> _requestCollaboration() async {
-    final collection = _collection;
-    if (collection == null) return;
-
-    try {
-      await _firestoreService.requestCollaboratorAccess(
-        collectionId: widget.collectionId,
-        userId: widget.currentUserId,
-        username: _currentUserName.isNotEmpty ? _currentUserName : 'user',
-      );
-      if (mounted) {
-        SnackBarUtils.showSuccessSnackBar(
-          context,
-          'Collaboration request sent to the owner',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        SnackBarUtils.showErrorSnackBar(context, 'Could not send request: $e');
-      }
-    }
-  }
-
-  Future<void> _cancelCollaborationRequest() async {
-    try {
-      await _firestoreService.cancelCollaboratorRequest(
-        collectionId: widget.collectionId,
-        userId: widget.currentUserId,
-      );
-      if (mounted) {
-        SnackBarUtils.showInfoSnackBar(context, 'Collaboration request withdrawn');
-      }
-    } catch (e) {
-      if (mounted) {
-        SnackBarUtils.showErrorSnackBar(context, 'Could not withdraw request: $e');
-      }
-    }
   }
 
   void _showManageCollaboratorsDialog() {
@@ -1333,43 +1232,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 child: _buildCollectionTabBar(),
               ),
 
-              // Search bar (if active)
-              if (_showSearch && _tabController.index == 0)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _contentHorizontalPadding,
-                      vertical: 8,
-                    ),
-                    child: TextField(
-                      autofocus: true,
-                      style: GoogleFonts.plusJakartaSans(),
-                      decoration: InputDecoration(
-                        hintText: 'Search items...',
-                        hintStyle: GoogleFonts.plusJakartaSans(),
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.close_rounded),
-                          onPressed: () {
-                            setState(() {
-                              _showSearch = false;
-                              _searchQuery = '';
-                            });
-                          },
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                      onChanged: (value) {
-                        setState(() => _searchQuery = value);
-                      },
-                    ),
-                  ),
-                ),
-
               // Items list
               if (_tabController.index == 0)
                 _buildItemsList(),
@@ -1395,18 +1257,21 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           );
 
               return GestureDetector(
-                onTap: isDiscussionTab
-                    ? () {
-                        if (_replyingToCommentId != null) {
-                          _cancelReply();
-                        }
-                        if (_isCommentComposerActive) {
-                          _dismissDiscussionComposer();
-                        } else {
-                          FocusManager.instance.primaryFocus?.unfocus();
-                        }
-                      }
-                    : null,
+                onTap: () {
+                  if (isDiscussionTab) {
+                    if (_replyingToCommentId != null) {
+                      _cancelReply();
+                    }
+                    if (_isCommentComposerActive) {
+                      _dismissDiscussionComposer();
+                    }
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  } else if (_showSearch) {
+                    _dismissItemSearchKeyboard();
+                  } else {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  }
+                },
                 behavior: HitTestBehavior.translucent,
                 child: scrollView,
               );
@@ -1432,6 +1297,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   static const double _heroHorizontalPadding = 16;
+  static const double _heroNavSize = 40;
+  static const double _heroSearchHeight = 40;
   static const double _contentHorizontalPadding = 24;
   static const double _heroSectionGap = 22;
   static const double _heroCoverHeight = 210;
@@ -1693,7 +1560,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final topInset = mediaQuery.viewPadding.top > mediaQuery.padding.top
         ? mediaQuery.viewPadding.top
         : mediaQuery.padding.top;
-    const navButtonSize = 38.0;
     const topPadding = 8.0;
 
     return Stack(
@@ -1729,28 +1595,53 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                           icon: Icons.keyboard_arrow_left,
                           onTap: () => Navigator.pop(context),
                         ),
-                        const Spacer(),
-                        _buildCircleButton(
-                          icon: Icons.search_rounded,
-                          onTap: () {
-                            setState(() {
-                              _showSearch = !_showSearch;
-                              if (!_showSearch) _searchQuery = '';
-                            });
-                          },
+                        const SizedBox(width: _heroInlineGap),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SizeTransition(
+                                  sizeFactor: animation,
+                                  axisAlignment: -1,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: _showSearch && _tabController.index == 0
+                                ? _buildHeroSearchField(key: const ValueKey('hero-search-field'))
+                                : Align(
+                                    key: const ValueKey('hero-search-button'),
+                                    alignment: Alignment.centerRight,
+                                    child: _buildCircleButton(
+                                      icon: Icons.search_rounded,
+                                      onTap: _openItemSearch,
+                                    ),
+                                  ),
+                          ),
                         ),
                         const SizedBox(width: _heroInlineGap),
-                        PopupMenuButton<String>(
-                          padding: EdgeInsets.zero,
-                          offset: const Offset(0, 44),
-                          child: Container(
-                            width: navButtonSize,
-                            height: navButtonSize,
-                            decoration: _navCircleDecoration,
-                            child: const Icon(Icons.more_horiz, color: AppColors.textPrimary, size: 22),
-                          ),
-                          itemBuilder: (context) =>
-                              _buildCollectionOverflowMenuItems(_collection),
+                        _AnchoredTrailingMenu(
+                          itemBuilder: (context) => [
+                            if (_isOwner)
+                              _popupMenuEntry(value: 'edit', label: 'Edit collection'),
+                            if (_isOwner && !(_collection?.isOpenForContribution ?? false))
+                              _popupMenuEntry(value: 'collaborators', label: 'Add collaborators'),
+                            if (!_isOwner)
+                              _popupMenuEntry(value: 'add_to_new', label: 'Add to new collection'),
+                            _popupMenuEntry(value: 'get_info', label: 'Get info'),
+                            if (_isOwner) ...[
+                              const PopupMenuDivider(height: 1),
+                              _popupMenuEntry(
+                                value: 'delete',
+                                label: 'Delete',
+                                color: AppColors.heartSalmon,
+                              ),
+                            ],
+                          ],
                           onSelected: (value) {
                             if (value == 'get_info') {
                               if (_collection != null) _showCollectionInfoDialog(_collection!);
@@ -1762,12 +1653,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                               _showDeleteDialog();
                             } else if (value == 'add_to_new') {
                               _duplicateCollection();
-                            } else if (value == 'request_collaborate') {
-                              _requestCollaboration();
-                            } else if (value == 'cancel_request') {
-                              _cancelCollaborationRequest();
                             }
                           },
+                          child: Container(
+                            width: _heroNavSize,
+                            height: _heroNavSize,
+                            decoration: _navCircleDecoration,
+                            child: const Icon(Icons.more_horiz, color: AppColors.textPrimary, size: 22),
+                          ),
                         ),
                       ],
                     ),
@@ -2121,6 +2014,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           focusNode: _commentFocusNode,
           firestoreService: _firestoreService,
           accentColor: _accentColor,
+          onConfirmedMentionsChanged: (mentions) {
+            _commentConfirmedMentions = mentions;
+          },
           hintText: 'Add a comment...',
           minLines: 1,
           maxLines: 6,
@@ -2185,7 +2081,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                     onPressed: () async {
                       final text = _commentController.text.trim();
                       if (text.isEmpty) return;
+                      final mentions = List<CommentMention>.from(_commentConfirmedMentions);
                       _commentController.clear();
+                      _commentConfirmedMentions = const [];
                       _commentFocusNode.unfocus();
                       final auth = await _firestoreService.getUser(widget.currentUserId);
                       await _firestoreService.addComment(
@@ -2194,6 +2092,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                         userName: auth?.userName ?? '',
                         userAvatarUrl: auth?.avatarUrl,
                         text: text,
+                        confirmedMentions: mentions,
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -2406,6 +2305,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     setState(() {
       _replyingToCommentId = null;
       _replyController.clear();
+      _replyConfirmedMentions = const [];
     });
     _replyFocusNode.unfocus();
     FocusManager.instance.primaryFocus?.unfocus();
@@ -2416,7 +2316,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
     final text = _replyController.text.trim();
     if (text.isEmpty) return;
+    final mentions = List<CommentMention>.from(_replyConfirmedMentions);
     _replyController.clear();
+    _replyConfirmedMentions = const [];
     _replyFocusNode.unfocus();
     final auth = await _firestoreService.getUser(widget.currentUserId);
     await _firestoreService.addComment(
@@ -2426,6 +2328,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       userAvatarUrl: auth?.avatarUrl,
       text: text,
       parentCommentId: targetComment.id,
+      confirmedMentions: mentions,
     );
     if (mounted) _cancelReply();
   }
@@ -2440,6 +2343,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           focusNode: _replyFocusNode,
           firestoreService: _firestoreService,
           accentColor: _accentColor,
+          onConfirmedMentionsChanged: (mentions) {
+            _replyConfirmedMentions = mentions;
+          },
           hintText: 'Reply to ${targetComment.userName}...',
           filled: true,
           minLines: 1,
@@ -2686,6 +2592,28 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
+  static const double _popupMenuItemHeight = 40;
+
+  PopupMenuItem<String> _popupMenuEntry({
+    required String value,
+    required String label,
+    Color? color,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: _popupMenuItemHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: color ?? AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+
   static const BoxDecoration _navCircleDecoration = BoxDecoration(
     color: Colors.white,
     shape: BoxShape.circle,
@@ -2702,10 +2630,78 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 38,
-        height: 38,
+        width: _heroNavSize,
+        height: _heroNavSize,
         decoration: _navCircleDecoration,
         child: Icon(icon, color: AppColors.textPrimary, size: 22),
+      ),
+    );
+  }
+
+  Widget _buildHeroSearchField({Key? key}) {
+    const radius = _heroSearchHeight / 2;
+
+    return Container(
+      key: key,
+      height: _heroSearchHeight,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: _navCircleDecoration.boxShadow,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: TextField(
+          controller: _itemSearchController,
+          focusNode: _itemSearchFocusNode,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary,
+            height: 1.2,
+          ),
+          cursorColor: AppColors.textPrimary,
+          decoration: InputDecoration(
+            hintText: 'Search items...',
+            hintStyle: GoogleFonts.plusJakartaSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textMuted,
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: AppColors.textMuted.withValues(alpha: 0.85),
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: _heroSearchHeight),
+            suffixIcon: IconButton(
+              onPressed: _closeItemSearch,
+              icon: Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: AppColors.textMuted.withValues(alpha: 0.85),
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              splashRadius: 18,
+            ),
+            suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: _heroSearchHeight),
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          ),
+          onChanged: (value) {
+            setState(() => _searchQuery = value);
+          },
+          textInputAction: TextInputAction.search,
+        ),
       ),
     );
   }
@@ -2876,20 +2872,35 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     required bool canEdit,
     required bool showGetInfo,
   }) {
-    return PopupMenuButton<String>(
-      padding: EdgeInsets.zero,
-      offset: const Offset(0, 24),
-      child: const Icon(Icons.more_horiz, size: 18, color: AppColors.textMuted),
+    return _AnchoredTrailingMenu(
+      child: const SizedBox(
+        width: 28,
+        height: 28,
+        child: Center(
+          child: Icon(Icons.more_horiz, size: 18, color: AppColors.textMuted),
+        ),
+      ),
       onSelected: (value) {
         if (value == 'edit') _navigateToAddItem(item);
         else if (value == 'delete') _deleteItem(item);
         else if (value == 'add_to_collections') _showAddToCollectionsDialog(item);
         else if (value == 'get_info') _showItemInfoDialog(item);
       },
-      itemBuilder: (context) => _buildItemOverflowMenuItems(
-        canEdit: canEdit,
-        showGetInfo: showGetInfo,
-      ),
+      itemBuilder: (context) => [
+        if (canEdit)
+          _popupMenuEntry(value: 'edit', label: 'Edit'),
+        _popupMenuEntry(value: 'add_to_collections', label: 'Add to collection'),
+        if (showGetInfo)
+          _popupMenuEntry(value: 'get_info', label: 'Get info'),
+        if (canEdit) ...[
+          const PopupMenuDivider(height: 1),
+          _popupMenuEntry(
+            value: 'delete',
+            label: 'Delete',
+            color: AppColors.heartSalmon,
+          ),
+        ],
+      ],
     );
   }
 
@@ -3015,7 +3026,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                     onTap: () => _showItemImagePreview(item.imageUrls, i),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(AppColors.radiusSmall),
-                      child: CachedNetworkImage(
+                      child: ResolvedNetworkImage(
                         imageUrl: item.imageUrls[i],
                         fit: BoxFit.cover,
                         width: _itemImageThumbSize,
@@ -3218,13 +3229,14 @@ class _ItemImagePreviewDialogState extends State<_ItemImagePreviewDialog> {
   Size? _imageSize;
   ImageStream? _imageStream;
   ImageStreamListener? _imageListener;
+  final Map<int, String?> _resolvedUrls = {};
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
-    _resolveImageSize(widget.imageUrls[widget.initialIndex]);
+    _resolveImageSize(widget.initialIndex);
   }
 
   @override
@@ -3242,12 +3254,20 @@ class _ItemImagePreviewDialogState extends State<_ItemImagePreviewDialog> {
     _imageListener = null;
   }
 
-  void _resolveImageSize(String url) {
+  Future<void> _resolveImageSize(int index) async {
     _removeImageListener();
     if (!mounted) return;
     setState(() => _imageSize = null);
 
-    final provider = CachedNetworkImageProvider(url);
+    final raw = widget.imageUrls[index];
+    var resolved = _resolvedUrls[index];
+    resolved ??= await resolveStorageImageUrl(raw);
+    _resolvedUrls[index] = resolved;
+    if (!mounted) return;
+
+    if (resolved == null || resolved.isEmpty) return;
+
+    final provider = CachedNetworkImageProvider(resolved);
     final stream = provider.resolve(ImageConfiguration.empty);
     _imageStream = stream;
     _imageListener = ImageStreamListener((info, _) {
@@ -3289,7 +3309,8 @@ class _ItemImagePreviewDialogState extends State<_ItemImagePreviewDialog> {
     );
   }
 
-  Widget _buildImagePage(String imageUrl) {
+  Widget _buildImagePage(int index) {
+    final imageUrl = widget.imageUrls[index];
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerSize = Size(constraints.maxWidth, constraints.maxHeight);
@@ -3310,7 +3331,7 @@ class _ItemImagePreviewDialogState extends State<_ItemImagePreviewDialog> {
                 child: InteractiveViewer(
                   minScale: 0.5,
                   maxScale: 4,
-                  child: CachedNetworkImage(
+                  child: ResolvedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.contain,
                     placeholder: (_, __) => const Center(
@@ -3356,9 +3377,9 @@ class _ItemImagePreviewDialogState extends State<_ItemImagePreviewDialog> {
               itemCount: widget.imageUrls.length,
               onPageChanged: (index) {
                 setState(() => _currentIndex = index);
-                _resolveImageSize(widget.imageUrls[index]);
+                _resolveImageSize(index);
               },
-              itemBuilder: (context, index) => _buildImagePage(widget.imageUrls[index]),
+              itemBuilder: (context, index) => _buildImagePage(index),
             ),
           ),
           Positioned(
@@ -3411,4 +3432,94 @@ class _CoverBottomCurveClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+/// Opens a popup menu anchored to the bottom-right of [anchorKey], so it
+/// drops directly below trailing ⋯ buttons.
+Future<String?> _showTrailingPopupMenu({
+  required BuildContext context,
+  required GlobalKey anchorKey,
+  required List<PopupMenuEntry<String>> items,
+  double gapBelow = 4,
+}) {
+  final anchorContext = anchorKey.currentContext;
+  if (anchorContext == null) {
+    return Future<String?>.value(null);
+  }
+
+  final renderObject = anchorContext.findRenderObject();
+  if (renderObject is! RenderBox || !renderObject.hasSize) {
+    return Future<String?>.value(null);
+  }
+
+  final anchor = renderObject;
+  final overlayBox = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final bottomRight = anchor.localToGlobal(
+    anchor.size.bottomRight(Offset.zero),
+    ancestor: overlayBox,
+  );
+  final menuTop = bottomRight.dy + gapBelow;
+
+  return showMenu<String>(
+    context: context,
+    position: RelativeRect.fromLTRB(
+      bottomRight.dx,
+      menuTop,
+      overlayBox.size.width - bottomRight.dx,
+      overlayBox.size.height - menuTop,
+    ),
+    items: items,
+    popUpAnimationStyle: const AnimationStyle(
+      curve: Curves.easeOutCubic,
+      duration: Duration(milliseconds: 200),
+    ),
+  );
+}
+
+class _AnchoredTrailingMenu extends StatefulWidget {
+  const _AnchoredTrailingMenu({
+    required this.child,
+    required this.itemBuilder,
+    required this.onSelected,
+    this.gapBelow = 4,
+  });
+
+  final Widget child;
+  final List<PopupMenuEntry<String>> Function(BuildContext context) itemBuilder;
+  final ValueChanged<String> onSelected;
+  final double gapBelow;
+
+  @override
+  State<_AnchoredTrailingMenu> createState() => _AnchoredTrailingMenuState();
+}
+
+class _AnchoredTrailingMenuState extends State<_AnchoredTrailingMenu> {
+  final GlobalKey _anchorKey = GlobalKey();
+
+  Future<void> _openMenu() async {
+    final items = widget.itemBuilder(context);
+    if (items.isEmpty) return;
+
+    final selected = await _showTrailingPopupMenu(
+      context: context,
+      anchorKey: _anchorKey,
+      items: items,
+      gapBelow: widget.gapBelow,
+    );
+    if (selected != null) {
+      widget.onSelected(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _openMenu,
+      behavior: HitTestBehavior.opaque,
+      child: KeyedSubtree(
+        key: _anchorKey,
+        child: widget.child,
+      ),
+    );
+  }
 }

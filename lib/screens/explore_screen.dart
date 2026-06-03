@@ -59,6 +59,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   static const double _trendingGravity = 1.8;
   static const Duration _trendingWindow = Duration(days: 2);
+  static const int _topLikedMaxItems = 5;
 
   @override
   void initState() {
@@ -91,29 +92,43 @@ class _ExploreScreenState extends State<ExploreScreen> {
     try {
       final since = _sinceForTopLikedRange(_topLikedRange);
 
-      final allCollections = await _firestoreService.getPublicCollectionsList(limit: 200);
-
-      final allPublic = await _firestoreService.getPublicCollectionsList(limit: 50);
+      final allPublic = await _firestoreService.getPublicCollectionsList(limit: 200);
 
       final trending = _computeTrending(allPublic, limit: 5);
 
       List<CollectionEntity> topLiked = [];
-      try {
-        topLiked = await _firestoreService.getTopLikedCollections(since: since, limit: 10);
-      } catch (e) {
-        debugPrint('Top liked query failed: $e');
+      if (since != null) {
+        // Prefer the already-loaded public list so mixed createdAt types are not missed.
+        topLiked = _filterBySince(allPublic, since)
+          ..sort((a, b) => b.likes.compareTo(a.likes));
+        if (topLiked.length > _topLikedMaxItems) {
+          topLiked = topLiked.take(_topLikedMaxItems).toList();
+        }
       }
 
       if (topLiked.isEmpty) {
+        try {
+          topLiked = await _firestoreService.getTopLikedCollections(
+            since: since,
+            limit: _topLikedMaxItems,
+          );
+        } catch (e) {
+          debugPrint('Top liked query failed: $e');
+        }
+      }
+
+      if (topLiked.isEmpty && since != null) {
         topLiked = _filterBySince(allPublic, since)
           ..sort((a, b) => b.likes.compareTo(a.likes));
-        if (topLiked.length > 10) topLiked = topLiked.take(10).toList();
+        if (topLiked.length > _topLikedMaxItems) {
+          topLiked = topLiked.take(_topLikedMaxItems).toList();
+        }
       }
       
       if (mounted) {
         setState(() {
-          _allPublicCollections = allCollections;
-          _categoryCounts = _computeCategoryCounts(allCollections);
+          _allPublicCollections = allPublic;
+          _categoryCounts = _computeCategoryCounts(allPublic);
           _trendingCollections = trending;
           _topLikedCollections = topLiked;
         });
@@ -717,7 +732,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
       return const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator())));
     }
 
-    final count = _topLikedCollections.length > 4 ? 4 : _topLikedCollections.length;
+    final count = _topLikedCollections.length > _topLikedMaxItems
+        ? _topLikedMaxItems
+        : _topLikedCollections.length;
     if (count == 0) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     return SliverToBoxAdapter(
@@ -1087,20 +1104,17 @@ class _CollectionsListScreenState extends State<_CollectionsListScreen> {
                     ],
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                    itemCount: _collections.length,
-                    itemBuilder: (context, index) {
-                      final c = _collections[index];
-                      return CollectionListCard(
-                        collection: c,
-                        currentUserId: widget.currentUserId,
-                        collaborationStyle: true,
-                      );
-                    },
-                  ),
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                  itemCount: _collections.length,
+                  itemBuilder: (context, index) {
+                    final c = _collections[index];
+                    return CollectionListCard(
+                      collection: c,
+                      currentUserId: widget.currentUserId,
+                      collaborationStyle: true,
+                    );
+                  },
                 ),
     );
   }
@@ -1119,7 +1133,7 @@ class _BrowseCategoriesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final categories = CategoryType.values.where((c) => c != CategoryType.other).toList();
+    final categories = CategoryType.values.toList();
 
     return Scaffold(
       backgroundColor: AppColors.backgroundSurface,

@@ -340,12 +340,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.backgroundSurface,
-      body: RefreshIndicator(
-        onRefresh: () async => _setupRealtimeStreams(),
-        color: AppColors.primary,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
+      body: CustomScrollView(
+        slivers: [
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -394,7 +390,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             const SliverToBoxAdapter(child: SizedBox(height: _bottomNavClearance)),
           ],
         ),
-      ),
     );
   }
 

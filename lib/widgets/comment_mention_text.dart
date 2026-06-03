@@ -48,46 +48,16 @@ class _CommentMentionTextState extends State<CommentMentionText> {
           color: AppColors.textPrimary,
           height: 1.45,
         );
-    final mentionStyle = style.copyWith(
-      color: widget.mentionColor ?? AppColors.primary,
-      fontWeight: FontWeight.w700,
+
+    final span = CommentMentions.buildMentionTextSpan(
+      text: widget.text,
+      mentions: widget.mentions,
+      onMentionTap: widget.onMentionTap,
+      baseStyle: style,
+      mentionColor: widget.mentionColor ?? AppColors.primary,
+      recognizers: _recognizers,
     );
 
-    final usernameToUserId = {
-      for (final mention in widget.mentions)
-        if (mention.username.isNotEmpty && mention.userId.isNotEmpty)
-          mention.username.toLowerCase(): mention.userId,
-    };
-
-    final spans = <InlineSpan>[];
-    var lastIndex = 0;
-
-    for (final match in CommentMentions.mentionPattern.allMatches(widget.text)) {
-      if (match.start > lastIndex) {
-        spans.add(TextSpan(text: widget.text.substring(lastIndex, match.start), style: style));
-      }
-
-      final username = match.group(1)!;
-      final userId = usernameToUserId[username.toLowerCase()];
-      final mentionText = match.group(0)!;
-
-      if (userId != null) {
-        final recognizer = TapGestureRecognizer()..onTap = () => widget.onMentionTap(userId);
-        _recognizers.add(recognizer);
-        spans.add(TextSpan(text: mentionText, style: mentionStyle, recognizer: recognizer));
-      } else {
-        spans.add(TextSpan(text: mentionText, style: mentionStyle));
-      }
-
-      lastIndex = match.end;
-    }
-
-    if (lastIndex < widget.text.length) {
-      spans.add(TextSpan(text: widget.text.substring(lastIndex), style: style));
-    }
-
-    return RichText(
-      text: TextSpan(children: spans),
-    );
+    return RichText(text: span);
   }
 }

@@ -24,6 +24,7 @@ class MentionTextField extends StatefulWidget {
   final FirestoreService firestoreService;
   final Color? accentColor;
   final Widget Function(Widget textField)? surroundBuilder;
+  final ValueChanged<List<CommentMention>>? onConfirmedMentionsChanged;
 
   const MentionTextField({
     super.key,
@@ -41,6 +42,7 @@ class MentionTextField extends StatefulWidget {
     this.collapseDecoration = false,
     this.accentColor,
     this.surroundBuilder,
+    this.onConfirmedMentionsChanged,
   });
 
   @override
@@ -153,9 +155,17 @@ class _MentionTextFieldState extends State<MentionTextField> {
   }
 
   void _syncConfirmedMentions(String text) {
+    final before = _confirmedMentions.length;
     _confirmedMentions.removeWhere(
       (mention) => !text.contains('@${mention.username}'),
     );
+    if (_confirmedMentions.length != before) {
+      _notifyConfirmedMentionsChanged();
+    }
+  }
+
+  void _notifyConfirmedMentionsChanged() {
+    widget.onConfirmedMentionsChanged?.call(List.unmodifiable(_confirmedMentions));
   }
 
   void _handleTextChanged() {
@@ -233,6 +243,7 @@ class _MentionTextFieldState extends State<MentionTextField> {
       (existing) => existing.username.toLowerCase() == user.username.toLowerCase(),
     );
     _confirmedMentions.add(CommentMention(userId: user.id, username: user.username));
+    _notifyConfirmedMentionsChanged();
 
     widget.controller.value = TextEditingValue(
       text: updated,
@@ -387,12 +398,17 @@ class _MentionTextFieldState extends State<MentionTextField> {
     );
   }
 
-  Widget _buildStyledTextField() {
-    if (widget.maxLines > 1) {
-      return _buildPlainTextField();
-    }
+  TextStyle get _mentionTextStyle => _baseTextStyle.copyWith(
+        color: _accentColor,
+        fontWeight: FontWeight.w700,
+      );
 
+  Widget _buildStyledTextField() {
     final padding = _contentPadding.resolve(Directionality.of(context));
+    final strutStyle = StrutStyle.fromTextStyle(
+      _baseTextStyle,
+      forceStrutHeight: true,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -409,7 +425,9 @@ class _MentionTextFieldState extends State<MentionTextField> {
                       text: widget.controller.text,
                       mentions: List.unmodifiable(_confirmedMentions),
                       baseStyle: _baseTextStyle,
+                      mentionStyle: _mentionTextStyle,
                     ),
+                    strutStyle: strutStyle,
                     softWrap: true,
                   ),
                 ),

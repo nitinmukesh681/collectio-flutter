@@ -117,6 +117,8 @@ class CommentMentions {
     required List<CommentMention> mentions,
     required void Function(String userId) onMentionTap,
     TextStyle? baseStyle,
+    Color? mentionColor,
+    List<TapGestureRecognizer>? recognizers,
   }) {
     final style = baseStyle ??
         GoogleFonts.plusJakartaSans(
@@ -125,7 +127,7 @@ class CommentMentions {
           height: 1.45,
         );
     final mentionStyle = style.copyWith(
-      color: AppColors.primary,
+      color: mentionColor ?? AppColors.primary,
       fontWeight: FontWeight.w700,
     );
 
@@ -148,15 +150,17 @@ class CommentMentions {
       final mentionText = match.group(0)!;
 
       if (userId != null) {
+        final recognizer = TapGestureRecognizer()..onTap = () => onMentionTap(userId);
+        recognizers?.add(recognizer);
         spans.add(
           TextSpan(
             text: mentionText,
             style: mentionStyle,
-            recognizer: TapGestureRecognizer()..onTap = () => onMentionTap(userId),
+            recognizer: recognizer,
           ),
         );
       } else {
-        spans.add(TextSpan(text: mentionText, style: mentionStyle));
+        spans.add(TextSpan(text: mentionText, style: style));
       }
 
       lastIndex = match.end;

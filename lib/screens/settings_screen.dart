@@ -162,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _SettingsInfoRow(
                 icon: Icons.info_outline_rounded,
                 title: 'App Version',
-                subtitle: '1.0.5 (4)',
+                subtitle: '1.0.5 (5)',
               ),
               _SettingsDivider(),
               _SettingsNavRow(

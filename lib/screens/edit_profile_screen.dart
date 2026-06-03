@@ -1,10 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../utils/snackbar_utils.dart';
@@ -32,8 +34,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _clearAvatar = false;
   bool _isLoading = false;
   bool _usernameTaken = false;
+  bool _usernameAvailable = false;
+  bool _checkingUsername = false;
+  Timer? _usernameCheckDebounce;
+  int _usernameCheckGeneration = 0;
 
   static const double _avatarSize = 108;
+  static const Duration _usernameCheckDelay = Duration(milliseconds: 400);
 
   @override
   void initState() {
@@ -42,18 +49,81 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _originalUsername = UsernameUtils.normalize(auth.userEntity?.userName ?? '');
     _usernameController = TextEditingController(text: _originalUsername);
     _bioController = TextEditingController(text: auth.userEntity?.bio ?? '');
-    _usernameController.addListener(() {
-      if (_usernameTaken) setState(() => _usernameTaken = false);
-    });
+    _usernameController.addListener(_onUsernameChanged);
     _bioController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
+    _usernameCheckDebounce?.cancel();
     _usernameController.dispose();
     _bioController.dispose();
     super.dispose();
   }
+
+  void _onUsernameChanged() {
+    _usernameCheckDebounce?.cancel();
+    setState(() {
+      _usernameTaken = false;
+      _usernameAvailable = false;
+      _checkingUsername = false;
+    });
+
+    _usernameCheckDebounce = Timer(_usernameCheckDelay, _checkUsernameAvailability);
+  }
+
+  Future<void> _checkUsernameAvailability() async {
+    final text = _usernameController.text;
+    final normalized = UsernameUtils.normalize(text);
+
+    if (normalized == _originalUsername) {
+      if (mounted) {
+        setState(() {
+          _checkingUsername = false;
+          _usernameTaken = false;
+          _usernameAvailable = false;
+        });
+      }
+      return;
+    }
+
+    if (UsernameUtils.validate(text) != null) {
+      if (mounted) {
+        setState(() {
+          _checkingUsername = false;
+          _usernameTaken = false;
+          _usernameAvailable = false;
+        });
+      }
+      return;
+    }
+
+    final generation = ++_usernameCheckGeneration;
+    if (mounted) setState(() => _checkingUsername = true);
+
+    final auth = context.read<AuthProvider>();
+    try {
+      final available = await _firestoreService.isUsernameAvailable(
+        normalized,
+        excludeUserId: auth.userId,
+      );
+
+      if (!mounted || generation != _usernameCheckGeneration) return;
+
+      setState(() {
+        _checkingUsername = false;
+        _usernameTaken = !available;
+        _usernameAvailable = available;
+      });
+      _formKey.currentState?.validate();
+    } catch (_) {
+      if (!mounted || generation != _usernameCheckGeneration) return;
+      setState(() => _checkingUsername = false);
+    }
+  }
+
+  bool get _canSave =>
+      !_isLoading && !_checkingUsername && !_usernameTaken;
 
   Future<void> _pickAvatar() async {
     try {
@@ -380,6 +450,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             decoration: _fieldDecoration(
               hintText: 'Choose a username',
               prefixIcon: Icons.alternate_email_rounded,
+              suffixIcon: _usernameFieldSuffix(),
+              helperText: _usernameHelperText(),
+              helperColor: _usernameTaken
+                  ? null
+                  : (_usernameAvailable ? Colors.green.shade700 : AppColors.textMuted),
             ),
             validator: (value) {
               if (_usernameTaken) {
@@ -525,7 +600,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: _isLoading ? null : _save,
+            onPressed: _canSave ? _save : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -599,9 +674,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  Widget? _usernameFieldSuffix() {
+    if (_checkingUsername) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (_usernameTaken) {
+      return Icon(Icons.error_outline_rounded, color: Colors.red.shade400, size: 22);
+    }
+    if (_usernameAvailable) {
+      return Icon(Icons.check_circle_rounded, color: Colors.green.shade600, size: 22);
+    }
+    return null;
+  }
+
+  String? _usernameHelperText() {
+    if (_checkingUsername) return 'Checking availability...';
+    if (_usernameTaken) return null;
+    if (_usernameAvailable) return 'Username is available';
+    return null;
+  }
+
   InputDecoration _fieldDecoration({
     required String hintText,
     IconData? prefixIcon,
+    Widget? suffixIcon,
+    String? helperText,
+    Color? helperColor,
   }) {
     return InputDecoration(
       hintText: hintText,
@@ -613,6 +718,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       prefixIcon: prefixIcon == null
           ? null
           : Icon(prefixIcon, color: AppColors.textMuted, size: 20),
+      suffixIcon: suffixIcon,
+      helperText: helperText,
+      helperStyle: helperText == null
+          ? null
+          : GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: helperColor ?? AppColors.textMuted,
+            ),
       filled: true,
       fillColor: AppColors.surfaceMuted,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

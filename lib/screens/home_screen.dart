@@ -86,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _mergeFeedCollections() {
     final feed = List<CollectionEntity>.from(_followingCollections)
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      ..sort((a, b) => b.lastContentActivityAt.compareTo(a.lastContentActivityAt));
 
     setState(() {
       _feedCollections = feed;
@@ -140,16 +140,9 @@ class _HomeScreenState extends State<HomeScreen> {
           index: _selectedIndex,
           children: [
             // Tab 0: Home Feed
-            RefreshIndicator(
-              onRefresh: () async {
-                // Refresh all streams by canceling and recreating them
-                await _followingSubscription?.cancel();
-                await _collabSubscription?.cancel();
-                _setupRealtimeStreams();
-              },
-              child: CustomScrollView(
-                controller: _feedScrollController,
-                slivers: [
+            CustomScrollView(
+              controller: _feedScrollController,
+              slivers: [
                   SliverToBoxAdapter(
                     child: _buildFeedPageHeader(auth),
                   ),
@@ -363,7 +356,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SliverToBoxAdapter(child: SizedBox(height: 120)),
                 ],
               ),
-            ),
             
             // Other Tabs
             ExploreScreen(currentUserId: auth.userId),
