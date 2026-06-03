@@ -234,6 +234,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                         showDialog(
                           context: context,
                           builder: (context) => UnsplashSearchDialog(
+                            allowMultiple: true,
+                            maxSelections: _remainingImageSlots,
                             onImageSelected: (imageUrl, attribution) {
                               if (!_canAddMoreImages) {
                                 SnackBarUtils.showErrorSnackBar(

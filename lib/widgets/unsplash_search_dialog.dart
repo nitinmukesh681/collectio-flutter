@@ -6,10 +6,16 @@ import '../theme/app_theme.dart';
 /// Dialog for searching and selecting Unsplash photos
 class UnsplashSearchDialog extends StatefulWidget {
   final Function(String imageUrl, String? attribution) onImageSelected;
+  /// When true, the dialog stays open so the user can pick several photos.
+  final bool allowMultiple;
+  /// Max photos the user may add in this session (only used when [allowMultiple]).
+  final int? maxSelections;
 
   const UnsplashSearchDialog({
     super.key,
     required this.onImageSelected,
+    this.allowMultiple = false,
+    this.maxSelections,
   });
 
   @override
@@ -19,10 +25,15 @@ class UnsplashSearchDialog extends StatefulWidget {
 class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
   final UnsplashService _unsplashService = UnsplashService();
   final TextEditingController _searchController = TextEditingController();
-  
+  final Set<String> _selectedPhotoIds = {};
+
   List<UnsplashPhoto> _photos = [];
   bool _isLoading = false;
   String? _error;
+
+  int get _maxSelections => widget.maxSelections ?? 1;
+  bool get _canSelectMore =>
+      !widget.allowMultiple || _selectedPhotoIds.length < _maxSelections;
 
   Future<void> _search(String query) async {
     if (query.length < 2) return;
@@ -43,9 +54,34 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
   }
 
   void _selectPhoto(UnsplashPhoto photo) {
-    // Use regular size for good quality without being too heavy
+    if (widget.allowMultiple) {
+      if (_selectedPhotoIds.contains(photo.id)) return;
+      if (!_canSelectMore) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _maxSelections == 1
+                  ? 'You can only add one more photo'
+                  : 'You can add up to $_maxSelections photos',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     final attribution = 'Photo by ${photo.user.name} on Unsplash';
     widget.onImageSelected(photo.urls.regular, attribution);
+
+    if (widget.allowMultiple) {
+      setState(() => _selectedPhotoIds.add(photo.id));
+      return;
+    }
+
+    Navigator.pop(context);
+  }
+
+  void _finishMultiSelect() {
     Navigator.pop(context);
   }
 
@@ -77,11 +113,35 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                     'Unsplash',
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
+                  if (widget.allowMultiple) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_selectedPhotoIds.length}/$_maxSelections',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                   const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                  if (widget.allowMultiple)
+                    TextButton(
+                      onPressed: _finishMultiSelect,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      child: Text(
+                        _selectedPhotoIds.isEmpty ? 'Cancel' : 'Done',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                 ],
               ),
             ),
@@ -149,8 +209,12 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                       itemCount: _photos.length,
                       itemBuilder: (context, index) {
                         final photo = _photos[index];
+                        final isSelected =
+                            widget.allowMultiple && _selectedPhotoIds.contains(photo.id);
                         return GestureDetector(
-                          onTap: () => _selectPhoto(photo),
+                          onTap: _canSelectMore || isSelected
+                              ? () => _selectPhoto(photo)
+                              : null,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -159,6 +223,11 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                                 child: CachedNetworkImage(
                                   imageUrl: photo.urls.small,
                                   fit: BoxFit.cover,
+                                  color: isSelected
+                                      ? Colors.black.withValues(alpha: 0.35)
+                                      : null,
+                                  colorBlendMode:
+                                      isSelected ? BlendMode.darken : null,
                                   placeholder: (context, url) => Container(
                                     color: AppColors.surfaceMuted,
                                     child: const Center(child: CircularProgressIndicator()),
@@ -169,6 +238,23 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                                   ),
                                 ),
                               ),
+                              if (isSelected)
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.check_rounded,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
                               // Attribution overlay
                               Positioned(
                                 bottom: 0,
@@ -209,16 +295,35 @@ class _UnsplashSearchDialogState extends State<UnsplashSearchDialog> {
                 color: AppColors.surfaceMuted,
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  Text(
-                    'Photos by ',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                  ),
-                  const Text(
-                    'Unsplash',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  if (widget.allowMultiple)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        _selectedPhotoIds.isEmpty
+                            ? 'Tap photos to add them, then press Done'
+                            : '${_selectedPhotoIds.length} photo${_selectedPhotoIds.length == 1 ? '' : 's'} selected',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Photos by ',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                      const Text(
+                        'Unsplash',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ],
               ),
