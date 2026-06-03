@@ -16,6 +16,7 @@ import '../services/unsplash_service.dart';
 import '../models/collection_entity.dart';
 import '../widgets/unsplash_search_dialog.dart';
 import '../widgets/resolved_network_image.dart';
+import 'collection_detail_screen.dart';
 
 
 class CreateCollectionScreen extends StatefulWidget {
@@ -23,6 +24,8 @@ class CreateCollectionScreen extends StatefulWidget {
   final String userName;
   final String? userAvatarUrl;
   final CollectionEntity? existingCollection; // For editing
+  /// When true (default), replaces this screen with the new collection detail.
+  final bool openCollectionOnCreate;
 
   const CreateCollectionScreen({
     super.key,
@@ -30,6 +33,7 @@ class CreateCollectionScreen extends StatefulWidget {
     required this.userName,
     this.userAvatarUrl,
     this.existingCollection,
+    this.openCollectionOnCreate = true,
   });
 
   @override
@@ -807,7 +811,23 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
           isPublic: _isPublic,
           isOpenForContribution: _isOpenForContribution,
         );
-        await _firestoreService.createCollection(collection);
+        final collectionId = await _firestoreService.createCollection(collection);
+        if (mounted) {
+          if (widget.openCollectionOnCreate) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CollectionDetailScreen(
+                  collectionId: collectionId,
+                  currentUserId: widget.userId,
+                ),
+              ),
+            );
+          } else {
+            Navigator.pop(context, collectionId);
+          }
+        }
+        return;
       }
 
       if (mounted) {

@@ -267,7 +267,7 @@ class CollectionEntity {
     Object? googleMapsUrl = _unset,
     CategoryType? category,
     List<String>? tags,
-    String? coverImageUrl,
+    Object? coverImageUrl = _unset,
     List<String>? previewImageUrls,
     CollectionVisibility? visibility,
     bool? isPublic,
@@ -304,7 +304,9 @@ class CollectionEntity {
       googleMapsUrl: identical(googleMapsUrl, _unset) ? this.googleMapsUrl : googleMapsUrl as String?,
       category: category ?? this.category,
       tags: tags ?? this.tags,
-      coverImageUrl: coverImageUrl ?? this.coverImageUrl,
+      coverImageUrl: identical(coverImageUrl, _unset)
+          ? this.coverImageUrl
+          : coverImageUrl as String?,
       previewImageUrls: previewImageUrls ?? this.previewImageUrls,
       visibility: visibility ?? this.visibility,
       isPublic: isPublic ?? this.isPublic,

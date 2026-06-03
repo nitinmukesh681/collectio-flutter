@@ -196,20 +196,25 @@ class _ImportLinkScreenState extends State<ImportLinkScreen> {
   }
 
   Future<void> _createNewCollection() async {
-    final created = await Navigator.push<bool>(
+    final createdId = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (context) => CreateCollectionScreen(
           userId: widget.userId,
           userName: _resolvedUserName(context),
           userAvatarUrl: _resolvedUserAvatarUrl(context),
+          openCollectionOnCreate: false,
         ),
       ),
     );
 
-    if (created == true && mounted) {
+    if (createdId != null && createdId.isNotEmpty && mounted) {
       await _refreshUserCollections();
-      setState(_selectedCollectionIds.clear);
+      setState(() {
+        _selectedCollectionIds
+          ..clear()
+          ..add(createdId);
+      });
     }
   }
 

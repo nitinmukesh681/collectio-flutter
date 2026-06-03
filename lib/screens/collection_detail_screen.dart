@@ -2755,9 +2755,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   static const double _itemRatingBadgeHeight = 26;
   static const double _itemMenuButtonReservedWidth = 24;
   static const double _itemMetaRowTopGap = 4;
-  static const double _itemMetaRowAfterDescriptionGap = 8;
   static const double _itemImageThumbSize = 100;
   static const double _itemImagesTopGap = 12;
+  static const double _itemImagesAfterLinksGap = 22;
   static const TextHeightBehavior _itemTitleTextHeightBehavior = TextHeightBehavior(
     applyHeightToFirstAscent: true,
     applyHeightToLastDescent: false,
@@ -2971,7 +2971,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                               borderRadius: 6,
                               iconGap: 4,
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 4),
                           ],
                           _buildItemMenuButton(item: item, canEdit: canEdit, showGetInfo: showGetInfo),
                         ],
@@ -3003,7 +3003,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                           fontSize: 14,
                           height: 1.45,
                         ),
-                        textHeightBehavior: _itemTitleTextHeightBehavior,
                       ),
                     ),
                   ],
@@ -3012,8 +3011,20 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             },
           ),
 
+          if (hasWebsite || hasLocation) ...[
+            const SizedBox(height: _itemMetaRowTopGap),
+            _buildLinkLocationRow(
+              websiteUrl: item.websiteUrl,
+              googleMapsUrl: item.googleMapsUrl,
+            ),
+          ],
+
           if (hasImages) ...[
-            const SizedBox(height: _itemImagesTopGap),
+            SizedBox(
+              height: (hasWebsite || hasLocation)
+                  ? _itemImagesAfterLinksGap
+                  : _itemImagesTopGap,
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: SizedBox(
@@ -3043,20 +3054,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   ),
                 ),
               ),
-            ),
-          ],
-
-          if (hasWebsite || hasLocation) ...[
-            SizedBox(
-              height: hasImages
-                  ? 10
-                  : (hasDescription
-                      ? _itemMetaRowAfterDescriptionGap
-                      : _itemMetaRowTopGap),
-            ),
-            _buildLinkLocationRow(
-              websiteUrl: item.websiteUrl,
-              googleMapsUrl: item.googleMapsUrl,
             ),
           ],
         ],

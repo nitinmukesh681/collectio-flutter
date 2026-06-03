@@ -40,10 +40,10 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
   ],
   CategoryType.career: [
     _fillIcon(PhosphorIconsFill.briefcase),
-    _fillIcon(PhosphorIconsFill.graduationCap),
-    _fillIcon(PhosphorIconsFill.chalkboardTeacher),
+    _fillIcon(PhosphorIconsFill.certificate),
+    _fillIcon(PhosphorIconsFill.newspaper),
     _fillIcon(PhosphorIconsFill.identificationBadge),
-    _fillIcon(PhosphorIconsFill.chartLineUp),
+    _fillIcon(PhosphorIconsFill.presentationChart),
     _fillIcon(PhosphorIconsFill.laptop),
   ],
   CategoryType.home: [
@@ -52,7 +52,7 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
     _fillIcon(PhosphorIconsFill.lamp),
     _fillIcon(PhosphorIconsFill.plant),
     _fillIcon(PhosphorIconsFill.door),
-    _fillIcon(PhosphorIconsFill.coatHanger),
+    _fillIcon(PhosphorIconsFill.bed),
   ],
   CategoryType.travel: [
     _fillIcon(PhosphorIconsFill.airplane),
@@ -60,7 +60,7 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
     _fillIcon(PhosphorIconsFill.mapPin),
     _fillIcon(PhosphorIconsFill.globeHemisphereWest),
     _fillIcon(PhosphorIconsFill.compass),
-    _fillIcon(PhosphorIconsFill.camera),
+    _fillIcon(PhosphorIconsFill.train),
   ],
   CategoryType.tech: [
     _fillIcon(PhosphorIconsFill.code),
@@ -74,7 +74,7 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
     _fillIcon(PhosphorIconsFill.gameController),
     _fillIcon(PhosphorIconsFill.joystick),
     _fillIcon(PhosphorIconsFill.diceFive),
-    _fillIcon(PhosphorIconsFill.trophy),
+    _fillIcon(PhosphorIconsFill.ranking),
     _fillIcon(PhosphorIconsFill.target),
     _fillIcon(PhosphorIconsFill.puzzlePiece),
   ],
@@ -97,7 +97,7 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
   CategoryType.fashion: [
     _fillIcon(PhosphorIconsFill.tShirt),
     _fillIcon(PhosphorIconsFill.highHeel),
-    _fillIcon(PhosphorIconsFill.sparkle),
+    _fillIcon(PhosphorIconsFill.crownSimple),
     _fillIcon(PhosphorIconsFill.sunglasses),
     _fillIcon(PhosphorIconsFill.coatHanger),
     _fillIcon(PhosphorIconsFill.handbag),
@@ -123,8 +123,8 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
     _fillIcon(PhosphorIconsFill.palette),
     _fillIcon(PhosphorIconsFill.penNib),
     _fillIcon(PhosphorIconsFill.scissors),
-    _fillIcon(PhosphorIconsFill.sparkle),
-    _fillIcon(PhosphorIconsFill.camera),
+    _fillIcon(PhosphorIconsFill.swatches),
+    _fillIcon(PhosphorIconsFill.filmSlate),
   ],
   CategoryType.sports: [
     _fillIcon(PhosphorIconsFill.cricket),
@@ -136,7 +136,7 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
   ],
   CategoryType.beauty: [
     _fillIcon(PhosphorIconsFill.sparkle),
-    _fillIcon(PhosphorIconsFill.flowerLotus),
+    _fillIcon(PhosphorIconsFill.eyeglasses),
     _fillIcon(PhosphorIconsFill.drop),
     _fillIcon(PhosphorIconsFill.flower),
     _fillIcon(PhosphorIconsFill.flowerTulip),
@@ -144,27 +144,27 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
   ],
   CategoryType.learning: [
     _fillIcon(PhosphorIconsFill.graduationCap),
-    _fillIcon(PhosphorIconsFill.bookOpen),
+    _fillIcon(PhosphorIconsFill.brain),
     _fillIcon(PhosphorIconsFill.student),
     _fillIcon(PhosphorIconsFill.chalkboardTeacher),
-    _fillIcon(PhosphorIconsFill.notebook),
+    _fillIcon(PhosphorIconsFill.exam),
     _fillIcon(PhosphorIconsFill.lightbulb),
   ],
   CategoryType.business: [
-    _fillIcon(PhosphorIconsFill.briefcase),
+    _fillIcon(PhosphorIconsFill.briefcaseMetal),
     _fillIcon(PhosphorIconsFill.buildings),
-    _fillIcon(PhosphorIconsFill.chartLineUp),
+    _fillIcon(PhosphorIconsFill.chartBar),
     _fillIcon(PhosphorIconsFill.handshake),
-    _fillIcon(PhosphorIconsFill.currencyDollar),
-    _fillIcon(PhosphorIconsFill.laptop),
+    _fillIcon(PhosphorIconsFill.money),
+    _fillIcon(PhosphorIconsFill.desktopTower),
   ],
   CategoryType.events: [
     _fillIcon(PhosphorIconsFill.confetti),
     _fillIcon(PhosphorIconsFill.calendar),
-    _fillIcon(PhosphorIconsFill.ticket),
+    _fillIcon(PhosphorIconsFill.megaphone),
     _fillIcon(PhosphorIconsFill.champagne),
     _fillIcon(PhosphorIconsFill.balloon),
-    _fillIcon(PhosphorIconsFill.cake),
+    _fillIcon(PhosphorIconsFill.calendarStar),
   ],
   CategoryType.pets: [
     _fillIcon(PhosphorIconsFill.pawPrint),
@@ -176,10 +176,10 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
   ],
   CategoryType.gifting: [
     _fillIcon(PhosphorIconsFill.gift),
-    _fillIcon(PhosphorIconsFill.balloon),
+    _fillIcon(PhosphorIconsFill.handHeart),
     _fillIcon(PhosphorIconsFill.heart),
     _fillIcon(PhosphorIconsFill.package),
-    _fillIcon(PhosphorIconsFill.confetti),
+    _fillIcon(PhosphorIconsFill.stamp),
     _fillIcon(PhosphorIconsFill.envelope),
   ],
   CategoryType.music: [
@@ -208,18 +208,18 @@ final Map<CategoryType, List<IconData>> _primaryIconPools = {
   ],
   CategoryType.random: [
     _fillIcon(PhosphorIconsFill.shuffle),
-    _fillIcon(PhosphorIconsFill.diceFive),
+    _fillIcon(PhosphorIconsFill.shuffleAngular),
     _fillIcon(PhosphorIconsFill.asterisk),
     _fillIcon(PhosphorIconsFill.question),
-    _fillIcon(PhosphorIconsFill.star),
-    _fillIcon(PhosphorIconsFill.sparkle),
+    _fillIcon(PhosphorIconsFill.sealQuestion),
+    _fillIcon(PhosphorIconsFill.magicWand),
   ],
   CategoryType.other: [
-    _fillIcon(PhosphorIconsFill.star),
-    _fillIcon(PhosphorIconsFill.sparkle),
-    _fillIcon(PhosphorIconsFill.heart),
-    _fillIcon(PhosphorIconsFill.compass),
-    _fillIcon(PhosphorIconsFill.package),
+    _fillIcon(PhosphorIconsFill.bookmarkSimple),
+    _fillIcon(PhosphorIconsFill.circleDashed),
+    _fillIcon(PhosphorIconsFill.leaf),
+    _fillIcon(PhosphorIconsFill.archive),
+    _fillIcon(PhosphorIconsFill.folderOpen),
     _fillIcon(PhosphorIconsFill.acorn),
   ],
 };
@@ -252,19 +252,19 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
     _fillIcon(PhosphorIconsFill.personSimpleTaiChi),
   ],
   CategoryType.career: [
-    _fillIcon(PhosphorIconsFill.graduationCap),
-    _fillIcon(PhosphorIconsFill.chalkboardTeacher),
-    _fillIcon(PhosphorIconsFill.identificationBadge),
-    _fillIcon(PhosphorIconsFill.laptop),
-    _fillIcon(PhosphorIconsFill.chartLineUp),
     _fillIcon(PhosphorIconsFill.briefcase),
+    _fillIcon(PhosphorIconsFill.certificate),
+    _fillIcon(PhosphorIconsFill.newspaper),
+    _fillIcon(PhosphorIconsFill.identificationBadge),
+    _fillIcon(PhosphorIconsFill.presentationChart),
+    _fillIcon(PhosphorIconsFill.laptop),
   ],
   CategoryType.home: [
     _fillIcon(PhosphorIconsFill.armchair),
     _fillIcon(PhosphorIconsFill.lamp),
     _fillIcon(PhosphorIconsFill.plant),
     _fillIcon(PhosphorIconsFill.door),
-    _fillIcon(PhosphorIconsFill.coatHanger),
+    _fillIcon(PhosphorIconsFill.bed),
     _fillIcon(PhosphorIconsFill.house),
   ],
   CategoryType.travel: [
@@ -275,7 +275,7 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
     _fillIcon(PhosphorIconsFill.mountains),
     _fillIcon(PhosphorIconsFill.backpack),
     _fillIcon(PhosphorIconsFill.binoculars),
-    _fillIcon(PhosphorIconsFill.ticket),
+    _fillIcon(PhosphorIconsFill.mapTrifold),
     _fillIcon(PhosphorIconsFill.airplaneTakeoff),
   ],
   CategoryType.tech: [
@@ -289,7 +289,7 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
   CategoryType.gaming: [
     _fillIcon(PhosphorIconsFill.joystick),
     _fillIcon(PhosphorIconsFill.diceFive),
-    _fillIcon(PhosphorIconsFill.trophy),
+    _fillIcon(PhosphorIconsFill.ranking),
     _fillIcon(PhosphorIconsFill.gameController),
     _fillIcon(PhosphorIconsFill.puzzlePiece),
   ],
@@ -314,7 +314,7 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
     _fillIcon(PhosphorIconsFill.sunglasses),
     _fillIcon(PhosphorIconsFill.handbag),
     _fillIcon(PhosphorIconsFill.coatHanger),
-    _fillIcon(PhosphorIconsFill.sparkle),
+    _fillIcon(PhosphorIconsFill.crownSimple),
     _fillIcon(PhosphorIconsFill.tShirt),
   ],
   CategoryType.books: [
@@ -338,8 +338,8 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
     _fillIcon(PhosphorIconsFill.penNib),
     _fillIcon(PhosphorIconsFill.scissors),
     _fillIcon(PhosphorIconsFill.paintBrush),
-    _fillIcon(PhosphorIconsFill.sparkle),
-    _fillIcon(PhosphorIconsFill.camera),
+    _fillIcon(PhosphorIconsFill.swatches),
+    _fillIcon(PhosphorIconsFill.filmSlate),
   ],
   CategoryType.sports: [
     _fillIcon(PhosphorIconsFill.baseball),
@@ -350,7 +350,7 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
     _fillIcon(PhosphorIconsFill.tennisBall),
   ],
   CategoryType.beauty: [
-    _fillIcon(PhosphorIconsFill.flowerLotus),
+    _fillIcon(PhosphorIconsFill.eyeglasses),
     _fillIcon(PhosphorIconsFill.drop),
     _fillIcon(PhosphorIconsFill.flower),
     _fillIcon(PhosphorIconsFill.flowerTulip),
@@ -360,25 +360,25 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
   CategoryType.learning: [
     _fillIcon(PhosphorIconsFill.student),
     _fillIcon(PhosphorIconsFill.chalkboardTeacher),
-    _fillIcon(PhosphorIconsFill.notebook),
+    _fillIcon(PhosphorIconsFill.exam),
     _fillIcon(PhosphorIconsFill.lightbulb),
-    _fillIcon(PhosphorIconsFill.bookOpen),
+    _fillIcon(PhosphorIconsFill.brain),
     _fillIcon(PhosphorIconsFill.graduationCap),
   ],
   CategoryType.business: [
     _fillIcon(PhosphorIconsFill.buildings),
     _fillIcon(PhosphorIconsFill.handshake),
-    _fillIcon(PhosphorIconsFill.chartLineUp),
-    _fillIcon(PhosphorIconsFill.briefcase),
-    _fillIcon(PhosphorIconsFill.laptop),
-    _fillIcon(PhosphorIconsFill.currencyDollar),
+    _fillIcon(PhosphorIconsFill.chartBar),
+    _fillIcon(PhosphorIconsFill.invoice),
+    _fillIcon(PhosphorIconsFill.desktopTower),
+    _fillIcon(PhosphorIconsFill.money),
   ],
   CategoryType.events: [
     _fillIcon(PhosphorIconsFill.calendar),
-    _fillIcon(PhosphorIconsFill.ticket),
+    _fillIcon(PhosphorIconsFill.megaphone),
     _fillIcon(PhosphorIconsFill.champagne),
     _fillIcon(PhosphorIconsFill.balloon),
-    _fillIcon(PhosphorIconsFill.cake),
+    _fillIcon(PhosphorIconsFill.calendarStar),
     _fillIcon(PhosphorIconsFill.confetti),
   ],
   CategoryType.pets: [
@@ -390,10 +390,10 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
     _fillIcon(PhosphorIconsFill.pawPrint),
   ],
   CategoryType.gifting: [
-    _fillIcon(PhosphorIconsFill.balloon),
+    _fillIcon(PhosphorIconsFill.handHeart),
     _fillIcon(PhosphorIconsFill.heart),
     _fillIcon(PhosphorIconsFill.package),
-    _fillIcon(PhosphorIconsFill.confetti),
+    _fillIcon(PhosphorIconsFill.stamp),
     _fillIcon(PhosphorIconsFill.envelope),
     _fillIcon(PhosphorIconsFill.gift),
   ],
@@ -422,19 +422,19 @@ final Map<CategoryType, List<IconData>> _coverIconPools = {
     _fillIcon(PhosphorIconsFill.handsPraying),
   ],
   CategoryType.random: [
-    _fillIcon(PhosphorIconsFill.diceFive),
+    _fillIcon(PhosphorIconsFill.shuffleAngular),
     _fillIcon(PhosphorIconsFill.asterisk),
     _fillIcon(PhosphorIconsFill.question),
-    _fillIcon(PhosphorIconsFill.star),
-    _fillIcon(PhosphorIconsFill.sparkle),
+    _fillIcon(PhosphorIconsFill.sealQuestion),
+    _fillIcon(PhosphorIconsFill.magicWand),
     _fillIcon(PhosphorIconsFill.shuffle),
   ],
   CategoryType.other: [
-    _fillIcon(PhosphorIconsFill.sparkle),
-    _fillIcon(PhosphorIconsFill.heart),
-    _fillIcon(PhosphorIconsFill.compass),
-    _fillIcon(PhosphorIconsFill.package),
-    _fillIcon(PhosphorIconsFill.star),
+    _fillIcon(PhosphorIconsFill.bookmarkSimple),
+    _fillIcon(PhosphorIconsFill.leaf),
+    _fillIcon(PhosphorIconsFill.archive),
+    _fillIcon(PhosphorIconsFill.folderOpen),
+    _fillIcon(PhosphorIconsFill.circleDashed),
     _fillIcon(PhosphorIconsFill.acorn),
   ],
 };
@@ -444,6 +444,22 @@ List<IconData> _poolFor(CategoryType category) =>
 
 List<IconData> _coverPoolFor(CategoryType category) =>
     _coverIconPools[category] ?? _coverIconPools[CategoryType.other]!;
+
+/// Returns icon code points that appear in more than one [CategoryType].
+Set<int> findCrossCategoryIconCodePointDuplicates() {
+  final iconToCategories = <int, Set<CategoryType>>{};
+  for (final pool in [_primaryIconPools, _coverIconPools]) {
+    for (final entry in pool.entries) {
+      for (final icon in entry.value) {
+        iconToCategories.putIfAbsent(icon.codePoint, () => {}).add(entry.key);
+      }
+    }
+  }
+  return iconToCategories.entries
+      .where((entry) => entry.value.length > 1)
+      .map((entry) => entry.key)
+      .toSet();
+}
 
 /// Stable seed so different collections in the same category get different icons.
 String collectionCoverSeed({

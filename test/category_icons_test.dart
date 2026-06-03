@@ -52,8 +52,8 @@ void main() {
     ));
   });
 
-  testWidgets('cover icon picker is stable for the same seed', (tester) async {
-    const seed = collectionCoverSeed(
+  test('cover icon picker is stable for the same seed', () {
+    final seed = collectionCoverSeed(
       collectionId: 'stable-collection-id',
       title: 'My Collection',
     );
@@ -62,7 +62,7 @@ void main() {
     expect(first.codePoint, second.codePoint);
   });
 
-  testWidgets('different titles pick different cover icons when possible', () {
+  test('different titles pick different cover icons when possible', () {
     final melbourne = categoryCoverIcon(
       CategoryType.travel,
       collectionCoverSeed(
@@ -78,5 +78,9 @@ void main() {
       ),
     );
     expect(melbourne.codePoint, isNot(equals(manali.codePoint)));
+  });
+
+  test('category icon pools do not share icons across categories', () {
+    expect(findCrossCategoryIconCodePointDuplicates(), isEmpty);
   });
 }
