@@ -415,27 +415,41 @@ class _AddItemScreenState extends State<AddItemScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Preserve add order: upload local files inline, keep existing URLs as-is.
-      final imageUrls = <String>[];
+      // Preserve add order; upload new local files in parallel.
+      final orderedUrls = List<String?>.filled(_imageItems.length, null);
       final uploadBaseMs = DateTime.now().millisecondsSinceEpoch;
       var uploadIndex = 0;
-      for (final image in _imageItems) {
+      final uploadFutures = <Future<void>>[];
+
+      for (var i = 0; i < _imageItems.length; i++) {
+        final image = _imageItems[i];
         if (image.isNetwork) {
           final url = image.url?.trim();
           if (url != null && url.isNotEmpty) {
-            imageUrls.add(url);
+            orderedUrls[i] = url;
           }
         } else if (image.file != null) {
-          final url = await _firestoreService.uploadImage(
-            image.file!,
-            'items/${widget.collectionId}/${uploadBaseMs}_$uploadIndex.jpg',
-          );
+          final slot = i;
+          final path =
+              'items/${widget.collectionId}/${uploadBaseMs}_$uploadIndex.jpg';
           uploadIndex++;
-          if (url != null) {
-            imageUrls.add(url);
-          }
+          uploadFutures.add(() async {
+            final url = await _firestoreService.uploadImage(image.file!, path);
+            if (url != null) {
+              orderedUrls[slot] = url;
+            }
+          }());
         }
       }
+
+      if (uploadFutures.isNotEmpty) {
+        await Future.wait(uploadFutures);
+      }
+
+      final imageUrls = orderedUrls
+          .whereType<String>()
+          .where((url) => url.isNotEmpty)
+          .toList(growable: false);
 
       if (_isEditing) {
         // Determine final Google Maps URL
