@@ -329,6 +329,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     String actionText;
     String? subtitle;
     bool showFollowBack = false;
+    bool showCollabInviteActions = false;
+    bool showCollabRequestActions = false;
 
     final fromUsername = data['fromUsername'] as String? ?? 'Someone';
     final collectionTitle = data['collectionTitle'] as String?;
@@ -372,6 +374,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         icon = Icons.group_add_rounded;
         iconColor = Colors.blueAccent;
         actionText = ' invited you to collaborate';
+        subtitle = collectionTitle;
+        showCollabInviteActions = type == 'collaboration_invite';
+        break;
+      case 'collaboration_request':
+        icon = Icons.group_add_rounded;
+        iconColor = Colors.blueAccent;
+        actionText = ' requested to collaborate';
+        subtitle = collectionTitle;
+        showCollabRequestActions = true;
+        break;
+      case 'collaboration_accepted':
+        icon = Icons.check_circle_rounded;
+        iconColor = Colors.teal;
+        actionText = ' added you as a collaborator';
         subtitle = collectionTitle;
         break;
       case 'comment':
@@ -515,12 +531,170 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     const SizedBox(height: 8),
                     _buildFollowBackRow(fromUserId),
                   ],
+                  if (showCollabInviteActions &&
+                      collectionId != null &&
+                      collectionId.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _buildCollaborationInviteActions(
+                      notificationId: id,
+                      collectionId: collectionId,
+                    ),
+                  ],
+                  if (showCollabRequestActions &&
+                      collectionId != null &&
+                      collectionId.isNotEmpty &&
+                      fromUserId != null &&
+                      fromUserId.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _buildCollaborationRequestActions(
+                      notificationId: id,
+                      collectionId: collectionId,
+                      requesterId: fromUserId,
+                      requesterUsername: fromUsername,
+                      role: (data['role'] as String?) ?? 'EDITOR',
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCollaborationInviteActions({
+    required String notificationId,
+    required String collectionId,
+  }) {
+    return Row(
+      children: [
+        OutlinedButton(
+          onPressed: () async {
+            try {
+              final user = await _firestoreService.getUser(widget.userId);
+              await _firestoreService.acceptCollaboratorInvite(
+                collectionId: collectionId,
+                userId: widget.userId,
+                username: user?.userName ?? 'user',
+              );
+              _markAsRead(notificationId);
+              if (mounted) {
+                SnackBarUtils.showSuccessSnackBar(context, 'Collaboration accepted');
+                setState(() {});
+              }
+            } catch (e) {
+              if (mounted) {
+                SnackBarUtils.showErrorSnackBar(context, 'Could not accept: $e');
+              }
+            }
+          },
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primaryPurple,
+            side: const BorderSide(color: AppColors.primaryPurple),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text('Accept', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12)),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton(
+          onPressed: () async {
+            try {
+              await _firestoreService.declineCollaboratorInvite(
+                collectionId: collectionId,
+                userId: widget.userId,
+              );
+              _markAsRead(notificationId);
+              if (mounted) {
+                SnackBarUtils.showInfoSnackBar(context, 'Invite declined');
+                setState(() {});
+              }
+            } catch (e) {
+              if (mounted) {
+                SnackBarUtils.showErrorSnackBar(context, 'Could not decline: $e');
+              }
+            }
+          },
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text('Decline', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 12)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCollaborationRequestActions({
+    required String notificationId,
+    required String collectionId,
+    required String requesterId,
+    required String requesterUsername,
+    required String role,
+  }) {
+    return Row(
+      children: [
+        OutlinedButton(
+          onPressed: () async {
+            try {
+              await _firestoreService.acceptCollaboratorRequest(
+                collectionId: collectionId,
+                requesterId: requesterId,
+                requesterUsername: requesterUsername,
+                role: role.toLowerCase() == 'viewer' ? 'viewer' : 'editor',
+                ownerId: widget.userId,
+                ownerUsername: _currentUsername.isNotEmpty ? _currentUsername : 'owner',
+              );
+              _markAsRead(notificationId);
+              if (mounted) {
+                SnackBarUtils.showSuccessSnackBar(context, 'Collaborator added');
+                setState(() {});
+              }
+            } catch (e) {
+              if (mounted) {
+                SnackBarUtils.showErrorSnackBar(context, 'Could not accept: $e');
+              }
+            }
+          },
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primaryPurple,
+            side: const BorderSide(color: AppColors.primaryPurple),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text('Accept', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12)),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton(
+          onPressed: () async {
+            try {
+              await _firestoreService.declineCollaboratorRequest(
+                collectionId: collectionId,
+                requesterId: requesterId,
+              );
+              _markAsRead(notificationId);
+              if (mounted) {
+                SnackBarUtils.showInfoSnackBar(context, 'Request declined');
+                setState(() {});
+              }
+            } catch (e) {
+              if (mounted) {
+                SnackBarUtils.showErrorSnackBar(context, 'Could not decline: $e');
+              }
+            }
+          },
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text('Decline', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 12)),
+        ),
+      ],
     );
   }
 
@@ -602,6 +776,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'collaborate':
       case 'collaboration_invite':
       case 'collaborator_added':
+      case 'collaboration_accepted':
+      case 'collaboration_request':
         if (data['collectionId'] != null) {
           Navigator.push(
             context,

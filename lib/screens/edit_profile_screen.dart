@@ -181,6 +181,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         await evictAvatarImageCache(
           previousUrl: previousAvatarUrl,
           newUrl: updatedUser.avatarUrl,
+          userId: auth.userId,
         );
       }
 

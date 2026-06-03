@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_entity.dart';
 import '../theme/app_theme.dart';
+import '../utils/avatar_display_utils.dart';
 import 'avatar_fallback.dart';
 
 /// Centered profile header: avatar, identity, bio, stats, action button.
@@ -401,7 +402,7 @@ class ProfileHeaderLayout extends StatelessWidget {
           return CachedNetworkImage(
             key: ValueKey(url),
             imageUrl: url,
-            cacheKey: url,
+            cacheKey: avatarImageCacheKey(userId: user.id, url: url),
             fit: BoxFit.cover,
             fadeInDuration: Duration.zero,
             errorWidget: (_, __, ___) => fallback(),
@@ -414,7 +415,7 @@ class ProfileHeaderLayout extends StatelessWidget {
     return CachedNetworkImage(
       key: ValueKey(url),
       imageUrl: url,
-      cacheKey: url,
+      cacheKey: avatarImageCacheKey(userId: user.id, url: url),
       fit: BoxFit.cover,
       fadeInDuration: Duration.zero,
       errorWidget: (_, __, ___) => fallback(),

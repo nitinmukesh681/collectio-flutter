@@ -18,6 +18,7 @@ import 'utils/link_import_utils.dart';
 import 'utils/link_title_utils.dart';
 import 'utils/share_intent_controller.dart';
 import 'utils/username_utils.dart';
+import 'services/avatar_denormalized_migration.dart';
 import 'services/username_lowercase_migration.dart';
 import 'services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -119,6 +120,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _didHandlePendingShare = false;
   bool _isCheckingAndroidShare = false;
   bool _usernameMigrationStarted = false;
+  bool _avatarMigrationStarted = false;
   bool _legacySearchSyncInFlight = false;
   static const _shareExtensionChannel = MethodChannel('com.collectio.app/share_extension');
 
@@ -129,6 +131,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     ShareIntentController.attach(_handleNativeSharePayload);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runUsernameMigrationIfNeeded();
+      _runAvatarMigrationIfNeeded();
       // Android cold start from share can report zero viewport on first frame.
       Future<void>.delayed(const Duration(milliseconds: 150), () {
         if (mounted) _initShareIntentListeners();
@@ -185,6 +188,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       setState(() {});
     }
     _runUsernameMigrationIfNeeded();
+    _runAvatarMigrationIfNeeded();
     _runLegacySearchIndexSyncIfNeeded();
   }
 
@@ -232,6 +236,29 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         (Object e, StackTrace st) {
           debugPrint('[Migration] Username lowercase migration failed: $e');
           _usernameMigrationStarted = false;
+        },
+      ),
+    );
+  }
+
+  void _runAvatarMigrationIfNeeded() {
+    if (_avatarMigrationStarted) return;
+    final auth = _auth;
+    if (auth == null || !auth.isAuthenticated || !auth.firebaseReady) return;
+
+    _avatarMigrationStarted = true;
+    try {
+      Firebase.app();
+    } catch (_) {
+      _avatarMigrationStarted = false;
+      return;
+    }
+
+    unawaited(
+      AvatarDenormalizedMigration.runIfNeeded(FirebaseFirestore.instance).catchError(
+        (Object e, StackTrace st) {
+          debugPrint('[Migration] Denormalized avatar migration failed: $e');
+          _avatarMigrationStarted = false;
         },
       ),
     );

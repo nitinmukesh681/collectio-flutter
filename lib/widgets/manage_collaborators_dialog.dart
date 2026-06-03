@@ -38,6 +38,8 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
   
   List<UserEntity> _searchResults = [];
   List<Map<String, dynamic>> _collaborators = [];
+  List<Map<String, dynamic>> _requests = [];
+  List<Map<String, dynamic>> _pendingInvites = [];
   String _selectedRole = 'editor';
   bool _isLoadingCollaborators = false;
   bool _isSearching = false;
@@ -63,6 +65,16 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
           _collaborators = collection.collaborators
               .map((c) => {'userId': c['userId'], 'username': c['username'], 'role': c['role']})
               .toList();
+          _requests = collection.collaboratorRequests
+              .map((c) => {'userId': c['userId'], 'username': c['username']})
+              .toList();
+          _pendingInvites = collection.collaboratorInvites
+              .map((c) => {
+                    'userId': c['userId'],
+                    'username': c['username'],
+                    'role': c['role'],
+                  })
+              .toList();
         });
       }
     } catch (e) {
@@ -87,6 +99,8 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
       final filtered = results.where((user) {
         if (user.id == widget.currentUserId) return false;
         if (_collaborators.any((c) => c['userId'] == user.id)) return false;
+        if (_requests.any((c) => c['userId'] == user.id)) return false;
+        if (_pendingInvites.any((c) => c['userId'] == user.id)) return false;
         return true;
       }).toList();
 
@@ -100,6 +114,7 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
 
   Future<void> _addCollaborator(UserEntity user) async {
     final role = widget.isPublicCollection ? 'editor' : _selectedRole;
+    final hadRequest = _requests.any((c) => c['userId'] == user.id);
     setState(() => _isLoadingCollaborators = true);
     try {
       await _firestoreService.addCollaborator(
@@ -112,19 +127,25 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
         collectionTitle: widget.collectionTitle,
       );
       
+      await _loadCollaborators();
       setState(() {
-        _collaborators.add({
-          'userId': user.id,
-          'username': user.userName,
-          'role': role.toUpperCase(),
-        });
         _searchController.clear();
         _searchResults = [];
       });
-      
+
       if (mounted) {
-        final label = role == 'editor' ? 'edit' : 'view';
-        SnackBarUtils.showSuccessSnackBar(context, 'Added ${user.userName} with $label access');
+        if (hadRequest) {
+          final label = role == 'editor' ? 'edit' : 'view';
+          SnackBarUtils.showSuccessSnackBar(
+            context,
+            'Added ${user.userName} with $label access',
+          );
+        } else {
+          SnackBarUtils.showSuccessSnackBar(
+            context,
+            'Invite sent to ${user.userName}',
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error adding collaborator: $e');
@@ -170,6 +191,66 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
       });
     } catch (e) {
       debugPrint('Error removing collaborator: $e');
+    }
+    if (mounted) setState(() => _isLoadingCollaborators = false);
+  }
+
+  Future<void> _acceptRequest(Map<String, dynamic> request) async {
+    final userId = request['userId'] as String? ?? '';
+    final username = request['username'] as String? ?? 'User';
+    if (userId.isEmpty) return;
+
+    final role = widget.isPublicCollection ? 'editor' : _selectedRole;
+    setState(() => _isLoadingCollaborators = true);
+    try {
+      await _firestoreService.acceptCollaboratorRequest(
+        collectionId: widget.collectionId,
+        requesterId: userId,
+        requesterUsername: username,
+        role: role,
+        ownerId: widget.currentUserId,
+        ownerUsername: widget.currentUserName,
+      );
+      await _loadCollaborators();
+      if (mounted) {
+        SnackBarUtils.showSuccessSnackBar(context, 'Added @$username as collaborator');
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(context, 'Could not accept request: $e');
+      }
+    }
+    if (mounted) setState(() => _isLoadingCollaborators = false);
+  }
+
+  Future<void> _declineRequest(String userId) async {
+    setState(() => _isLoadingCollaborators = true);
+    try {
+      await _firestoreService.declineCollaboratorRequest(
+        collectionId: widget.collectionId,
+        requesterId: userId,
+      );
+      await _loadCollaborators();
+    } catch (e) {
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(context, 'Could not decline request: $e');
+      }
+    }
+    if (mounted) setState(() => _isLoadingCollaborators = false);
+  }
+
+  Future<void> _cancelInvite(String userId) async {
+    setState(() => _isLoadingCollaborators = true);
+    try {
+      await _firestoreService.cancelCollaboratorInvite(
+        collectionId: widget.collectionId,
+        userId: userId,
+      );
+      await _loadCollaborators();
+    } catch (e) {
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(context, 'Could not cancel invite: $e');
+      }
     }
     if (mounted) setState(() => _isLoadingCollaborators = false);
   }
@@ -338,6 +419,75 @@ class _ManageCollaboratorsDialogState extends State<ManageCollaboratorsDialog> {
                   },
                 ),
               ),
+
+            if (_requests.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Collaboration requests (${_requests.length})',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              ..._requests.map((request) {
+                final userId = request['userId'] as String? ?? '';
+                final username = request['username'] as String? ?? 'user';
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('@$username'),
+                  subtitle: const Text(
+                    'Requested to collaborate',
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: _isLoadingCollaborators
+                            ? null
+                            : () => _declineRequest(userId),
+                        child: const Text('Decline'),
+                      ),
+                      FilledButton(
+                        onPressed: _isLoadingCollaborators
+                            ? null
+                            : () => _acceptRequest(request),
+                        child: const Text('Accept'),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+
+            if (_pendingInvites.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Pending invites (${_pendingInvites.length})',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              ..._pendingInvites.map((invite) {
+                final userId = invite['userId'] as String? ?? '';
+                final username = invite['username'] as String? ?? 'user';
+                final role = invite['role'] as String? ?? 'EDITOR';
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('@$username'),
+                  subtitle: Text(
+                    'Awaiting acceptance · ${_roleLabel(role)}',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    tooltip: 'Cancel invite',
+                    onPressed: _isLoadingCollaborators
+                        ? null
+                        : () => _cancelInvite(userId),
+                  ),
+                );
+              }),
+            ],
 
             const SizedBox(height: 16),
             const Divider(),

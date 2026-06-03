@@ -15,6 +15,13 @@ class ShareViewController: UIViewController {
     private let sharedKey = "ShareKey"
     private var didHandleShare = false
 
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Avoid flashing the extension UI while we hand off to the host app.
+        view.isHidden = true
+        view.alpha = 0
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         NSLog("[Share:1] viewDidAppear — didHandleShare=\(didHandleShare)")
@@ -132,38 +139,79 @@ class ShareViewController: UIViewController {
     }
     
     private func openMainAppAndComplete() {
-        NSLog("[Share:6] openMainAppAndComplete — calling openMainApp then completing after 0.3s")
-        openMainApp()
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            NSLog("[Share:6] openMainAppAndComplete — delay complete, calling completeExtension")
-            self?.completeExtension()
+        NSLog("[Share:6] openMainAppAndComplete — opening host app")
+        openMainApp { [weak self] in
+            // Brief delay so iOS can switch to the host app before the sheet dismisses.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                self?.completeExtension()
+            }
         }
     }
-    
-    private func openMainApp() {
-        guard let url = URL(string: "collectio://share") else {
-            NSLog("[Share:7] openMainApp — ERROR: failed to create URL 'collectio://share'")
+
+    /// Deep links registered on the host app (Runner/Info.plist CFBundleURLSchemes).
+    private var hostAppOpenURLs: [URL] {
+        [
+            URL(string: "collectio://share"),
+            URL(string: "com.sneha.iosfinds://share"),
+        ].compactMap { $0 }
+    }
+
+    private func openMainApp(completion: @escaping () -> Void) {
+        let urls = hostAppOpenURLs
+        guard !urls.isEmpty else {
+            NSLog("[Share:7] openMainApp — ERROR: no host app URLs configured")
+            completion()
             return
         }
-        
-        NSLog("[Share:7] openMainApp — attempting to open '\(url)' via responder chain")
-        
-        var responder: UIResponder? = self as UIResponder
-        var depth = 0
+
+        tryOpenHostApp(urls: urls, index: 0) { opened in
+            NSLog("[Share:7] openMainApp — finished, hostAppOpened=\(opened)")
+            completion()
+        }
+    }
+
+    private func tryOpenHostApp(urls: [URL], index: Int, completion: @escaping (Bool) -> Void) {
+        guard index < urls.count else {
+            completion(false)
+            return
+        }
+
+        let url = urls[index]
+        NSLog("[Share:7] tryOpenHostApp — attempt \(index + 1)/\(urls.count) url=\(url.absoluteString)")
+
+        openHostAppViaResponderChain(url: url)
+
+        guard let context = extensionContext else {
+            NSLog("[Share:7] tryOpenHostApp — extensionContext nil, responder chain only")
+            completion(true)
+            return
+        }
+
+        DispatchQueue.main.async {
+            context.open(url) { [weak self] success in
+                NSLog("[Share:7] tryOpenHostApp — extensionContext.open success=\(success) url=\(url.absoluteString)")
+                if success {
+                    completion(true)
+                    return
+                }
+                self?.tryOpenHostApp(urls: urls, index: index + 1, completion: completion)
+            }
+        }
+    }
+
+    /// Fallback when [NSExtensionContext.open] returns false (common on recent iOS versions).
+    private func openHostAppViaResponderChain(url: URL) {
         let selector = sel_registerName("openURL:")
-        while responder != nil {
-            NSLog("[Share:7] openMainApp — responder[\(depth)]=\(type(of: responder!)) responds=\(responder!.responds(to: selector))")
-            if responder!.responds(to: selector) {
-                responder!.perform(selector, with: url)
-                NSLog("[Share:7] openMainApp — SUCCESS: opened main app via responder chain at depth \(depth)")
+        var responder: UIResponder? = self
+        while let current = responder {
+            if current.responds(to: selector) {
+                _ = current.perform(selector, with: url)
+                NSLog("[Share:7] openHostAppViaResponderChain — performed openURL on \(String(describing: type(of: current)))")
                 return
             }
-            responder = responder?.next
-            depth += 1
+            responder = current.next
         }
-        
-        NSLog("[Share:7] openMainApp — FAILED: no responder in chain responded to openURL:. Data is saved in UserDefaults for next app launch.")
+        NSLog("[Share:7] openHostAppViaResponderChain — no responder handled openURL:")
     }
     
     private func completeExtension() {

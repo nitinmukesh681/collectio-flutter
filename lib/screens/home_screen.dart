@@ -28,18 +28,17 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  final ScrollController _feedScrollController = ScrollController();
   int _selectedIndex = 0;
 
   // Stream subscriptions
   StreamSubscription<List<CollectionEntity>>? _followingSubscription;
-  StreamSubscription<List<CollectionEntity>>? _publicSubscription;
   StreamSubscription<List<CollectionEntity>>? _collabSubscription;
   
   // Data lists
   List<CollectionEntity> _collabCollections = [];
   List<CollectionEntity> _feedCollections = [];
   List<CollectionEntity> _followingCollections = [];
-  List<CollectionEntity> _publicCollections = [];
   
   bool _isLoadingCollabs = true;
   bool _isLoadingFeed = true;
@@ -68,21 +67,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     );
 
-    // Setup public collections stream
-    _publicSubscription = _firestoreService.getPublicCollectionsStream(limit: 20).listen(
-      (collections) {
-        if (mounted) {
-          setState(() {
-            _publicCollections = collections;
-            _mergeFeedCollections();
-          });
-        }
-      },
-      onError: (error) {
-        debugPrint('Error in public collections stream: $error');
-      }
-    );
-
     // Setup collaborations stream
     _collabSubscription = _firestoreService.getOpenCollaborationCollectionsStream().listen(
       (collections) {
@@ -101,34 +85,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _mergeFeedCollections() {
-    // Merge & Deduplicate following and public collections
-    final Map<String, CollectionEntity> mergedMap = {};
-    
-    for (var c in _followingCollections) {
-      mergedMap[c.id] = c;
-    }
-    for (var c in _publicCollections) {
-      if (!mergedMap.containsKey(c.id)) {
-        mergedMap[c.id] = c;
-      }
-    }
-    
-    final combinedList = mergedMap.values.toList();
-    
-    // Sort by CreatedAt Descending
-    combinedList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final feed = List<CollectionEntity>.from(_followingCollections)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     setState(() {
-      _feedCollections = combinedList;
+      _feedCollections = feed;
       _isLoadingFeed = false;
     });
+  }
+
+  void _scrollFeedToTop() {
+    if (!_feedScrollController.hasClients) return;
+    _feedScrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
   void dispose() {
     _followingSubscription?.cancel();
-    _publicSubscription?.cancel();
     _collabSubscription?.cancel();
+    _feedScrollController.dispose();
     super.dispose();
   }
 
@@ -165,11 +144,11 @@ class _HomeScreenState extends State<HomeScreen> {
               onRefresh: () async {
                 // Refresh all streams by canceling and recreating them
                 await _followingSubscription?.cancel();
-                await _publicSubscription?.cancel();
                 await _collabSubscription?.cancel();
                 _setupRealtimeStreams();
               },
               child: CustomScrollView(
+                controller: _feedScrollController,
                 slivers: [
                   SliverToBoxAdapter(
                     child: _buildFeedPageHeader(auth),
@@ -227,7 +206,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             const Icon(Icons.feed_outlined, size: 64, color: AppColors.textMuted),
                             const SizedBox(height: 16),
                             Text(
-                              'Your feed is empty',
+                              'Follow people to see their collections here',
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -571,8 +551,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
-        if (isSpecial && onSpecialTap != null) { onSpecialTap(); }
-        else { setState(() => _selectedIndex = index); }
+        if (isSpecial && onSpecialTap != null) {
+          onSpecialTap();
+        } else if (index == 0 && _selectedIndex == 0) {
+          _scrollFeedToTop();
+        } else {
+          setState(() => _selectedIndex = index);
+        }
       },
       behavior: HitTestBehavior.opaque,
       child: SizedBox(

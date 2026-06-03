@@ -409,6 +409,7 @@ class AuthProvider extends ChangeNotifier {
       await evictAvatarImageCache(
         previousUrl: previousAvatarUrl,
         newUrl: updatedUser.avatarUrl,
+        userId: updatedUser.id,
       );
       await _firestoreService!.syncUserAvatarDenormalized(
         userId: updatedUser.id,

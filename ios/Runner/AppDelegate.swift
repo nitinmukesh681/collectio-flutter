@@ -27,6 +27,15 @@ import UIKit
       self?.checkAndProcessSharedData()
       self?.handleShareExtensionURL()
     }
+
+    NotificationCenter.default.addObserver(
+      forName: UIApplication.didBecomeActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      self?.checkAndProcessSharedData()
+      self?.handleShareExtensionURL()
+    }
   }
   
   private func setupMethodChannel(messenger: FlutterBinaryMessenger) {
@@ -84,8 +93,9 @@ import UIKit
     result(true)
   }
   
-  // Called by SceneDelegate when collectio://share URL is received
+  // Called by SceneDelegate when a share deep link is received.
   func handleShareExtensionURL(retryCount: Int = 0) {
+    checkAndProcessSharedData()
     NSLog("[AppDelegate:url] handleShareExtensionURL — checking appGroup '\(appGroupId)' key '\(sharedKey)'")
     if let userDefaults = UserDefaults(suiteName: appGroupId),
        let sharedUrl = userDefaults.string(forKey: sharedKey),
@@ -112,8 +122,11 @@ import UIKit
   // Fallback for non-scene based URL handling
   override func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
     NSLog("[AppDelegate:openURL] application(_:open:) — url='\(url)' scheme='\(url.scheme ?? "nil")' host='\(url.host ?? "nil")'")
-    if url.scheme == "collectio" && url.host == "share" {
-      NSLog("[AppDelegate:openURL] collectio://share matched — calling handleShareExtensionURL")
+    let isShareDeepLink =
+      (url.scheme == "collectio" && url.host == "share") ||
+      (url.scheme == "com.sneha.iosfinds" && url.host == "share")
+    if isShareDeepLink {
+      NSLog("[AppDelegate:openURL] share deep link matched — calling handleShareExtensionURL")
       handleShareExtensionURL()
       return true
     }

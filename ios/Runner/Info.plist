@@ -42,6 +42,16 @@
 				<string>collectio</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.sneha.iosfinds</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.sneha.iosfinds</string>
+			</array>
+		</dict>
 	</array>
 	<key>FlutterDeepLinkingEnabled</key>
 	<false/>

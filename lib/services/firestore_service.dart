@@ -472,6 +472,10 @@ class FirestoreService {
         ? {'userAvatarUrl': FieldValue.delete()}
         : {'userAvatarUrl': avatarUrl.trim()};
 
+    final notificationUpdate = (avatarUrl == null || avatarUrl.trim().isEmpty)
+        ? {'fromUserAvatarUrl': FieldValue.delete()}
+        : {'fromUserAvatarUrl': avatarUrl.trim()};
+
     try {
       await _updateQueryDocumentsInBatches(
         _collectionsRef.where('userId', isEqualTo: userId),
@@ -481,8 +485,36 @@ class FirestoreService {
         _commentsRef.where('userId', isEqualTo: userId),
         updateData,
       );
+      await _updateQueryDocumentsInBatches(
+        _firestore.collection('notifications').where('fromUserId', isEqualTo: userId),
+        notificationUpdate,
+      );
     } catch (e) {
       debugPrint('Could not sync avatar across content: $e');
+    }
+  }
+
+  Future<void> _deleteQueryDocumentsInBatches(Query query) async {
+    const pageSize = 200;
+    QueryDocumentSnapshot? lastDoc;
+
+    while (true) {
+      var paged = query.limit(pageSize);
+      if (lastDoc != null) {
+        paged = paged.startAfterDocument(lastDoc);
+      }
+
+      final snapshot = await paged.get();
+      if (snapshot.docs.isEmpty) break;
+
+      final batch = _firestore.batch();
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      if (snapshot.docs.length < pageSize) break;
+      lastDoc = snapshot.docs.last;
     }
   }
 
@@ -992,20 +1024,32 @@ class FirestoreService {
     });
   }
 
-  /// Delete a collection
+  /// Delete a collection and its items (and related comments).
   Future<void> deleteCollection(String collectionId, String userId) async {
-    final items = await _collectionItemsRef.where('collectionId', isEqualTo: collectionId).get();
-    final batch = _firestore.batch();
-    for (final item in items.docs) {
-      batch.delete(item.reference);
-    }
-    batch.delete(_collectionsRef.doc(collectionId));
-    await batch.commit();
+    final collectionRef = _collectionsRef.doc(collectionId);
+    final collectionSnap = await collectionRef.get();
+    if (!collectionSnap.exists) return;
 
-    // Decrement user's collection count
-    await _usersRef.doc(userId).update({
-      'collectionsCount': FieldValue.increment(-1),
-    });
+    final ownerId =
+        (collectionSnap.data() as Map<String, dynamic>?)?['userId'] as String? ??
+            userId;
+
+    await _deleteQueryDocumentsInBatches(
+      _collectionItemsRef.where('collectionId', isEqualTo: collectionId),
+    );
+    await _deleteQueryDocumentsInBatches(
+      _commentsRef.where('collectionId', isEqualTo: collectionId),
+    );
+
+    await collectionRef.delete();
+
+    try {
+      await _usersRef.doc(ownerId).update({
+        'collectionsCount': FieldValue.increment(-1),
+      });
+    } catch (e) {
+      debugPrint('Could not decrement collectionsCount after delete: $e');
+    }
   }
 
   /// Like a collection
@@ -1181,7 +1225,132 @@ class FirestoreService {
 
   // ==================== COLLABORATOR OPERATIONS ====================
 
-  /// Add a collaborator to a collection
+  List<Map<String, dynamic>> _parseCollaboratorEntries(dynamic raw) {
+    return (raw is List)
+        ? raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+  }
+
+  bool _collaboratorListHasUser(
+    List<Map<String, dynamic>> entries,
+    String userId,
+  ) {
+    return entries.any((e) => e['userId'] == userId);
+  }
+
+  Map<String, dynamic> _collaboratorUpdatesForActiveUser({
+    required Map<String, dynamic> data,
+    required String userId,
+    required String username,
+    required String normalizedRole,
+  }) {
+    final collaborators = _parseCollaboratorEntries(data['collaborators']);
+    if (!_collaboratorListHasUser(collaborators, userId)) {
+      collaborators.add({
+        'userId': userId,
+        'username': UsernameUtils.normalize(username),
+        'role': normalizedRole,
+        'addedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+    }
+
+    final requests = _parseCollaboratorEntries(data['collaboratorRequests'])
+      ..removeWhere((c) => c['userId'] == userId);
+    final invites = _parseCollaboratorEntries(data['collaboratorInvites'])
+      ..removeWhere((c) => c['userId'] == userId);
+
+    final updates = <String, dynamic>{
+      'collaborators': collaborators,
+      'collaboratorRequests': requests,
+      'collaboratorInvites': invites,
+    };
+
+    if (normalizedRole == 'EDITOR') {
+      updates['editors'] = FieldValue.arrayUnion([userId]);
+      updates['viewers'] = FieldValue.arrayRemove([userId]);
+    } else {
+      updates['viewers'] = FieldValue.arrayUnion([userId]);
+      updates['editors'] = FieldValue.arrayRemove([userId]);
+    }
+
+    return updates;
+  }
+
+  /// User requests to collaborate on a collection (owner must accept or invite).
+  Future<void> requestCollaboratorAccess({
+    required String collectionId,
+    required String userId,
+    required String username,
+  }) async {
+    final collectionRef = _collectionsRef.doc(collectionId);
+    var ownerId = '';
+    var collectionTitle = '';
+    var collectionCategory = CategoryType.other.name;
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(collectionRef);
+      if (!snap.exists) throw Exception('Collection not found');
+
+      final data = snap.data() as Map<String, dynamic>;
+      ownerId = data['userId'] as String? ?? '';
+      collectionTitle = data['title'] as String? ?? '';
+      collectionCategory = _collectionCategoryFromMap(data);
+
+      if (ownerId == userId) {
+        throw Exception('You already own this collection');
+      }
+
+      final editors = List<String>.from(data['editors'] ?? []);
+      final viewers = List<String>.from(data['viewers'] ?? []);
+      if (editors.contains(userId) || viewers.contains(userId)) {
+        throw Exception('You are already a collaborator');
+      }
+
+      final collaborators = _parseCollaboratorEntries(data['collaborators']);
+      if (_collaboratorListHasUser(collaborators, userId)) {
+        throw Exception('You are already a collaborator');
+      }
+
+      final requests = _parseCollaboratorEntries(data['collaboratorRequests']);
+      if (_collaboratorListHasUser(requests, userId)) {
+        return;
+      }
+
+      final invites = _parseCollaboratorEntries(data['collaboratorInvites']);
+      if (_collaboratorListHasUser(invites, userId)) {
+        throw Exception('You already have a pending invite');
+      }
+
+      requests.add({
+        'userId': userId,
+        'username': UsernameUtils.normalize(username),
+        'requestedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      tx.update(collectionRef, {'collaboratorRequests': requests});
+    });
+
+    if (ownerId.isEmpty || ownerId == userId) return;
+
+    final fromUserAvatarUrl = await _getUserAvatarUrl(userId);
+    await _firestore.collection('notifications').add({
+      'type': 'COLLABORATION_REQUEST',
+      'toUserId': ownerId,
+      'fromUserId': userId,
+      'fromUsername': UsernameUtils.normalize(username),
+      if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
+      'collectionId': collectionId,
+      'collectionTitle': collectionTitle,
+      'collectionCategory': collectionCategory,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Owner invites a user, or adds them immediately if they already requested.
   Future<void> addCollaborator({
     required String collectionId,
     required String userId,
@@ -1194,6 +1363,7 @@ class FirestoreService {
     final collectionRef = _collectionsRef.doc(collectionId);
     final normalizedRole = role.toUpperCase();
     var collectionCategory = CategoryType.other.name;
+    var addedDirectly = false;
 
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(collectionRef);
@@ -1203,37 +1373,63 @@ class FirestoreService {
 
       final data = snap.data() as Map<String, dynamic>;
       collectionCategory = _collectionCategoryFromMap(data);
-      final collaborators = (data['collaborators'] as List?)
-              ?.map((entry) => Map<String, dynamic>.from(entry as Map))
-              .toList() ??
-          <Map<String, dynamic>>[];
 
-      if (collaborators.any((c) => c['userId'] == userId)) {
+      final collaborators = _parseCollaboratorEntries(data['collaborators']);
+      if (_collaboratorListHasUser(collaborators, userId)) {
         return;
       }
 
-      collaborators.add({
+      final requests = _parseCollaboratorEntries(data['collaboratorRequests']);
+      final hadRequest = _collaboratorListHasUser(requests, userId);
+
+      if (hadRequest) {
+        addedDirectly = true;
+        tx.update(
+          collectionRef,
+          _collaboratorUpdatesForActiveUser(
+            data: data,
+            userId: userId,
+            username: username,
+            normalizedRole: normalizedRole,
+          ),
+        );
+        return;
+      }
+
+      final invites = _parseCollaboratorEntries(data['collaboratorInvites']);
+      if (_collaboratorListHasUser(invites, userId)) {
+        return;
+      }
+
+      invites.add({
         'userId': userId,
         'username': UsernameUtils.normalize(username),
         'role': normalizedRole,
-        'addedAt': DateTime.now().millisecondsSinceEpoch,
+        'invitedAt': DateTime.now().millisecondsSinceEpoch,
+        'invitedBy': currentUserId,
       });
 
-      final updates = <String, dynamic>{
-        'collaborators': collaborators,
-      };
-
-      if (normalizedRole == 'EDITOR') {
-        updates['editors'] = FieldValue.arrayUnion([userId]);
-      } else {
-        updates['viewers'] = FieldValue.arrayUnion([userId]);
-      }
-
-      tx.update(collectionRef, updates);
+      tx.update(collectionRef, {'collaboratorInvites': invites});
     });
 
-    // Create notification for the invited user
     final fromUserAvatarUrl = await _getUserAvatarUrl(currentUserId);
+    if (addedDirectly) {
+      await _firestore.collection('notifications').add({
+        'type': 'COLLABORATION_ACCEPTED',
+        'toUserId': userId,
+        'fromUserId': currentUserId,
+        'fromUsername': UsernameUtils.normalize(currentUsername),
+        if (fromUserAvatarUrl != null) 'fromUserAvatarUrl': fromUserAvatarUrl,
+        'collectionId': collectionId,
+        'collectionTitle': collectionTitle,
+        'collectionCategory': collectionCategory,
+        'role': normalizedRole,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
     await _firestore.collection('notifications').add({
       'type': 'COLLABORATION_INVITE',
       'toUserId': userId,
@@ -1249,23 +1445,137 @@ class FirestoreService {
     });
   }
 
+  /// Owner accepts a user's collaboration request.
+  Future<void> acceptCollaboratorRequest({
+    required String collectionId,
+    required String requesterId,
+    required String requesterUsername,
+    required String role,
+    required String ownerId,
+    required String ownerUsername,
+  }) async {
+    await addCollaborator(
+      collectionId: collectionId,
+      userId: requesterId,
+      username: requesterUsername,
+      role: role,
+      currentUserId: ownerId,
+      currentUsername: ownerUsername,
+      collectionTitle: (await getCollection(collectionId))?.title ?? '',
+    );
+  }
+
+  /// Owner declines a collaboration request.
+  Future<void> declineCollaboratorRequest({
+    required String collectionId,
+    required String requesterId,
+  }) async {
+    final collectionRef = _collectionsRef.doc(collectionId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(collectionRef);
+      if (!snap.exists) return;
+
+      final data = snap.data() as Map<String, dynamic>;
+      final requests = _parseCollaboratorEntries(data['collaboratorRequests'])
+        ..removeWhere((c) => c['userId'] == requesterId);
+      tx.update(collectionRef, {'collaboratorRequests': requests});
+    });
+  }
+
+  /// Invitee accepts a pending collaboration invite.
+  Future<void> acceptCollaboratorInvite({
+    required String collectionId,
+    required String userId,
+    required String username,
+  }) async {
+    final collectionRef = _collectionsRef.doc(collectionId);
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(collectionRef);
+      if (!snap.exists) throw Exception('Collection not found');
+
+      final data = snap.data() as Map<String, dynamic>;
+      final invites = _parseCollaboratorEntries(data['collaboratorInvites']);
+      Map<String, dynamic>? invite;
+      for (final entry in invites) {
+        if (entry['userId'] == userId) {
+          invite = entry;
+          break;
+        }
+      }
+      if (invite == null) {
+        throw Exception('No pending invite found');
+      }
+
+      final role = (invite['role'] as String? ?? 'EDITOR').toUpperCase();
+      tx.update(
+        collectionRef,
+        _collaboratorUpdatesForActiveUser(
+          data: data,
+          userId: userId,
+          username: username,
+          normalizedRole: role,
+        ),
+      );
+    });
+  }
+
+  /// Invitee declines a pending collaboration invite.
+  Future<void> declineCollaboratorInvite({
+    required String collectionId,
+    required String userId,
+  }) async {
+    final collectionRef = _collectionsRef.doc(collectionId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(collectionRef);
+      if (!snap.exists) return;
+
+      final data = snap.data() as Map<String, dynamic>;
+      final invites = _parseCollaboratorEntries(data['collaboratorInvites'])
+        ..removeWhere((c) => c['userId'] == userId);
+      tx.update(collectionRef, {'collaboratorInvites': invites});
+    });
+  }
+
+  /// Owner cancels a pending invite they sent.
+  Future<void> cancelCollaboratorInvite({
+    required String collectionId,
+    required String userId,
+  }) async {
+    await declineCollaboratorInvite(collectionId: collectionId, userId: userId);
+  }
+
+  /// Requester withdraws their collaboration request.
+  Future<void> cancelCollaboratorRequest({
+    required String collectionId,
+    required String userId,
+  }) async {
+    await declineCollaboratorRequest(
+      collectionId: collectionId,
+      requesterId: userId,
+    );
+  }
+
   /// Remove a collaborator from a collection
   Future<void> removeCollaborator({
     required String collectionId,
     required String userId,
   }) async {
-    // Get current collaborators
     final doc = await _collectionsRef.doc(collectionId).get();
     if (!doc.exists) return;
 
     final data = doc.data() as Map<String, dynamic>;
-    final collaborators = List<Map<String, dynamic>>.from(data['collaborators'] ?? []);
-    
-    // Remove the collaborator
-    collaborators.removeWhere((c) => c['userId'] == userId);
-    
+    final collaborators = _parseCollaboratorEntries(data['collaborators'])
+      ..removeWhere((c) => c['userId'] == userId);
+    final requests = _parseCollaboratorEntries(data['collaboratorRequests'])
+      ..removeWhere((c) => c['userId'] == userId);
+    final invites = _parseCollaboratorEntries(data['collaboratorInvites'])
+      ..removeWhere((c) => c['userId'] == userId);
+
     await _collectionsRef.doc(collectionId).update({
       'collaborators': collaborators,
+      'collaboratorRequests': requests,
+      'collaboratorInvites': invites,
       'editors': FieldValue.arrayRemove([userId]),
       'viewers': FieldValue.arrayRemove([userId]),
     });
@@ -1642,16 +1952,42 @@ class FirestoreService {
     return newCollectionRef.id;
   }
 
-  /// Check if user is following another user
+  /// Check if [currentUserId] follows [targetUserId] (uses the current user's
+  /// `following` list — same source as the Following tab).
   Future<bool> isFollowing(String currentUserId, String targetUserId) async {
+    if (currentUserId.isEmpty || targetUserId.isEmpty) return false;
+    if (currentUserId == targetUserId) return false;
+
     try {
       final doc = await _usersRef.doc(currentUserId).get();
       if (!doc.exists) return false;
-      
+
       final data = doc.data() as Map<String, dynamic>;
       final following = List<String>.from(data['following'] ?? []);
-      return following.contains(targetUserId);
+      final follows = following.contains(targetUserId);
+      if (!follows) return false;
+
+      // Repair one-sided data: in following but missing from target's followers.
+      try {
+        final targetSnap = await _usersRef.doc(targetUserId).get();
+        if (!targetSnap.exists) return true;
+
+        final targetFollowers = List<String>.from(
+          (targetSnap.data() as Map<String, dynamic>)['followers'] ?? [],
+        );
+        if (!targetFollowers.contains(currentUserId)) {
+          await _usersRef.doc(targetUserId).update({
+            'followers': FieldValue.arrayUnion([currentUserId]),
+            'followerCount': FieldValue.increment(1),
+          });
+        }
+      } catch (e) {
+        debugPrint('Could not repair followers list for $targetUserId: $e');
+      }
+
+      return true;
     } catch (e) {
+      debugPrint('isFollowing failed: $e');
       return false;
     }
   }

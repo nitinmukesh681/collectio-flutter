@@ -59,6 +59,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   bool _isFollowing = false;
   bool _isAddToCollectionsLoading = false;
   bool _isUnauthorized = false;
+  bool _isDeletingCollection = false;
 
   late TabController _tabController;
   final TextEditingController _commentController = TextEditingController();
@@ -109,9 +110,12 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       (collection) async {
         if (mounted) {
           if (collection == null) {
-            // Collection was deleted, navigate back
+            if (_isDeletingCollection) {
+              return;
+            }
             debugPrint('Collection deleted, navigating back');
             await _collectionSubscription?.cancel();
+            if (!mounted) return;
             Navigator.of(context).pop();
             return;
           }
@@ -342,6 +346,149 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
   bool _isPublicCollection(CollectionEntity collection) {
     return collection.isPublic || collection.visibility == CollectionVisibility.public;
+  }
+
+  bool _canRequestCollaboration(CollectionEntity collection) {
+    if (_isOwner) return false;
+    if (collection.userId == widget.currentUserId) return false;
+    if (collection.hasActiveCollaborator(widget.currentUserId)) return false;
+    if (collection.hasCollaboratorRequest(widget.currentUserId)) return false;
+    if (collection.hasCollaboratorInvite(widget.currentUserId)) return false;
+    return true;
+  }
+
+  bool _showRequestCollaborateMenuItem(CollectionEntity collection) {
+    if (_isOwner) return false;
+    if (collection.userId == widget.currentUserId) return false;
+    if (collection.hasActiveCollaborator(widget.currentUserId)) return false;
+    if (collection.hasCollaboratorInvite(widget.currentUserId)) return false;
+    return true;
+  }
+
+  /// Collection overflow menu: actions → get info → destructive.
+  List<PopupMenuEntry<String>> _buildCollectionOverflowMenuItems(
+    CollectionEntity? collection,
+  ) {
+    final items = <PopupMenuEntry<String>>[];
+
+    if (_isOwner) {
+      items.add(const PopupMenuItem(value: 'edit', child: Text('Edit collection')));
+      if (!(collection?.isOpenForContribution ?? false)) {
+        items.add(
+          const PopupMenuItem(value: 'collaborators', child: Text('Add collaborators')),
+        );
+      }
+    } else if (collection != null) {
+      if (_showRequestCollaborateMenuItem(collection)) {
+        final canRequest = _canRequestCollaboration(collection);
+        items.add(
+          PopupMenuItem(
+            value: 'request_collaborate',
+            enabled: canRequest,
+            child: Text(
+              'Request to collaborate',
+              style: GoogleFonts.plusJakartaSans(
+                color: canRequest ? AppColors.textPrimary : AppColors.textMuted,
+                fontWeight: canRequest ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+        );
+      }
+      if (collection.hasCollaboratorRequest(widget.currentUserId)) {
+        items.add(
+          const PopupMenuItem(
+            value: 'cancel_request',
+            child: Text('Withdraw collaboration request'),
+          ),
+        );
+      }
+      items.add(
+        const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
+      );
+    }
+
+    items.add(const PopupMenuItem(value: 'get_info', child: Text('Get info')));
+
+    if (_isOwner) {
+      items.add(const PopupMenuItem(value: 'delete', child: Text('Delete')));
+    }
+
+    return items;
+  }
+
+  /// Item overflow menu: actions → get info → delete.
+  List<PopupMenuEntry<String>> _buildItemOverflowMenuItems({
+    required bool canEdit,
+    required bool showGetInfo,
+  }) {
+    final items = <PopupMenuEntry<String>>[];
+    final textStyle = GoogleFonts.plusJakartaSans();
+
+    if (canEdit) {
+      items.add(
+        PopupMenuItem(value: 'edit', child: Text('Edit', style: textStyle)),
+      );
+    }
+    items.add(
+      PopupMenuItem(
+        value: 'add_to_collections',
+        child: Text('Add to collection', style: textStyle),
+      ),
+    );
+    if (showGetInfo) {
+      items.add(
+        PopupMenuItem(
+          value: 'get_info',
+          child: Text('Get info', style: textStyle),
+        ),
+      );
+    }
+    if (canEdit) {
+      items.add(
+        PopupMenuItem(value: 'delete', child: Text('Delete', style: textStyle)),
+      );
+    }
+    return items;
+  }
+
+  Future<void> _requestCollaboration() async {
+    final collection = _collection;
+    if (collection == null) return;
+
+    try {
+      await _firestoreService.requestCollaboratorAccess(
+        collectionId: widget.collectionId,
+        userId: widget.currentUserId,
+        username: _currentUserName.isNotEmpty ? _currentUserName : 'user',
+      );
+      if (mounted) {
+        SnackBarUtils.showSuccessSnackBar(
+          context,
+          'Collaboration request sent to the owner',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(context, 'Could not send request: $e');
+      }
+    }
+  }
+
+  Future<void> _cancelCollaborationRequest() async {
+    try {
+      await _firestoreService.cancelCollaboratorRequest(
+        collectionId: widget.collectionId,
+        userId: widget.currentUserId,
+      );
+      if (mounted) {
+        SnackBarUtils.showInfoSnackBar(context, 'Collaboration request withdrawn');
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(context, 'Could not withdraw request: $e');
+      }
+    }
   }
 
   void _showManageCollaboratorsDialog() {
@@ -1054,54 +1201,44 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () async {
-              Navigator.pop(context); // Close dialog
-              
+              Navigator.pop(context);
+              if (!mounted) return;
+
+              final messenger = ScaffoldMessenger.of(context);
+              setState(() => _isDeletingCollection = true);
+              await _collectionSubscription?.cancel();
+              _collectionSubscription = null;
+
+              messenger.hideCurrentSnackBar();
+              SnackBarUtils.showInfoSnackBar(context, 'Deleting collection...');
+
               try {
-                // Show loading indicator
-                if (mounted) {
-                  SnackBarUtils.showInfoSnackBar(context, 'Deleting collection...');
-                }
-                
                 await _firestoreService.deleteCollection(
                   widget.collectionId,
                   widget.currentUserId,
                 );
-                
-                // Show success message and navigate back
-                if (mounted) {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  SnackBarUtils.showSuccessSnackBar(context, 'Collection deleted successfully');
-                  
-                  // Cancel stream subscription to prevent conflicts
-                  await _collectionSubscription?.cancel();
-                  
-                  // Navigate back to previous screen with fallback
-                  try {
-                    Navigator.of(context).pop();
-                  } catch (e) {
-                    debugPrint('Navigation error: $e');
-                    // Fallback: try to navigate after a short delay
-                    Future.delayed(const Duration(milliseconds: 500), () {
-                      if (mounted) {
-                        try {
-                          Navigator.of(context).pop();
-                        } catch (e2) {
-                          debugPrint('Fallback navigation failed: $e2');
-                          // Last resort: push to home screen
-                          Navigator.of(context).pushNamedAndRemoveUntil(
-                            '/',
-                            (route) => false,
-                          );
-                        }
-                      }
-                    });
-                  }
-                }
+
+                if (!mounted) return;
+                messenger.hideCurrentSnackBar();
+                await Navigator.of(context).maybePop(true);
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Collection deleted'),
+                    backgroundColor: Color(0xFF22C55E),
+                    behavior: SnackBarBehavior.floating,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
               } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  SnackBarUtils.showErrorSnackBar(context, 'Error deleting collection: $e');
-                }
+                if (!mounted) return;
+                setState(() => _isDeletingCollection = false);
+                _setupCollectionStream();
+                messenger.hideCurrentSnackBar();
+                SnackBarUtils.showErrorSnackBar(
+                  context,
+                  'Could not delete collection. Please try again.',
+                );
+                debugPrint('Error deleting collection: $e');
               }
             },
             child: Text('Delete', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
@@ -1612,17 +1749,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                             decoration: _navCircleDecoration,
                             child: const Icon(Icons.more_horiz, color: AppColors.textPrimary, size: 22),
                           ),
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(value: 'get_info', child: Text('Get info')),
-                            if (_isOwner)
-                              const PopupMenuItem(value: 'edit', child: Text('Edit collection')),
-                            if (_isOwner && !(_collection?.isOpenForContribution ?? false))
-                              const PopupMenuItem(value: 'collaborators', child: Text('Add collaborators')),
-                            if (_isOwner)
-                              const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                            if (!_isOwner)
-                              const PopupMenuItem(value: 'add_to_new', child: Text('Add to new collection')),
-                          ],
+                          itemBuilder: (context) =>
+                              _buildCollectionOverflowMenuItems(_collection),
                           onSelected: (value) {
                             if (value == 'get_info') {
                               if (_collection != null) _showCollectionInfoDialog(_collection!);
@@ -1634,6 +1762,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                               _showDeleteDialog();
                             } else if (value == 'add_to_new') {
                               _duplicateCollection();
+                            } else if (value == 'request_collaborate') {
+                              _requestCollaboration();
+                            } else if (value == 'cancel_request') {
+                              _cancelCollaborationRequest();
                             }
                           },
                         ),
@@ -2754,12 +2886,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         else if (value == 'add_to_collections') _showAddToCollectionsDialog(item);
         else if (value == 'get_info') _showItemInfoDialog(item);
       },
-      itemBuilder: (context) => [
-        if (canEdit) PopupMenuItem(value: 'edit', child: Text('Edit', style: GoogleFonts.plusJakartaSans())),
-        if (canEdit) PopupMenuItem(value: 'delete', child: Text('Delete', style: GoogleFonts.plusJakartaSans())),
-        if (showGetInfo) PopupMenuItem(value: 'get_info', child: Text('Get info', style: GoogleFonts.plusJakartaSans())),
-        PopupMenuItem(value: 'add_to_collections', child: Text('Add to collection', style: GoogleFonts.plusJakartaSans())),
-      ],
+      itemBuilder: (context) => _buildItemOverflowMenuItems(
+        canEdit: canEdit,
+        showGetInfo: showGetInfo,
+      ),
     );
   }
 

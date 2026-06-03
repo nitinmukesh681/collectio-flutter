@@ -5,6 +5,7 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>collectio</string>
+		<string>com.sneha.iosfinds</string>
 	</array>
 	<key>NSExtension</key>
 	<dict>

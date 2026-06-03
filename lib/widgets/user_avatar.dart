@@ -1,13 +1,18 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/user_entity.dart';
+import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
+import '../utils/avatar_display_utils.dart';
 import 'avatar_fallback.dart';
 
 /// Displays a user profile photo with gs:// resolution.
-/// Uses [avatarUrl] when provided; otherwise loads from Firestore via [userId].
-/// When [trustProvidedAvatar] is true, [avatarUrl] is authoritative (null = no photo).
-class UserAvatar extends StatefulWidget {
+/// When [userId] is set, loads the canonical avatar from the user profile (not
+/// denormalized collection/comment copies) unless [trustProvidedAvatar] is true.
+/// For the signed-in user, always prefers the live profile URL from [AuthProvider].
+class UserAvatar extends StatelessWidget {
   final String name;
   final double size;
   final String? avatarUrl;
@@ -32,17 +37,17 @@ class UserAvatar extends StatefulWidget {
       return _resolveRawAvatarUrl(avatarUrl?.trim());
     }
 
-    var raw = avatarUrl?.trim();
-    if (raw == null || raw.isEmpty) {
-      if (userId != null && userId.isNotEmpty) {
-        try {
-          raw = (await FirestoreService().getUser(userId))?.avatarUrl?.trim();
-        } catch (_) {
-          raw = null;
+    final uid = userId?.trim() ?? '';
+    if (uid.isNotEmpty) {
+      try {
+        final live = (await FirestoreService().getUser(uid))?.avatarUrl?.trim();
+        if (live != null && live.isNotEmpty) {
+          return _resolveRawAvatarUrl(live);
         }
-      }
+      } catch (_) {}
     }
-    return _resolveRawAvatarUrl(raw);
+
+    return _resolveRawAvatarUrl(avatarUrl?.trim());
   }
 
   static Future<String?> _resolveRawAvatarUrl(String? raw) async {
@@ -64,68 +69,100 @@ class UserAvatar extends StatefulWidget {
   }
 
   @override
-  State<UserAvatar> createState() => _UserAvatarState();
-}
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final uid = userId?.trim() ?? '';
+    final isCurrentUser = uid.isNotEmpty && uid == auth.userId;
 
-class _UserAvatarState extends State<UserAvatar> {
-  late Future<String?> _urlFuture;
+    final effectiveUrl = uid.isNotEmpty
+        ? displayAvatarUrl(
+            storedAvatarUrl: avatarUrl,
+            subjectUserId: uid,
+            currentUserId: auth.userId,
+            currentUserAvatarUrl: auth.userEntity?.avatarUrl,
+          )
+        : avatarUrl;
 
-  void _refreshUrlFuture() {
-    _urlFuture = UserAvatar.resolveAvatarUrl(
-      avatarUrl: widget.avatarUrl,
-      userId: widget.userId,
-      trustProvidedAvatar: widget.trustProvidedAvatar,
+    final trusted = trustProvidedAvatar || isCurrentUser;
+    final fallback = AvatarFallback(name: name, size: size);
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipOval(
+        child: uid.isNotEmpty && !trusted
+            ? StreamBuilder<UserEntity?>(
+                stream: FirestoreService().getUserStream(uid),
+                builder: (context, userSnap) {
+                  final liveRaw = userSnap.data?.avatarUrl?.trim();
+                  final raw = (liveRaw != null && liveRaw.isNotEmpty)
+                      ? liveRaw
+                      : effectiveUrl?.trim();
+                  return _ResolvedAvatarImage(
+                    rawAvatar: raw,
+                    userId: uid,
+                    size: size,
+                    fallback: fallback,
+                  );
+                },
+              )
+            : _ResolvedAvatarImage(
+                rawAvatar: effectiveUrl?.trim(),
+                userId: uid.isEmpty ? null : uid,
+                size: size,
+                fallback: fallback,
+                trustProvidedAvatar: trusted,
+              ),
+      ),
     );
   }
+}
 
-  @override
-  void initState() {
-    super.initState();
-    _refreshUrlFuture();
-  }
+class _ResolvedAvatarImage extends StatelessWidget {
+  final String? rawAvatar;
+  final String? userId;
+  final double size;
+  final Widget fallback;
+  final bool trustProvidedAvatar;
 
-  @override
-  void didUpdateWidget(UserAvatar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.avatarUrl != widget.avatarUrl ||
-        oldWidget.userId != widget.userId ||
-        oldWidget.trustProvidedAvatar != widget.trustProvidedAvatar) {
-      _refreshUrlFuture();
-    }
-  }
+  const _ResolvedAvatarImage({
+    required this.rawAvatar,
+    required this.userId,
+    required this.size,
+    required this.fallback,
+    this.trustProvidedAvatar = true,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final fallback = AvatarFallback(name: widget.name, size: widget.size);
-    final cacheKey = widget.trustProvidedAvatar
-        ? 'provided|${widget.avatarUrl ?? ''}'
-        : '${widget.userId}|${widget.avatarUrl}';
+    final uid = userId?.trim() ?? '';
+    final futureKey = trustProvidedAvatar
+        ? 'provided|${rawAvatar ?? ''}'
+        : 'user|$uid|${rawAvatar ?? ''}';
 
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: ClipOval(
-        child: FutureBuilder<String?>(
-          key: ValueKey(cacheKey),
-          future: _urlFuture,
-          builder: (context, snapshot) {
-            final url = snapshot.data;
-            if (url != null && url.isNotEmpty) {
-              return CachedNetworkImage(
-                key: ValueKey(url),
-                imageUrl: url,
-                cacheKey: url,
-                fit: BoxFit.cover,
-                width: widget.size,
-                height: widget.size,
-                fadeInDuration: Duration.zero,
-                errorWidget: (_, __, ___) => fallback,
-              );
-            }
-            return fallback;
-          },
-        ),
+    return FutureBuilder<String?>(
+      key: ValueKey(futureKey),
+      future: UserAvatar.resolveAvatarUrl(
+        avatarUrl: rawAvatar,
+        userId: uid.isEmpty ? null : uid,
+        trustProvidedAvatar: trustProvidedAvatar,
       ),
+      builder: (context, snapshot) {
+        final url = snapshot.data;
+        if (url != null && url.isNotEmpty) {
+          return CachedNetworkImage(
+            key: ValueKey('img|$uid|$url'),
+            imageUrl: url,
+            cacheKey: avatarImageCacheKey(userId: uid.isEmpty ? null : uid, url: url),
+            fit: BoxFit.cover,
+            width: size,
+            height: size,
+            fadeInDuration: Duration.zero,
+            errorWidget: (_, __, ___) => fallback,
+          );
+        }
+        return fallback;
+      },
     );
   }
 }

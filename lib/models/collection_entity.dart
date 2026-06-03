@@ -59,6 +59,8 @@ class CollectionEntity {
   final UserRole userRole;
   final int collaboratorCount;
   final List<Map<String, dynamic>> collaborators;
+  final List<Map<String, dynamic>> collaboratorRequests;
+  final List<Map<String, dynamic>> collaboratorInvites;
   final List<String> editors;
   final List<String> viewers;
   final int createdAt;
@@ -116,6 +118,8 @@ class CollectionEntity {
     this.userRole = UserRole.none,
     this.collaboratorCount = 0,
     this.collaborators = const [],
+    this.collaboratorRequests = const [],
+    this.collaboratorInvites = const [],
     this.editors = const [],
     this.viewers = const [],
     List<String>? searchKeywords,
@@ -132,6 +136,27 @@ class CollectionEntity {
         ),
         createdAt = createdAt ?? DateTime.now().millisecondsSinceEpoch,
         updatedAt = updatedAt ?? createdAt ?? DateTime.now().millisecondsSinceEpoch;
+
+  static List<Map<String, dynamic>> _parseCollaboratorEntries(dynamic raw) {
+    return (raw is List)
+        ? raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : const [];
+  }
+
+  bool hasActiveCollaborator(String userId) {
+    if (userId.isEmpty) return false;
+    if (editors.contains(userId) || viewers.contains(userId)) return true;
+    return collaborators.any((c) => c['userId'] == userId);
+  }
+
+  bool hasCollaboratorRequest(String userId) =>
+      collaboratorRequests.any((c) => c['userId'] == userId);
+
+  bool hasCollaboratorInvite(String userId) =>
+      collaboratorInvites.any((c) => c['userId'] == userId);
 
   /// Latest content change (items, title, description, cover, etc.).
   int get lastContentActivityAt =>
@@ -186,18 +211,9 @@ class CollectionEntity {
       inspiredByUserId: map['inspiredByUserId'],
       collaboratorCount: map['collaboratorCount'] ?? 0,
       savedBy: List<String>.from(map['savedBy'] ?? []),
-      collaborators: (map['collaborators'] as List?)
-              ?.whereType<Map>()
-              .map((e) {
-                final entry = Map<String, dynamic>.from(e);
-                final username = entry['username'];
-                if (username is String && username.isNotEmpty) {
-                  entry['username'] = UsernameUtils.normalize(username);
-                }
-                return entry;
-              })
-              .toList() ??
-          const [],
+      collaborators: _normalizeCollaboratorEntries(map['collaborators']),
+      collaboratorRequests: _normalizeCollaboratorEntries(map['collaboratorRequests']),
+      collaboratorInvites: _normalizeCollaboratorEntries(map['collaboratorInvites']),
       editors: List<String>.from(map['editors'] ?? []),
       viewers: List<String>.from(map['viewers'] ?? []),
       searchKeywords: (map['searchKeywords'] != null && (map['searchKeywords'] as List).isNotEmpty)
@@ -208,6 +224,18 @@ class CollectionEntity {
           ? _timestampToInt(map['updatedAt'])
           : _timestampToInt(map['createdAt']),
     );
+  }
+
+  static List<Map<String, dynamic>> _normalizeCollaboratorEntries(dynamic raw) {
+    return _parseCollaboratorEntries(raw)
+        .map((entry) {
+          final username = entry['username'];
+          if (username is String && username.isNotEmpty) {
+            entry['username'] = UsernameUtils.normalize(username);
+          }
+          return entry;
+        })
+        .toList();
   }
 
   static CollectionVisibility _visibilityFromFields({
@@ -248,6 +276,10 @@ class CollectionEntity {
       'inspiredByUserId': inspiredByUserId,
       'collaboratorCount': collaboratorCount,
       'collaborators': collaborators,
+      if (collaboratorRequests.isNotEmpty)
+        'collaboratorRequests': collaboratorRequests,
+      if (collaboratorInvites.isNotEmpty)
+        'collaboratorInvites': collaboratorInvites,
       'editors': editors,
       'viewers': viewers,
       'searchKeywords': searchKeywords,
@@ -287,6 +319,8 @@ class CollectionEntity {
     UserRole? userRole,
     int? collaboratorCount,
     List<Map<String, dynamic>>? collaborators,
+    List<Map<String, dynamic>>? collaboratorRequests,
+    List<Map<String, dynamic>>? collaboratorInvites,
     List<String>? editors,
     List<String>? viewers,
     List<String>? searchKeywords,
@@ -324,6 +358,8 @@ class CollectionEntity {
       userRole: userRole ?? this.userRole,
       collaboratorCount: collaboratorCount ?? this.collaboratorCount,
       collaborators: collaborators ?? this.collaborators,
+      collaboratorRequests: collaboratorRequests ?? this.collaboratorRequests,
+      collaboratorInvites: collaboratorInvites ?? this.collaboratorInvites,
       editors: editors ?? this.editors,
       viewers: viewers ?? this.viewers,
       searchKeywords: searchKeywords ?? generateKeywords(

@@ -82,11 +82,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     setState(() => _isLoading = true);
 
     _userSubscription = _firestoreService.getUserStream(widget.userId).listen(
-      (user) {
+      (user) async {
         if (user != null && mounted) {
+          final isFollowing = widget.userId == widget.currentUserId
+              ? false
+              : await _firestoreService.isFollowing(
+                  widget.currentUserId,
+                  widget.userId,
+                );
+          if (!mounted) return;
           setState(() {
             _user = user;
-            _isFollowing = user.followers.contains(widget.currentUserId);
+            _isFollowing = isFollowing;
             _isLoading = false;
             _applyVisibleCollections();
           });
