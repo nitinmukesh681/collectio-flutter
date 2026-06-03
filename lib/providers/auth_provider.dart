@@ -410,11 +410,9 @@ class AuthProvider extends ChangeNotifier {
         previousUrl: previousAvatarUrl,
         newUrl: updatedUser.avatarUrl,
       );
-      unawaited(
-        _firestoreService!.syncUserAvatarDenormalized(
-          userId: updatedUser.id,
-          avatarUrl: updatedUser.avatarUrl,
-        ),
+      await _firestoreService!.syncUserAvatarDenormalized(
+        userId: updatedUser.id,
+        avatarUrl: updatedUser.avatarUrl,
       );
       _userEntity = updatedUser;
       notifyListeners();

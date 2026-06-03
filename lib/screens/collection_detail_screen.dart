@@ -26,6 +26,7 @@ import 'user_profile_screen.dart';
 import 'profile_screen.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import '../widgets/manage_collaborators_dialog.dart';
+import '../widgets/animated_segmented_tab_bar.dart';
 
 class CollectionDetailScreen extends StatefulWidget {
   final String collectionId;
@@ -88,7 +89,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   void _onTabControllerChanged() {
     if (!mounted) return;
     setState(() {});
-    if (_tabController.indexIsChanging) return;
     if (_tabController.index != 1) {
       _dismissDiscussionComposer();
     }
@@ -1282,98 +1282,14 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   Widget _buildCollectionTabBar() {
-    final selectedIndex = _tabController.index;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(_contentHorizontalPadding, _heroSectionGap, _contentHorizontalPadding, 0),
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.all(4),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: AppColors.chipBg,
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final segmentWidth = constraints.maxWidth / 2;
-            final thumbRadius = BorderRadius.circular(constraints.maxHeight / 2);
-            return Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeInOut,
-                  left: selectedIndex * segmentWidth,
-                  width: segmentWidth,
-                  top: 0,
-                  bottom: 0,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: thumbRadius,
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x14000000),
-                          blurRadius: 6,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    _buildCollectionSegment(
-                      label: 'ITEMS',
-                      index: 0,
-                      selectedIndex: selectedIndex,
-                    ),
-                    _buildCollectionSegment(
-                      label: 'DISCUSSION',
-                      index: 1,
-                      selectedIndex: selectedIndex,
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCollectionSegment({
-    required String label,
-    required int index,
-    required int selectedIndex,
-  }) {
-    final isSelected = index == selectedIndex;
-
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () {
-            if (_tabController.index != index) {
-              _tabController.animateTo(index);
-            }
-          },
-          child: Center(
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeInOut,
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                fontSize: 13,
-                letterSpacing: 0.5,
-                color: isSelected ? AppColors.textPrimary : AppColors.textMuted,
-              ),
-              child: Text(label, textAlign: TextAlign.center),
-            ),
-          ),
-        ),
+    return AnimatedSegmentedTabBar(
+      controller: _tabController,
+      labels: const ['ITEMS', 'DISCUSSION'],
+      padding: EdgeInsets.fromLTRB(
+        _contentHorizontalPadding,
+        _heroSectionGap,
+        _contentHorizontalPadding,
+        0,
       ),
     );
   }
@@ -1537,6 +1453,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             child: UserAvatar(
               userId: collection.userId,
               avatarUrl: _avatarUrlForUser(collection.userId, collection.userAvatarUrl),
+              trustProvidedAvatar: collection.userId == widget.currentUserId,
               name: collection.userName,
               size: 28,
             ),
@@ -2108,7 +2025,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       name: _currentUserName.isNotEmpty ? _currentUserName : 'You',
                       size: _discussionComposerAvatarSize,
                       userId: widget.currentUserId,
-                      avatarUrl: context.watch<AuthProvider>().userEntity?.avatarUrl,
+                      avatarUrl: _avatarUrlForUser(
+                        widget.currentUserId,
+                        context.watch<AuthProvider>().userEntity?.avatarUrl,
+                      ),
+                      trustProvidedAvatar: true,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2522,6 +2443,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             name: comment.userName,
             size: avatarSize,
             avatarUrl: _avatarUrlForUser(comment.userId, comment.userAvatarUrl),
+            trustProvidedAvatar: comment.userId == widget.currentUserId,
             userId: comment.userId,
           ),
         ),
@@ -2675,11 +2597,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final resolvedUrl = userId == null
         ? avatarUrl
         : _avatarUrlForUser(userId, avatarUrl);
+    final isCurrentUser = userId == widget.currentUserId;
     return UserAvatar(
       name: name,
       size: size,
       avatarUrl: resolvedUrl,
       userId: userId,
+      trustProvidedAvatar: isCurrentUser,
     );
   }
 

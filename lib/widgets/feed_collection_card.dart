@@ -110,6 +110,7 @@ class FeedCollectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final isOwnCollection = collection.userId == auth.userId;
     final avatarUrl = displayAvatarUrl(
       storedAvatarUrl: collection.userAvatarUrl,
       subjectUserId: collection.userId,
@@ -151,6 +152,7 @@ class FeedCollectionCard extends StatelessWidget {
                         child: UserAvatar(
                           userId: collection.userId,
                           avatarUrl: avatarUrl,
+                          trustProvidedAvatar: isOwnCollection,
                           name: collection.userName,
                           size: 42,
                         ),

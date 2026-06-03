@@ -516,10 +516,17 @@ class FirestoreService {
   /// Create or update user
   Future<void> saveUser(UserEntity user) async {
     final normalized = UsernameUtils.normalize(user.username);
-    await _usersRef.doc(user.id).set({
+    final data = <String, dynamic>{
       ...user.copyWith(username: normalized).toMap(),
       'usernameLower': normalized,
-    }, SetOptions(merge: true));
+    };
+    final avatar = user.avatarUrl?.trim();
+    if (avatar == null || avatar.isEmpty) {
+      data['avatarUrl'] = FieldValue.delete();
+    } else {
+      data['avatarUrl'] = avatar;
+    }
+    await _usersRef.doc(user.id).set(data, SetOptions(merge: true));
   }
 
   /// Update username

@@ -526,6 +526,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: UserAvatar(
           userId: auth.userId,
           avatarUrl: auth.userEntity?.avatarUrl,
+          trustProvidedAvatar: true,
           name: auth.resolvedUserName,
           size: _headerSquircleSize,
         ),

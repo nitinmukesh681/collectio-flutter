@@ -11,6 +11,7 @@ import '../utils/snackbar_utils.dart';
 import '../utils/username_utils.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_fallback.dart';
+import '../utils/avatar_display_utils.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -141,6 +142,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final shouldClearAvatar = _clearAvatar && _newAvatar == null;
       String? avatarUrl = auth.userEntity?.avatarUrl;
 
+      final previousAvatarUrl = auth.userEntity?.avatarUrl;
+
       if (shouldClearAvatar) {
         await _firestoreService.clearUserAvatar(auth.userId);
         avatarUrl = null;
@@ -173,6 +176,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             );
 
       final success = await auth.updateProfile(updatedUser);
+
+      if (success) {
+        await evictAvatarImageCache(
+          previousUrl: previousAvatarUrl,
+          newUrl: updatedUser.avatarUrl,
+        );
+      }
 
       if (success && mounted) {
         SnackBarUtils.showSuccessSnackBar(context, 'Profile updated successfully');

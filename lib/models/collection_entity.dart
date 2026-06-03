@@ -9,6 +9,12 @@ enum CollectionVisibility { public, private, followers }
 /// User roles for collections
 enum UserRole { owner, collaborator, contributor, none }
 
+String? _nonEmptyString(dynamic value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
 /// Helper to convert Firestore Timestamp to int
 int _timestampToInt(dynamic value) {
   if (value is Timestamp) {
@@ -151,7 +157,7 @@ class CollectionEntity {
       userName: UsernameUtils.normalize(
         (map['userName'] ?? map['username'] ?? '').toString(),
       ),
-      userAvatarUrl: map['userAvatarUrl'],
+      userAvatarUrl: _nonEmptyString(map['userAvatarUrl']),
       title: map['title'] ?? '',
       description: map['description'],
       websiteUrl: map['websiteUrl'],

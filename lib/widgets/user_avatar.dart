@@ -6,11 +6,13 @@ import 'avatar_fallback.dart';
 
 /// Displays a user profile photo with gs:// resolution.
 /// Uses [avatarUrl] when provided; otherwise loads from Firestore via [userId].
+/// When [trustProvidedAvatar] is true, [avatarUrl] is authoritative (null = no photo).
 class UserAvatar extends StatefulWidget {
   final String name;
   final double size;
   final String? avatarUrl;
   final String? userId;
+  final bool trustProvidedAvatar;
 
   const UserAvatar({
     super.key,
@@ -18,12 +20,18 @@ class UserAvatar extends StatefulWidget {
     this.size = 44,
     this.avatarUrl,
     this.userId,
+    this.trustProvidedAvatar = false,
   });
 
   static Future<String?> resolveAvatarUrl({
     String? avatarUrl,
     String? userId,
+    bool trustProvidedAvatar = false,
   }) async {
+    if (trustProvidedAvatar) {
+      return _resolveRawAvatarUrl(avatarUrl?.trim());
+    }
+
     var raw = avatarUrl?.trim();
     if (raw == null || raw.isEmpty) {
       if (userId != null && userId.isNotEmpty) {
@@ -34,6 +42,10 @@ class UserAvatar extends StatefulWidget {
         }
       }
     }
+    return _resolveRawAvatarUrl(raw);
+  }
+
+  static Future<String?> _resolveRawAvatarUrl(String? raw) async {
     if (raw == null || raw.isEmpty) return null;
 
     if (raw.startsWith('gs://')) {
@@ -58,36 +70,43 @@ class UserAvatar extends StatefulWidget {
 class _UserAvatarState extends State<UserAvatar> {
   late Future<String?> _urlFuture;
 
-  @override
-  void initState() {
-    super.initState();
+  void _refreshUrlFuture() {
     _urlFuture = UserAvatar.resolveAvatarUrl(
       avatarUrl: widget.avatarUrl,
       userId: widget.userId,
+      trustProvidedAvatar: widget.trustProvidedAvatar,
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUrlFuture();
   }
 
   @override
   void didUpdateWidget(UserAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.avatarUrl != widget.avatarUrl || oldWidget.userId != widget.userId) {
-      _urlFuture = UserAvatar.resolveAvatarUrl(
-        avatarUrl: widget.avatarUrl,
-        userId: widget.userId,
-      );
+    if (oldWidget.avatarUrl != widget.avatarUrl ||
+        oldWidget.userId != widget.userId ||
+        oldWidget.trustProvidedAvatar != widget.trustProvidedAvatar) {
+      _refreshUrlFuture();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final fallback = AvatarFallback(name: widget.name, size: widget.size);
+    final cacheKey = widget.trustProvidedAvatar
+        ? 'provided|${widget.avatarUrl ?? ''}'
+        : '${widget.userId}|${widget.avatarUrl}';
 
     return SizedBox(
       width: widget.size,
       height: widget.size,
       child: ClipOval(
         child: FutureBuilder<String?>(
-          key: ValueKey('${widget.userId}|${widget.avatarUrl}'),
+          key: ValueKey(cacheKey),
           future: _urlFuture,
           builder: (context, snapshot) {
             final url = snapshot.data;

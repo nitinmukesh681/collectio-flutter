@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/collection_grid_card.dart';
+import '../widgets/animated_segmented_tab_bar.dart';
 import '../screens/collection_detail_screen.dart';
 import '../widgets/profile_header_layout.dart';
 import 'edit_profile_screen.dart';
@@ -308,103 +309,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Widget _buildProfileTabBar() {
-    final selectedIndex = _tabController.index;
-
-    return Padding(
+    return AnimatedSegmentedTabBar(
+      controller: _tabController,
+      labels: const ['COLLECTIONS', 'SAVED'],
       padding: const EdgeInsets.fromLTRB(
         16,
         _profileSectionGap - _profileHeaderShadowGap,
         16,
         _profileSectionGap - _profileHeaderShadowGap,
-      ),
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.all(4),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: AppColors.chipBg,
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final segmentWidth = constraints.maxWidth / 2;
-            final thumbRadius = BorderRadius.circular((constraints.maxHeight) / 2);
-            return Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeInOut,
-                  left: selectedIndex * segmentWidth,
-                  width: segmentWidth,
-                  top: 0,
-                  bottom: 0,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: thumbRadius,
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x14000000),
-                          blurRadius: 6,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    _buildProfileSegment(
-                      label: 'COLLECTIONS',
-                      index: 0,
-                      selectedIndex: selectedIndex,
-                    ),
-                    _buildProfileSegment(
-                      label: 'SAVED',
-                      index: 1,
-                      selectedIndex: selectedIndex,
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileSegment({
-    required String label,
-    required int index,
-    required int selectedIndex,
-  }) {
-    final isSelected = index == selectedIndex;
-
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () {
-            if (_tabController.index != index) {
-              _tabController.animateTo(index);
-            }
-          },
-          child: Center(
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeInOut,
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                fontSize: 13,
-                letterSpacing: 0.5,
-                color: isSelected ? AppColors.textPrimary : AppColors.textMuted,
-              ),
-              child: Text(label, textAlign: TextAlign.center),
-            ),
-          ),
-        ),
       ),
     );
   }
