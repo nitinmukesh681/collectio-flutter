@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'dart:io';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
+import '../utils/category_icons.dart';
 import '../models/category_type.dart';
 import '../models/place_prediction.dart';
 import '../services/firestore_service.dart';
@@ -13,6 +15,7 @@ import '../services/places_service.dart';
 import '../services/unsplash_service.dart';
 import '../models/collection_entity.dart';
 import '../widgets/unsplash_search_dialog.dart';
+import '../widgets/resolved_network_image.dart';
 
 
 class CreateCollectionScreen extends StatefulWidget {
@@ -61,6 +64,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
   String? _coverAutoSearchTitle;
   String? _selectedGoogleMapsUrl;
   final FocusNode _titleFocusNode = FocusNode();
+  final FocusNode _locationFocusNode = FocusNode();
 
   bool get _isEditing => widget.existingCollection != null;
 
@@ -181,10 +185,351 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
             widget.existingCollection!.coverImageUrl!.isNotEmpty);
   }
 
+  TextStyle get _labelStyle => GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.w700,
+        fontSize: 14,
+        color: AppColors.textPrimary,
+      );
+
+  TextStyle get _sectionTitleStyle => GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.w800,
+        fontSize: 16,
+        color: AppColors.textPrimary,
+      );
+
+  TextStyle get _hintStyle => GoogleFonts.plusJakartaSans(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: AppColors.textSecondary,
+        height: 1.35,
+      );
+
+  Widget _fieldLabel(String text, {bool optional = false, bool required = false}) {
+    final suffix = required ? ' *' : (optional ? ' (Optional)' : '');
+    return Text('$text$suffix', style: _labelStyle);
+  }
+
+  Widget _formCard({required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  ButtonStyle get _outlineActionStyle => OutlinedButton.styleFrom(
+        foregroundColor: AppColors.textPrimary,
+        side: const BorderSide(color: AppColors.divider),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        textStyle: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+        ),
+      );
+
+  String? get _displayCoverUrl {
+    if (_coverExplicitlyCleared) return null;
+    if (_selectedUnsplashUrl != null && _selectedUnsplashUrl!.isNotEmpty) {
+      return _selectedUnsplashUrl;
+    }
+    if (_isEditing &&
+        widget.existingCollection?.coverImageUrl != null &&
+        widget.existingCollection!.coverImageUrl!.isNotEmpty) {
+      return widget.existingCollection!.coverImageUrl;
+    }
+    return null;
+  }
+
+  Widget _buildCoverSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Cover', style: _sectionTitleStyle),
+        const SizedBox(height: 4),
+        Text(
+          _isEditing
+              ? 'Upload a photo or search Unsplash'
+              : 'Optional — we can suggest one from your collection name',
+          style: _hintStyle,
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isCoverPreparing ? null : _pickImage,
+                icon: const Icon(Icons.photo_library_outlined, size: 20),
+                label: const Text('Upload'),
+                style: _outlineActionStyle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isCoverPreparing
+                    ? null
+                    : () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => UnsplashSearchDialog(
+                            onImageSelected: (imageUrl, attribution) {
+                              _applyRemoteCover(imageUrl);
+                            },
+                          ),
+                        );
+                      },
+                icon: const Icon(Icons.image_search_outlined, size: 20),
+                label: const Text('Unsplash'),
+                style: _outlineActionStyle,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _buildCoverPreview(),
+      ],
+    );
+  }
+
+  Widget _buildCoverPreview() {
+    const height = 200.0;
+    final remoteUrl = _displayCoverUrl;
+
+    Widget coverChild;
+    if (_coverImage != null) {
+      coverChild = Image.file(_coverImage!, width: double.infinity, height: height, fit: BoxFit.cover);
+    } else if (remoteUrl != null && remoteUrl.isNotEmpty) {
+      coverChild = ResolvedNetworkImage(
+        imageUrl: remoteUrl,
+        width: double.infinity,
+        height: height,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => _coverPlaceholder(height, loading: true),
+        errorWidget: (_, __, ___) => _coverPlaceholder(height),
+      );
+    } else {
+      coverChild = _coverPlaceholder(height);
+    }
+
+    return GestureDetector(
+      onTap: _isCoverPreparing
+          ? null
+          : () {
+              if (!_hasCover) _pickImage();
+            },
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: SizedBox(
+              width: double.infinity,
+              height: height,
+              child: coverChild,
+            ),
+          ),
+          if (_hasCover) ...[
+            if (_canCropCover)
+              Positioned(
+                bottom: 10,
+                left: 10,
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(999),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: _cropCoverImage,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.crop_rounded, color: Colors.white, size: 16),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Crop',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.55),
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: _clearCover,
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (_isCoverPreparing || _isAutoSearchingCover)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _coverPlaceholder(double height, {bool loading = false}) {
+    return Container(
+      width: double.infinity,
+      height: height,
+      color: AppColors.surfaceMuted,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            loading ? Icons.hourglass_top_rounded : Icons.image_outlined,
+            size: 40,
+            color: AppColors.textMuted,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            loading ? 'Finding a cover...' : 'Tap to add a cover',
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(CategoryType category) {
+    final isSelected = _selectedCategory == category;
+    final color = AppColors.categoryLabelColor(category.name);
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedCategory = category),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color : color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected ? color : AppColors.divider,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CategoryPhosphorIcon(
+              category: category,
+              size: 16,
+              color: isSelected ? Colors.white : color,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              category.displayName,
+              style: GoogleFonts.plusJakartaSans(
+                color: isSelected ? Colors.white : AppColors.textPrimary,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisibilityTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+    Color? accentColor,
+  }) {
+    final accent = accentColor ?? AppColors.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: onChanged != null ? accent.withValues(alpha: 0.06) : AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 20, color: accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 15)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: _hintStyle),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _titleFocusNode.removeListener(_onTitleFocusChanged);
     _titleFocusNode.dispose();
+    _locationFocusNode.dispose();
     _titleController.dispose();
     _descriptionController.dispose();
     _websiteUrlController.dispose();
@@ -481,557 +826,308 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
       appBar: AppBar(
-        title: Text(
-          _isEditing ? 'Edit Collection' : 'New Collection',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+        backgroundColor: AppColors.backgroundSurface,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.pop(context),
         ),
+        title: Text(
+          _isEditing ? 'Edit Collection' : 'New Collection',
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: AppColors.textPrimary,
+          ),
+        ),
         actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _save,
-            child: _isLoading
-                ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const SizedBox(
-                      width: 16,
-                      height: 16,
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton(
+              onPressed: _isLoading ? null : _save,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator.adaptive(
                         strokeWidth: 2.4,
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryPurple),
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                         strokeCap: StrokeCap.round,
                       ),
+                    )
+                  : Text(
+                      _isEditing ? 'Save' : 'Create',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
                     ),
-                  )
-                : Text(
-                    _isEditing ? 'Save' : 'Create',
-                    style: const TextStyle(
-                      color: AppColors.primaryPurple,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+            ),
           ),
         ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
-            const Text(
-              'Cover Image (Optional)',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            Row(
+            _buildCoverSection(),
+            const SizedBox(height: 20),
+            _formCard(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: const Text('Upload'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.divider),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
+                Text('Details', style: _sectionTitleStyle),
+                const SizedBox(height: 18),
+                _fieldLabel('Collection name', required: true),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _titleController,
+                  focusNode: _titleFocusNode,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: _onTitleSubmitted,
+                  decoration: const InputDecoration(
+                    hintText: 'e.g., Summer Reading List',
                   ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a name';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isCoverPreparing
-                        ? null
-                        : () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => UnsplashSearchDialog(
-                                onImageSelected: (imageUrl, attribution) {
-                                  _applyRemoteCover(imageUrl);
+                const SizedBox(height: 18),
+                _fieldLabel('Description', optional: true),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(
+                    hintText: 'What is this collection about?',
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 4,
+                  minLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _formCard(
+              children: [
+                Text('Links', style: _sectionTitleStyle),
+                const SizedBox(height: 18),
+                _fieldLabel('Website', optional: true),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _websiteUrlController,
+                  decoration: const InputDecoration(
+                    hintText: 'https://...',
+                    prefixIcon: Icon(Icons.link_rounded),
+                  ),
+                  keyboardType: TextInputType.url,
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 18),
+                _fieldLabel('Location', optional: true),
+                const SizedBox(height: 8),
+                RawAutocomplete<PlacePrediction>(
+                  textEditingController: _googleMapsUrlController,
+                  focusNode: _locationFocusNode,
+                  optionsBuilder: (TextEditingValue textEditingValue) async {
+                    final q = textEditingValue.text.trim();
+                    if (q.length < 2) return const Iterable<PlacePrediction>.empty();
+                    if (q.startsWith('http://') || q.startsWith('https://')) {
+                      return const Iterable<PlacePrediction>.empty();
+                    }
+                    return _placesService.getAutocompletePredictions(q);
+                  },
+                  displayStringForOption: (PlacePrediction option) => option.description,
+                  onSelected: (PlacePrediction selection) async {
+                    _googleMapsUrlController.text = selection.description;
+                    final url = await _placesService.getPlaceUrl(selection.placeId);
+                    if (!mounted) return;
+                    setState(() => _selectedGoogleMapsUrl = url);
+                  },
+                  fieldViewBuilder: (
+                    BuildContext context,
+                    TextEditingController textEditingController,
+                    FocusNode focusNode,
+                    VoidCallback onFieldSubmitted,
+                  ) {
+                    return TextFormField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        hintText: 'Search for a place or paste URL',
+                        prefixIcon: const Icon(Icons.place_outlined),
+                        suffixIcon: textEditingController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded),
+                                onPressed: () {
+                                  textEditingController.clear();
+                                  setState(() => _selectedGoogleMapsUrl = null);
                                 },
-                              ),
-                            );
-                          },
-                    icon: const Icon(Icons.image_outlined),
-                    label: const Text('Unsplash'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.divider),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _canCropCover ? _cropCoverImage : null,
-                    icon: const Icon(Icons.crop),
-                    label: const Text('Crop'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.divider),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  height: 180,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.divider),
-                    image: _hasCover
-                        ? (_coverImage != null
-                            ? DecorationImage(
-                                image: FileImage(_coverImage!),
-                                fit: BoxFit.cover,
                               )
-                            : _selectedUnsplashUrl != null
-                                ? DecorationImage(
-                                    image: NetworkImage(_selectedUnsplashUrl!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : widget.existingCollection?.coverImageUrl != null
-                                    ? DecorationImage(
-                                        image: NetworkImage(
-                                          widget.existingCollection!.coverImageUrl!,
-                                        ),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null)
-                        : null,
-                  ),
-                  child: !_hasCover
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _isAutoSearchingCover
-                                  ? Icons.hourglass_top_rounded
-                                  : Icons.image_outlined,
-                              size: 42,
-                              color: AppColors.textMuted,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _isAutoSearchingCover
-                                  ? 'Finding a cover...'
-                                  : 'No cover selected',
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                if (_hasCover)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Material(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        onPressed: _clearCover,
-                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
-                        tooltip: 'Clear cover',
-                        visualDensity: VisualDensity.compact,
+                            : null,
                       ),
-                    ),
-                  ),
-                if (_isCoverPreparing || _isAutoSearchingCover)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.divider),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 14,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Collection name *',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _titleController,
-                    focusNode: _titleFocusNode,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: _onTitleSubmitted,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g., Summer Reading List',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter a title';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Description (Optional)',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      hintText: 'What is this collection about?',
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 22),
-                  const Text(
-                    'Link (Optional)',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _websiteUrlController,
-                    decoration: const InputDecoration(
-                      hintText: 'https://...',
-                      prefixIcon: Icon(Icons.link),
-                    ),
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Location (Optional)',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 10),
-                  RawAutocomplete<PlacePrediction>(
-                    textEditingController: _googleMapsUrlController,
-                    focusNode: FocusNode(),
-                    optionsBuilder: (TextEditingValue textEditingValue) async {
-                      final q = textEditingValue.text.trim();
-                      if (q.length < 2) return const Iterable<PlacePrediction>.empty();
-                      if (q.startsWith('http://') || q.startsWith('https://')) {
-                        return const Iterable<PlacePrediction>.empty();
-                      }
-                      return await _placesService.getAutocompletePredictions(q);
-                    },
-                    displayStringForOption: (PlacePrediction option) => option.description,
-                    onSelected: (PlacePrediction selection) async {
-                      _googleMapsUrlController.text = selection.description;
-                      final url = await _placesService.getPlaceUrl(selection.placeId);
-                      if (!mounted) return;
-                      setState(() {
-                        _selectedGoogleMapsUrl = url;
-                      });
-                    },
-                    fieldViewBuilder: (
-                      BuildContext context,
-                      TextEditingController textEditingController,
-                      FocusNode focusNode,
-                      VoidCallback onFieldSubmitted,
-                    ) {
-                      return TextFormField(
-                        controller: textEditingController,
-                        focusNode: focusNode,
-                        decoration: const InputDecoration(
-                          hintText: 'Search for a place or paste URL',
-                          prefixIcon: Icon(Icons.place_outlined),
-                        ),
-                        textInputAction: TextInputAction.next,
-                        onChanged: (_) {
-                          if (_selectedGoogleMapsUrl != null) {
-                            setState(() => _selectedGoogleMapsUrl = null);
-                          }
-                        },
-                      );
-                    },
-                    optionsViewBuilder: (
-                      BuildContext context,
-                      AutocompleteOnSelected<PlacePrediction> onSelected,
-                      Iterable<PlacePrediction> options,
-                    ) {
-                      return Align(
-                        alignment: Alignment.topLeft,
-                        child: Material(
-                          elevation: 10,
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 240, maxWidth: 360),
-                            child: ListView.builder(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              shrinkWrap: true,
-                              itemCount: options.length,
-                              itemBuilder: (context, index) {
-                                final option = options.elementAt(index);
-                                return ListTile(
-                                  leading: const Icon(Icons.place, size: 20, color: AppColors.textMuted),
-                                  title: Text(
-                                    option.mainText,
-                                    style: const TextStyle(fontWeight: FontWeight.w600),
-                                  ),
-                                  subtitle: option.secondaryText.isNotEmpty
-                                      ? Text(option.secondaryText)
-                                      : null,
-                                  onTap: () => onSelected(option),
-                                );
-                              },
-                            ),
+                      textInputAction: TextInputAction.done,
+                      onChanged: (_) {
+                        if (_selectedGoogleMapsUrl != null) {
+                          setState(() => _selectedGoogleMapsUrl = null);
+                        }
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (
+                    BuildContext context,
+                    AutocompleteOnSelected<PlacePrediction> onSelected,
+                    Iterable<PlacePrediction> options,
+                  ) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 10,
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            itemBuilder: (context, index) {
+                              final option = options.elementAt(index);
+                              return ListTile(
+                                leading: const Icon(Icons.place, size: 20, color: AppColors.textMuted),
+                                title: Text(
+                                  option.mainText,
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: option.secondaryText.isNotEmpty
+                                    ? Text(option.secondaryText)
+                                    : null,
+                                onTap: () => onSelected(option),
+                              );
+                            },
                           ),
                         ),
-                      );
-                    },
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _formCard(
+              children: [
+                Text('Category & tags', style: _sectionTitleStyle),
+                const SizedBox(height: 6),
+                Text('Pick a category and add hashtags to help others discover it', style: _hintStyle),
+                const SizedBox(height: 16),
+                _fieldLabel('Category', required: true),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 120,
+                  child: SingleChildScrollView(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: CategoryType.values.map(_buildCategoryChip).toList(),
+                    ),
                   ),
-                  const SizedBox(height: 22),
-                  const Text(
-                    'Category *',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                ),
+                const SizedBox(height: 18),
+                _fieldLabel('Tags', optional: true),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _tagController,
+                        decoration: const InputDecoration(
+                          hintText: 'Add a tag',
+                        ),
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _addTag(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Material(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
+                        onTap: _addTag,
+                        borderRadius: BorderRadius.circular(14),
+                        child: const SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Icon(Icons.add_rounded, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_tags.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: CategoryType.values.map((category) {
-                      final isSelected = _selectedCategory == category;
-                      return GestureDetector(
-                        onTap: () => setState(() => _selectedCategory = category),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primaryPurple : AppColors.surfaceMuted,
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: isSelected ? AppColors.primaryPurple : AppColors.divider,
-                            ),
-                          ),
-                          child: Text(
-                            category.displayName,
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.black,
-                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                            ),
-                          ),
+                    children: _tags.map((tag) {
+                      return InputChip(
+                        label: Text('#$tag'),
+                        deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                        onDeleted: () => _removeTag(tag),
+                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                        labelStyle: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
                         ),
+                        side: BorderSide(color: AppColors.primary.withValues(alpha: 0.2)),
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 22),
-                  const Text(
-                    'Tags',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _tagController,
-                          decoration: const InputDecoration(
-                            hintText: 'Add a tag',
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          ),
-                          onSubmitted: (_) => _addTag(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryPurple,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: IconButton(
-                          onPressed: _addTag,
-                          icon: const Icon(Icons.add, color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_tags.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _tags.map((tag) {
-                        return Chip(
-                          label: Text('#$tag'),
-                          deleteIcon: const Icon(Icons.close, size: 18),
-                          onDeleted: () => _removeTag(tag),
-                          backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                  const SizedBox(height: 22),
-                  Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryPurple.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: AppColors.divider),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryPurple.withOpacity(0.14),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              alignment: Alignment.center,
-                              child: Icon(
-                                _isPublic ? Icons.public : Icons.lock_outline,
-                                size: 18,
-                                color: AppColors.primaryPurple,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _isPublic ? 'Public' : 'Private',
-                                    style: const TextStyle(fontWeight: FontWeight.w800),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _isPublic
-                                        ? 'Anyone can see this collection'
-                                        : 'Only you can see this collection',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch.adaptive(
-                              value: _isPublic,
-                              onChanged: (value) => setState(() => _isPublic = value),
-                              activeColor: AppColors.primaryPurple,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Opacity(
-                        opacity: _isPublic ? 1 : 0.45,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceMuted,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: AppColors.divider),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.group_add_outlined,
-                                  size: 18,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Open for contribution',
-                                      style: TextStyle(fontWeight: FontWeight.w800),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      'Anyone can add items',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Switch.adaptive(
-                                value: _isOpenForContribution,
-                                onChanged: _isPublic
-                                    ? (value) => setState(() => _isOpenForContribution = value)
-                                    : null,
-                                activeColor: AppColors.primaryPurple,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
-              ),
+              ],
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
+            _formCard(
+              children: [
+                Text('Visibility', style: _sectionTitleStyle),
+                const SizedBox(height: 16),
+                _buildVisibilityTile(
+                  icon: _isPublic ? Icons.public_rounded : Icons.lock_outline_rounded,
+                  title: _isPublic ? 'Public' : 'Private',
+                  subtitle: _isPublic
+                      ? 'Anyone can see this collection'
+                      : 'Only you can see this collection',
+                  value: _isPublic,
+                  onChanged: (value) => setState(() => _isPublic = value),
+                ),
+                const SizedBox(height: 12),
+                Opacity(
+                  opacity: _isPublic ? 1 : 0.45,
+                  child: _buildVisibilityTile(
+                    icon: Icons.group_add_outlined,
+                    title: 'Open for contribution',
+                    subtitle: 'Let others add items to this collection',
+                    value: _isOpenForContribution,
+                    onChanged: _isPublic
+                        ? (value) => setState(() => _isOpenForContribution = value)
+                        : null,
+                    accentColor: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
-}
-
-class RoundedCornerShape extends RoundedRectangleBorder {
-  RoundedCornerShape(double radius) : super(borderRadius: BorderRadius.circular(radius));
 }
