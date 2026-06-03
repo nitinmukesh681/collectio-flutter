@@ -50,6 +50,7 @@ class UserEntity {
     String? email,
     String? username,
     String? avatarUrl,
+    bool clearAvatarUrl = false,
     String? bio,
     bool? isPrivateAccount,
     int? collectionsCount,
@@ -69,7 +70,7 @@ class UserEntity {
       username: username != null
           ? UsernameUtils.normalize(username)
           : this.username,
-      avatarUrl: avatarUrl ?? this.avatarUrl,
+      avatarUrl: clearAvatarUrl ? null : (avatarUrl ?? this.avatarUrl),
       bio: bio ?? this.bio,
       isPrivateAccount: isPrivateAccount ?? this.isPrivateAccount,
       collectionsCount: collectionsCount ?? this.collectionsCount,

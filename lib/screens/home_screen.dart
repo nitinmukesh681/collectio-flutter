@@ -465,20 +465,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                _buildHeaderSquircle(
-                  onTap: () => setState(() => _selectedIndex = 4),
-                  backgroundColor: AppColors.chipBg,
-                  padding: EdgeInsets.zero,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(_headerSquircleRadius),
-                    child: UserAvatar(
-                      userId: auth.userId,
-                      avatarUrl: auth.userEntity?.avatarUrl,
-                      name: auth.resolvedUserName,
-                      size: _headerSquircleSize,
-                    ),
-                  ),
-                ),
+                _buildHeaderProfileAvatar(auth),
               ],
             ),
         ),
@@ -530,6 +517,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildHeaderProfileAvatar(AuthProvider auth) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selectedIndex = 4),
+        customBorder: const CircleBorder(),
+        child: UserAvatar(
+          userId: auth.userId,
+          avatarUrl: auth.userEntity?.avatarUrl,
+          name: auth.resolvedUserName,
+          size: _headerSquircleSize,
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeaderSquircle({
     required VoidCallback onTap,
     required Widget child,
@@ -574,16 +577,28 @@ class _HomeScreenState extends State<HomeScreen> {
       child: SizedBox(
         width: 48, height: 48,
         child: Center(
-          child: isSelected
-              ? Container(
-                  width: 44, height: 44,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            child: isSelected
+                ? Container(
+                    key: ValueKey('selected-$index'),
+                    width: 44,
+                    height: 44,
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(filledIcon, color: Colors.white, size: 22),
+                  )
+                : Icon(
+                    outlineIcon,
+                    key: ValueKey('outline-$index'),
+                    color: _navIconColor,
+                    size: 24,
                   ),
-                  child: Icon(filledIcon, color: Colors.white, size: 22),
-                )
-              : Icon(outlineIcon, color: _navIconColor, size: 24),
+          ),
         ),
       ),
     );

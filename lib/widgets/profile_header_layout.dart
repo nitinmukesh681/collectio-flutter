@@ -399,17 +399,24 @@ class ProfileHeaderLayout extends StatelessWidget {
           final url = snap.data;
           if (url == null || url.isEmpty) return fallback();
           return CachedNetworkImage(
+            key: ValueKey(url),
             imageUrl: url,
+            cacheKey: url,
             fit: BoxFit.cover,
+            fadeInDuration: Duration.zero,
             errorWidget: (_, __, ___) => fallback(),
           );
         },
       );
     }
 
+    final url = user.avatarUrl!.trim();
     return CachedNetworkImage(
-      imageUrl: user.avatarUrl!.trim(),
+      key: ValueKey(url),
+      imageUrl: url,
+      cacheKey: url,
       fit: BoxFit.cover,
+      fadeInDuration: Duration.zero,
       errorWidget: (_, __, ___) => fallback(),
     );
   }

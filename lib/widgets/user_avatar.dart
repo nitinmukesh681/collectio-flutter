@@ -5,7 +5,7 @@ import '../services/firestore_service.dart';
 import 'avatar_fallback.dart';
 
 /// Displays a user profile photo with gs:// resolution.
-/// When [userId] is set, the live avatar from the user profile is used first.
+/// Uses [avatarUrl] when provided; otherwise loads from Firestore via [userId].
 class UserAvatar extends StatefulWidget {
   final String name;
   final double size;
@@ -24,17 +24,16 @@ class UserAvatar extends StatefulWidget {
     String? avatarUrl,
     String? userId,
   }) async {
-    String? raw;
-
-    if (userId != null && userId.isNotEmpty) {
-      try {
-        raw = (await FirestoreService().getUser(userId))?.avatarUrl?.trim();
-      } catch (_) {
-        raw = null;
+    var raw = avatarUrl?.trim();
+    if (raw == null || raw.isEmpty) {
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          raw = (await FirestoreService().getUser(userId))?.avatarUrl?.trim();
+        } catch (_) {
+          raw = null;
+        }
       }
     }
-
-    raw ??= avatarUrl?.trim();
     if (raw == null || raw.isEmpty) return null;
 
     if (raw.startsWith('gs://')) {
@@ -88,15 +87,19 @@ class _UserAvatarState extends State<UserAvatar> {
       height: widget.size,
       child: ClipOval(
         child: FutureBuilder<String?>(
+          key: ValueKey('${widget.userId}|${widget.avatarUrl}'),
           future: _urlFuture,
           builder: (context, snapshot) {
             final url = snapshot.data;
             if (url != null && url.isNotEmpty) {
               return CachedNetworkImage(
+                key: ValueKey(url),
                 imageUrl: url,
+                cacheKey: url,
                 fit: BoxFit.cover,
                 width: widget.size,
                 height: widget.size,
+                fadeInDuration: Duration.zero,
                 errorWidget: (_, __, ___) => fallback,
               );
             }

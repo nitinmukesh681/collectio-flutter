@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import '../providers/auth_provider.dart';
@@ -27,6 +28,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late String _originalUsername;
 
   File? _newAvatar;
+  bool _clearAvatar = false;
   bool _isLoading = false;
   bool _usernameTaken = false;
 
@@ -53,16 +55,58 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _pickAvatar() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 80,
-    );
-    if (pickedFile != null) {
-      setState(() => _newAvatar = File(pickedFile.path));
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null || !mounted) return;
+
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: pickedFile.path,
+        compressQuality: 85,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Profile Photo',
+            toolbarColor: AppColors.primaryPurple,
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: AppColors.primaryPurple,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
+          IOSUiSettings(
+            title: 'Crop Profile Photo',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            embedInNavigationController: true,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
+        ],
+      );
+
+      if (!mounted || croppedFile == null) return;
+      setState(() {
+        _newAvatar = File(croppedFile.path);
+        _clearAvatar = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(context, 'Could not update profile photo');
+      }
     }
+  }
+
+  void _clearProfilePhoto() {
+    setState(() {
+      _newAvatar = null;
+      _clearAvatar = true;
+    });
+  }
+
+  bool _canClearProfilePhoto(String? avatarUrl) {
+    if (_newAvatar != null) return true;
+    if (_clearAvatar) return false;
+    return avatarUrl != null && avatarUrl.trim().isNotEmpty;
   }
 
   Future<void> _save() async {
@@ -94,24 +138,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
 
+      final shouldClearAvatar = _clearAvatar && _newAvatar == null;
       String? avatarUrl = auth.userEntity?.avatarUrl;
 
-      if (_newAvatar != null) {
+      if (shouldClearAvatar) {
+        await _firestoreService.clearUserAvatar(auth.userId);
+        avatarUrl = null;
+      } else if (_newAvatar != null) {
         final rawUrl = await _firestoreService.uploadImage(
           _newAvatar!,
           'avatars/${auth.userId}.jpg',
         );
-        if (rawUrl != null) {
-          final separator = rawUrl.contains('?') ? '&' : '?';
-          avatarUrl = '$rawUrl${separator}t=${DateTime.now().millisecondsSinceEpoch}';
+        if (rawUrl == null) {
+          if (mounted) {
+            SnackBarUtils.showErrorSnackBar(context, 'Could not upload profile photo');
+            setState(() => _isLoading = false);
+          }
+          return;
         }
+        final separator = rawUrl.contains('?') ? '&' : '?';
+        avatarUrl = '$rawUrl${separator}t=${DateTime.now().millisecondsSinceEpoch}';
       }
 
-      final updatedUser = auth.userEntity!.copyWith(
-        username: newUsername,
-        bio: _bioController.text.trim(),
-        avatarUrl: avatarUrl,
-      );
+      final updatedUser = shouldClearAvatar
+          ? auth.userEntity!.copyWith(
+              username: newUsername,
+              bio: _bioController.text.trim(),
+              clearAvatarUrl: true,
+            )
+          : auth.userEntity!.copyWith(
+              username: newUsername,
+              bio: _bioController.text.trim(),
+              avatarUrl: avatarUrl,
+            );
 
       final success = await auth.updateProfile(updatedUser);
 
@@ -161,12 +220,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 children: [
                   _buildAvatarSection(user?.userName ?? 'U', user?.avatarUrl),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 12),
                   _buildFormCard(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   _buildEmailCard(auth, email),
                 ],
               ),
@@ -234,20 +293,35 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          'Change photo',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.primary,
+        if (_canClearProfilePhoto(avatarUrl)) ...[
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: _isLoading ? null : _clearProfilePhoto,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Remove photo',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
 
   Widget _buildAvatarImage(String userName, String? avatarUrl) {
+    if (_clearAvatar) {
+      return AvatarFallback(name: userName, size: _avatarSize);
+    }
+
     if (_newAvatar != null) {
       return Image.file(_newAvatar!, fit: BoxFit.cover);
     }
@@ -257,8 +331,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
 
     return CachedNetworkImage(
+      key: ValueKey(avatarUrl),
       imageUrl: avatarUrl,
+      cacheKey: avatarUrl,
       fit: BoxFit.cover,
+      fadeInDuration: Duration.zero,
       errorWidget: (_, __, ___) => AvatarFallback(name: userName, size: _avatarSize),
     );
   }
@@ -369,13 +446,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Email',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textMuted,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Email',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMuted,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                        if (auth.isEmailVerified) _buildVerifiedBadge(),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -389,29 +475,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ],
                 ),
               ),
-              if (auth.isEmailVerified)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.verified_rounded, size: 14, color: Colors.green.shade700),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Verified',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.green.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
           if (!auth.isEmailVerified) ...[
@@ -476,6 +539,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildVerifiedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.verified_rounded, size: 14, color: Colors.green.shade700),
+          const SizedBox(width: 4),
+          Text(
+            'Verified',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.green.shade700,
+              height: 1.2,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -388,19 +388,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           borderRadius: BorderRadius.circular(18),
           onTap: () {
             if (_tabController.index != index) {
-              _tabController.index = index;
+              _tabController.animateTo(index);
             }
           },
           child: Center(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOut,
               style: GoogleFonts.plusJakartaSans(
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                 fontSize: 13,
                 letterSpacing: 0.5,
                 color: isSelected ? AppColors.textPrimary : AppColors.textMuted,
               ),
+              child: Text(label, textAlign: TextAlign.center),
             ),
           ),
         ),

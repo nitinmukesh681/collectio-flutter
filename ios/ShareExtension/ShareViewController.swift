@@ -168,7 +168,7 @@ class ShareViewController: UIViewController {
     
     private func completeExtension() {
         NSLog("[Share:8] completeExtension — calling extensionContext.completeRequest")
-        extensionContext?.completeRequest(returningItems: [], completionHandler: { [weak self] expired in
+        extensionContext?.completeRequest(returningItems: [], completionHandler: { expired in
             NSLog("[Share:8] completeRequest callback — expired=\(expired)")
         })
     }

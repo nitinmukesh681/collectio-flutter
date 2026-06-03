@@ -7,6 +7,7 @@ import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../models/user_entity.dart';
 import '../utils/username_utils.dart';
+import '../utils/avatar_display_utils.dart';
 
 /// Authentication state provider
 class AuthProvider extends ChangeNotifier {
@@ -398,19 +399,29 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Update user profile and refresh entity
+  /// Update user profile and refresh entity (does not toggle global [isLoading]).
   Future<bool> updateProfile(UserEntity updatedUser) async {
     if (_firestoreService == null) return false;
-    _setLoading(true);
+    _error = null;
     try {
+      final previousAvatarUrl = _userEntity?.avatarUrl;
       await _firestoreService!.saveUser(updatedUser);
+      await evictAvatarImageCache(
+        previousUrl: previousAvatarUrl,
+        newUrl: updatedUser.avatarUrl,
+      );
+      unawaited(
+        _firestoreService!.syncUserAvatarDenormalized(
+          userId: updatedUser.id,
+          avatarUrl: updatedUser.avatarUrl,
+        ),
+      );
       _userEntity = updatedUser;
-      _setLoading(false);
       notifyListeners();
       return true;
     } catch (e) {
       _error = e.toString();
-      _setLoading(false);
+      notifyListeners();
       return false;
     }
   }

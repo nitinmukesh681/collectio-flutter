@@ -162,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _SettingsInfoRow(
                 icon: Icons.info_outline_rounded,
                 title: 'App Version',
-                subtitle: '1.0.0',
+                subtitle: '1.0.5 (3)',
               ),
               _SettingsDivider(),
               _SettingsNavRow(
@@ -379,6 +379,7 @@ class _VerifiedBadge extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               color: Colors.green.shade700,
+              height: 1.2,
             ),
           ),
         ],
@@ -516,13 +517,22 @@ class _SettingsInfoRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textMuted,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                    if (trailing != null) trailing!,
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -536,7 +546,6 @@ class _SettingsInfoRow extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!,
         ],
       ),
     );

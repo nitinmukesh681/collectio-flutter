@@ -117,7 +117,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   String? _pendingSharedUrl;
   String? _pendingSharedTitle;
   bool _didHandlePendingShare = false;
-  String? _postImportCollectionId;
   bool _isCheckingAndroidShare = false;
   bool _usernameMigrationStarted = false;
   bool _legacySearchSyncInFlight = false;
@@ -535,18 +534,27 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   void _completeShareImport([String? collectionId]) {
     if (!mounted) return;
+    final auth = _auth;
+    final userId = auth?.userId ?? '';
     setState(() {
       _pendingSharedUrl = null;
       _pendingSharedTitle = null;
       _didHandlePendingShare = true;
-      _postImportCollectionId = collectionId;
     });
     _clearNativeSharePayload();
-  }
 
-  void _clearPostImportCollection() {
-    if (!mounted) return;
-    setState(() => _postImportCollectionId = null);
+    if (collectionId == null || collectionId.isEmpty || userId.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      CollectioApp.navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => CollectionDetailScreen(
+            collectionId: collectionId,
+            currentUserId: userId,
+          ),
+        ),
+      );
+    });
   }
 
   Widget? _buildShareImportScreen(AuthProvider auth) {
@@ -628,19 +636,6 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         final shareImportScreen = _buildShareImportScreen(auth);
         if (shareImportScreen != null) {
           return shareImportScreen;
-        }
-
-        if (_postImportCollectionId != null) {
-          return PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, _) {
-              if (!didPop) _clearPostImportCollection();
-            },
-            child: CollectionDetailScreen(
-              collectionId: _postImportCollectionId!,
-              currentUserId: auth.userId,
-            ),
-          );
         }
 
         if (auth.isAuthenticated && !auth.userProfileLoaded) {

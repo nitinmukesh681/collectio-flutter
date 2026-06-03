@@ -90,6 +90,6 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Finds needs access to your photo library to save and share items from your collections.</string>
+	<string>Finds needs access to your photo library to set your profile photo and add images to collections.</string>
 </dict>
 </plist>

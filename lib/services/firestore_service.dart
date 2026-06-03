@@ -320,8 +320,31 @@ class FirestoreService {
     }
   }
 
-  Future<void> deleteComment(String commentId) async {
-    await _commentsRef.doc(commentId).delete();
+  /// Deletes a comment when [requestingUserId] is the author or collection owner.
+  Future<void> deleteComment(
+    String commentId, {
+    required String requestingUserId,
+  }) async {
+    final snap = await _commentsRef.doc(commentId).get();
+    if (!snap.exists) return;
+
+    final data = snap.data() as Map<String, dynamic>;
+    final commentUserId = data['userId'] as String? ?? '';
+    if (commentUserId == requestingUserId) {
+      await _commentsRef.doc(commentId).delete();
+      return;
+    }
+
+    final collectionId = data['collectionId'] as String? ?? '';
+    if (collectionId.isNotEmpty) {
+      final collection = await getCollection(collectionId);
+      if (collection?.userId == requestingUserId) {
+        await _commentsRef.doc(commentId).delete();
+        return;
+      }
+    }
+
+    throw Exception('Not authorized to delete this comment');
   }
 
   Future<String> _getUsername(String userId) async {
@@ -427,6 +450,67 @@ class FirestoreService {
       chunks.add(items.sublist(i, (i + size).clamp(0, items.length)));
     }
     return chunks;
+  }
+
+  /// Removes the user's profile photo from Storage and Firestore.
+  Future<void> clearUserAvatar(String userId) async {
+    try {
+      await _storage.ref().child('avatars/$userId.jpg').delete();
+    } catch (e) {
+      debugPrint('Could not delete avatar from storage: $e');
+    }
+    await _usersRef.doc(userId).update({'avatarUrl': FieldValue.delete()});
+    await syncUserAvatarDenormalized(userId: userId, avatarUrl: null);
+  }
+
+  /// Updates denormalized avatar URLs on the user's collections and comments.
+  Future<void> syncUserAvatarDenormalized({
+    required String userId,
+    required String? avatarUrl,
+  }) async {
+    final updateData = (avatarUrl == null || avatarUrl.trim().isEmpty)
+        ? {'userAvatarUrl': FieldValue.delete()}
+        : {'userAvatarUrl': avatarUrl.trim()};
+
+    try {
+      await _updateQueryDocumentsInBatches(
+        _collectionsRef.where('userId', isEqualTo: userId),
+        updateData,
+      );
+      await _updateQueryDocumentsInBatches(
+        _commentsRef.where('userId', isEqualTo: userId),
+        updateData,
+      );
+    } catch (e) {
+      debugPrint('Could not sync avatar across content: $e');
+    }
+  }
+
+  Future<void> _updateQueryDocumentsInBatches(
+    Query query,
+    Map<String, dynamic> updateData,
+  ) async {
+    const pageSize = 200;
+    QueryDocumentSnapshot? lastDoc;
+
+    while (true) {
+      var paged = query.limit(pageSize);
+      if (lastDoc != null) {
+        paged = paged.startAfterDocument(lastDoc);
+      }
+
+      final snapshot = await paged.get();
+      if (snapshot.docs.isEmpty) break;
+
+      final batch = _firestore.batch();
+      for (final doc in snapshot.docs) {
+        batch.update(doc.reference, updateData);
+      }
+      await batch.commit();
+
+      if (snapshot.docs.length < pageSize) break;
+      lastDoc = snapshot.docs.last;
+    }
   }
 
   /// Create or update user

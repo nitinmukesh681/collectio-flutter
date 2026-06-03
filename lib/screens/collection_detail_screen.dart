@@ -15,6 +15,7 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
+import '../utils/avatar_display_utils.dart';
 import '../widgets/avatar_fallback.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/mention_text_field.dart';
@@ -85,7 +86,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   Stream<List<CollectionItemEntity>>? _itemsStream;
 
   void _onTabControllerChanged() {
-    if (!mounted || _tabController.indexIsChanging) return;
+    if (!mounted) return;
+    setState(() {});
+    if (_tabController.indexIsChanging) return;
     if (_tabController.index != 1) {
       _dismissDiscussionComposer();
     }
@@ -273,7 +276,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       return;
     }
 
-    final ids = rawIds.where((id) => id.trim().isNotEmpty && id != collection.userId).toList();
+    final ids = rawIds
+        .where((id) => id.trim().isNotEmpty && id != collection.userId)
+        .toSet()
+        .toList();
     if (ids.isEmpty) {
       if (mounted) setState(() => _contributorUsers = []);
       return;
@@ -302,9 +308,36 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   List<Map<String, dynamic>> _editorCollaborators(CollectionEntity collection) {
-    return collection.collaborators
-        .where((c) => collection.editors.contains(c['userId'] as String? ?? ''))
-        .toList();
+    return _dedupeCollaboratorEntries(
+      collection.collaborators
+          .where((c) => collection.editors.contains(c['userId'] as String? ?? ''))
+          .toList(),
+    );
+  }
+
+  List<Map<String, dynamic>> _dedupeCollaboratorEntries(
+    List<Map<String, dynamic>> entries,
+  ) {
+    final seen = <String>{};
+    final unique = <Map<String, dynamic>>[];
+    for (final entry in entries) {
+      final userId = (entry['userId'] as String? ?? '').trim();
+      if (userId.isEmpty || seen.contains(userId)) continue;
+      seen.add(userId);
+      unique.add(entry);
+    }
+    return unique;
+  }
+
+  List<UserEntity> _dedupeUsers(List<UserEntity> users) {
+    final seen = <String>{};
+    final unique = <UserEntity>[];
+    for (final user in users) {
+      if (seen.contains(user.id)) continue;
+      seen.add(user.id);
+      unique.add(user);
+    }
+    return unique;
   }
 
   bool _isPublicCollection(CollectionEntity collection) {
@@ -333,9 +366,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
 
       try {
         final users = await _firestoreService.getUsersByIds(editorIds);
-        collaborators = users
-            .map((u) => {'userId': u.id, 'username': u.userName})
-            .toList();
+        collaborators = _dedupeCollaboratorEntries(
+          users.map((u) => {'userId': u.id, 'username': u.userName}).toList(),
+        );
       } catch (e) {
         debugPrint('Error loading collaborators: $e');
         return;
@@ -445,7 +478,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   void _showContributorsDialog(CollectionEntity collection) {
-    final users = _contributorUsers;
+    final users = _dedupeUsers(_contributorUsers);
     if (users.isEmpty) return;
 
     showDialog(
@@ -712,6 +745,19 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
       if (mounted) {
         setState(() => _optimisticCommentLikes.remove(comment.id));
         SnackBarUtils.showErrorSnackBar(context, 'Could not update like');
+      }
+    }
+  }
+
+  Future<void> _deleteComment(CommentEntity comment) async {
+    try {
+      await _firestoreService.deleteComment(
+        comment.id,
+        requestingUserId: widget.currentUserId,
+      );
+    } catch (e) {
+      if (mounted) {
+        SnackBarUtils.showErrorSnackBar(context, 'Could not delete comment');
       }
     }
   }
@@ -1311,19 +1357,20 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           borderRadius: BorderRadius.circular(18),
           onTap: () {
             if (_tabController.index != index) {
-              _tabController.index = index;
+              _tabController.animateTo(index);
             }
           },
           child: Center(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOut,
               style: GoogleFonts.plusJakartaSans(
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                 fontSize: 13,
                 letterSpacing: 0.5,
                 color: isSelected ? AppColors.textPrimary : AppColors.textMuted,
               ),
+              child: Text(label, textAlign: TextAlign.center),
             ),
           ),
         ),
@@ -1378,12 +1425,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     // Only show when more than one person has added items.
     if (itemAuthorIds.length <= 1) return const [];
 
-    return itemAuthorIds.where((id) => id != collection.userId).toList();
+    return itemAuthorIds.where((id) => id != collection.userId).toSet().toList();
   }
 
   List<String> _editorUserIdsExcludingOwner(CollectionEntity collection) {
     return collection.editors
         .where((id) => id.isNotEmpty && id != collection.userId)
+        .toSet()
         .toList();
   }
 
@@ -1417,16 +1465,19 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     CollectionEntity collection,
     List<String> contributorIds,
   ) async {
-    if (contributorIds.isEmpty) return;
+    final uniqueContributorIds = contributorIds.toSet().toList();
+    if (uniqueContributorIds.isEmpty) return;
 
-    var users = _contributorUsers.where((u) => contributorIds.contains(u.id)).toList();
-    if (users.length < contributorIds.length) {
+    var users =
+        _contributorUsers.where((u) => uniqueContributorIds.contains(u.id)).toList();
+    if (users.length < uniqueContributorIds.length) {
       try {
-        users = await _firestoreService.getUsersByIds(contributorIds);
+        users = await _firestoreService.getUsersByIds(uniqueContributorIds);
       } catch (e) {
         debugPrint('Error loading open contributors: $e');
       }
     }
+    users = _dedupeUsers(users);
 
     if (!mounted || users.isEmpty) return;
 
@@ -1447,12 +1498,16 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                 subtitle: 'Owner',
               ),
               ...users.map(
-                (user) => _buildPeopleDialogRow(
-                  dialogContext: dialogContext,
-                  userId: user.id,
-                  username: user.userName,
-                  avatarUrl: user.avatarUrl,
-                ),
+                (user) {
+                  final isEditor = collection.editors.contains(user.id);
+                  return _buildPeopleDialogRow(
+                    dialogContext: dialogContext,
+                    userId: user.id,
+                    username: user.userName,
+                    avatarUrl: user.avatarUrl,
+                    subtitle: isEditor ? 'Editor' : null,
+                  );
+                },
               ),
             ],
           ),
@@ -1481,7 +1536,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             behavior: HitTestBehavior.opaque,
             child: UserAvatar(
               userId: collection.userId,
-              avatarUrl: collection.userAvatarUrl,
+              avatarUrl: _avatarUrlForUser(collection.userId, collection.userAvatarUrl),
               name: collection.userName,
               size: 28,
             ),
@@ -1702,6 +1757,13 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             collection.description!,
             textHeightBehavior: _heroTextHeightBehavior,
             style: GoogleFonts.plusJakartaSans(textStyle: _heroDescriptionStyle),
+          ),
+        ],
+        if (_collectionHasWebsite(collection) || _collectionHasLocation(collection)) ...[
+          const SizedBox(height: 14),
+          _buildLinkLocationRow(
+            websiteUrl: collection.websiteUrl,
+            googleMapsUrl: collection.googleMapsUrl,
           ),
         ],
         const SizedBox(height: 14),
@@ -2046,6 +2108,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       name: _currentUserName.isNotEmpty ? _currentUserName : 'You',
                       size: _discussionComposerAvatarSize,
                       userId: widget.currentUserId,
+                      avatarUrl: context.watch<AuthProvider>().userEntity?.avatarUrl,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2445,7 +2508,8 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     final isLiked = _commentIsLiked(comment);
     final likeCount = _commentLikeCount(comment);
     final isOwn = comment.userId == widget.currentUserId;
-    final isCollectionOwner = comment.userId == _collection?.userId;
+    final canDeleteComment = isOwn || _isOwner;
+    final isCommentByCollectionOwner = comment.userId == _collection?.userId;
     final isReplying = _replyingToCommentId == comment.id;
     final avatarSize = depth == 0 ? 36.0 : 30.0;
 
@@ -2457,7 +2521,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
           child: UserAvatar(
             name: comment.userName,
             size: avatarSize,
-            avatarUrl: comment.userAvatarUrl,
+            avatarUrl: _avatarUrlForUser(comment.userId, comment.userAvatarUrl),
             userId: comment.userId,
           ),
         ),
@@ -2482,7 +2546,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       ),
                     ),
                   ),
-                  if (isCollectionOwner) ...[
+                  if (isCommentByCollectionOwner) ...[
                     const SizedBox(width: 6),
                     _buildCommentOwnerBadge(),
                   ],
@@ -2533,9 +2597,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
             ],
           ),
         ),
-        if (isOwn)
+        if (canDeleteComment)
           GestureDetector(
-            onTap: () => _firestoreService.deleteComment(comment.id),
+            onTap: () => _deleteComment(comment),
             child: const Padding(
               padding: EdgeInsets.only(left: 8, top: 2),
               child: Icon(Icons.close, size: 14, color: AppColors.textMuted),
@@ -2592,16 +2656,29 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     );
   }
 
+  String? _avatarUrlForUser(String userId, String? storedUrl) {
+    final auth = context.watch<AuthProvider>();
+    return displayAvatarUrl(
+      storedAvatarUrl: storedUrl,
+      subjectUserId: userId,
+      currentUserId: widget.currentUserId,
+      currentUserAvatarUrl: auth.userEntity?.avatarUrl,
+    );
+  }
+
   Widget _buildUserAvatar(
     String name,
     String? avatarUrl, {
     double size = 28,
     String? userId,
   }) {
+    final resolvedUrl = userId == null
+        ? avatarUrl
+        : _avatarUrlForUser(userId, avatarUrl);
     return UserAvatar(
       name: name,
       size: size,
-      avatarUrl: avatarUrl,
+      avatarUrl: resolvedUrl,
       userId: userId,
     );
   }
@@ -2646,6 +2723,65 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
         fontWeight: FontWeight.w700,
         color: _accentColor,
       );
+
+  bool _collectionHasWebsite(CollectionEntity collection) =>
+      (collection.websiteUrl ?? '').trim().isNotEmpty;
+
+  bool _collectionHasLocation(CollectionEntity collection) =>
+      (collection.googleMapsUrl ?? '').trim().isNotEmpty;
+
+  Widget _buildLinkLocationRow({
+    required String? websiteUrl,
+    required String? googleMapsUrl,
+  }) {
+    final hasWebsite = (websiteUrl ?? '').trim().isNotEmpty;
+    final hasLocation = (googleMapsUrl ?? '').trim().isNotEmpty;
+    if (!hasWebsite && !hasLocation) return const SizedBox.shrink();
+
+    return Row(
+      children: [
+        if (hasWebsite)
+          GestureDetector(
+            onTap: () {
+              var raw = websiteUrl!.trim();
+              if (!raw.startsWith('http')) raw = 'https://$raw';
+              final uri = Uri.tryParse(raw);
+              if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform.translate(
+                  offset: const Offset(-2, 0),
+                  child: Icon(Icons.link, size: 18, color: _accentColor),
+                ),
+                const SizedBox(width: 2),
+                Text('Link', style: _itemMetaLabelStyle),
+              ],
+            ),
+          ),
+        if (hasWebsite && hasLocation) const SizedBox(width: 24),
+        if (hasLocation)
+          GestureDetector(
+            onTap: () {
+              final uri = Uri.tryParse(googleMapsUrl!.trim());
+              if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform.translate(
+                  offset: const Offset(-2, 0),
+                  child: Icon(Icons.location_on, size: 18, color: _accentColor),
+                ),
+                const SizedBox(width: 2),
+                Text('Location', style: _itemMetaLabelStyle),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 
   double _itemTitleTrailingWidth(CollectionItemEntity item) {
     var width = _itemMenuButtonReservedWidth;
@@ -2853,42 +2989,9 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                       ? _itemMetaRowAfterDescriptionGap
                       : _itemMetaRowTopGap),
             ),
-            Row(
-              children: [
-                if (hasWebsite)
-                  GestureDetector(
-                    onTap: () {
-                      var raw = (item.websiteUrl ?? '').trim();
-                      if (!raw.startsWith('http')) raw = 'https://$raw';
-                      final uri = Uri.tryParse(raw);
-                      if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-                    },
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Transform.translate(
-                        offset: const Offset(-2, 0),
-                        child: Icon(Icons.link, size: 18, color: _accentColor),
-                      ),
-                      const SizedBox(width: 2),
-                      Text('Link', style: _itemMetaLabelStyle),
-                    ]),
-                  ),
-                if (hasWebsite && hasLocation) const SizedBox(width: 24),
-                if (hasLocation)
-                  GestureDetector(
-                    onTap: () {
-                      final uri = Uri.tryParse((item.googleMapsUrl ?? '').trim());
-                      if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-                    },
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Transform.translate(
-                        offset: const Offset(-2, 0),
-                        child: Icon(Icons.location_on, size: 18, color: _accentColor),
-                      ),
-                      const SizedBox(width: 2),
-                      Text('Location', style: _itemMetaLabelStyle),
-                    ]),
-                  ),
-              ],
+            _buildLinkLocationRow(
+              websiteUrl: item.websiteUrl,
+              googleMapsUrl: item.googleMapsUrl,
             ),
           ],
         ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -10,6 +11,8 @@ import '../utils/collection_cover_placeholder.dart';
 import '../utils/category_icons.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbar_utils.dart';
+import '../utils/avatar_display_utils.dart';
+import '../providers/auth_provider.dart';
 import 'user_avatar.dart';
 
 class FeedCollectionCard extends StatelessWidget {
@@ -106,6 +109,13 @@ class FeedCollectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final avatarUrl = displayAvatarUrl(
+      storedAvatarUrl: collection.userAvatarUrl,
+      subjectUserId: collection.userId,
+      currentUserId: auth.userId,
+      currentUserAvatarUrl: auth.userEntity?.avatarUrl,
+    );
     final gradientColors =
         AppColors.categoryGradients[collection.category.name] ??
         AppColors.categoryGradients['other']!;
@@ -140,7 +150,7 @@ class FeedCollectionCard extends StatelessWidget {
                         onTap: onUserTap,
                         child: UserAvatar(
                           userId: collection.userId,
-                          avatarUrl: collection.userAvatarUrl,
+                          avatarUrl: avatarUrl,
                           name: collection.userName,
                           size: 42,
                         ),
