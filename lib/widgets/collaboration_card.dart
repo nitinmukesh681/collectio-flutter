@@ -8,8 +8,8 @@ import '../utils/category_icons.dart';
 import '../theme/app_theme.dart';
 
 class CollaborationCard extends StatefulWidget {
-  static const double cardWidth = 158;
-  static const double cardHeight = 172;
+  static const double cardWidth = 208;
+  static const double cardHeight = 228;
 
   final CollectionEntity collection;
   final VoidCallback onTap;
@@ -23,7 +23,7 @@ class CollaborationCard extends StatefulWidget {
 class _CollaborationCardState extends State<CollaborationCard> {
   static const double _cardWidth = CollaborationCard.cardWidth;
   static const double _cardHeight = CollaborationCard.cardHeight;
-  static const double _cardRadius = 13;
+  static const double _cardRadius = 16;
 
   late Future<String?> _coverUrlFuture;
 
@@ -66,7 +66,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
         title: widget.collection.title,
       ),
       gradientColors: gradientColors,
-      iconSize: 26,
+      iconSize: 34,
     );
   }
 
@@ -101,7 +101,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
       child: Container(
         width: _cardWidth,
         height: _cardHeight,
-        margin: const EdgeInsets.only(right: 12),
+        margin: const EdgeInsets.only(right: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(_cardRadius),
           boxShadow: AppColors.collectionCoverShadow,
@@ -140,29 +140,29 @@ class _CollaborationCardState extends State<CollaborationCard> {
                 ),
               ),
               Positioned(
-                top: 8,
-                left: 8,
+                top: 9,
+                left: 9,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
                     'COLLECTING',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 7.5,
+                      fontSize: 9,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      letterSpacing: 0.6,
+                      letterSpacing: 0.7,
                     ),
                   ),
                 ),
               ),
               Positioned(
-                left: 10,
-                right: 10,
-                bottom: 10,
+                left: 11,
+                right: 11,
+                bottom: 11,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -170,29 +170,29 @@ class _CollaborationCardState extends State<CollaborationCard> {
                     Text(
                       collection.title,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
+                        fontSize: 17,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
                         height: 1.12,
-                        letterSpacing: -0.28,
+                        letterSpacing: -0.3,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (location != null) ...[
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           Transform.translate(
                             offset: const Offset(-1, 0),
-                            child: const Icon(Icons.location_on, size: 11, color: Colors.white),
+                            child: const Icon(Icons.location_on, size: 14, color: Colors.white),
                           ),
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
                               location,
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 10.5,
+                                fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.white.withValues(alpha: 0.92),
                               ),

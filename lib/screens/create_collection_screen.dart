@@ -69,6 +69,8 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
   String? _selectedGoogleMapsUrl;
   final FocusNode _titleFocusNode = FocusNode();
   final FocusNode _locationFocusNode = FocusNode();
+  final ScrollController _categoryScrollController = ScrollController();
+  bool _categoryScrollHintVisible = false;
 
   bool get _isEditing => widget.existingCollection != null;
 
@@ -116,6 +118,19 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
       }
     } else {
       _titleFocusNode.addListener(_onTitleFocusChanged);
+    }
+    _categoryScrollController.addListener(_updateCategoryScrollHint);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateCategoryScrollHint());
+  }
+
+  void _updateCategoryScrollHint() {
+    if (!_categoryScrollController.hasClients) return;
+    final position = _categoryScrollController.position;
+    final canScroll = position.maxScrollExtent > 4;
+    final atBottom = position.pixels >= position.maxScrollExtent - 4;
+    final visible = canScroll && !atBottom;
+    if (visible != _categoryScrollHintVisible && mounted) {
+      setState(() => _categoryScrollHintVisible = visible);
     }
   }
 
@@ -529,8 +544,72 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
     );
   }
 
+  Widget _buildCategoryPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _fieldLabel('Category', required: true),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 128,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification is ScrollUpdateNotification ||
+                      notification is ScrollMetricsNotification) {
+                    _updateCategoryScrollHint();
+                  }
+                  return false;
+                },
+                child: Scrollbar(
+                  controller: _categoryScrollController,
+                  thumbVisibility: _categoryScrollHintVisible,
+                  radius: const Radius.circular(8),
+                  child: SingleChildScrollView(
+                    controller: _categoryScrollController,
+                    padding: const EdgeInsets.only(bottom: 8, right: 4),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: CategoryType.values.map(_buildCategoryChip).toList(),
+                    ),
+                  ),
+                ),
+              ),
+              if (_categoryScrollHintVisible)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Container(
+                      height: 24,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(alpha: 0),
+                            Colors.white.withValues(alpha: 0.95),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
+    _categoryScrollController.removeListener(_updateCategoryScrollHint);
+    _categoryScrollController.dispose();
     _titleFocusNode.removeListener(_onTitleFocusChanged);
     _titleFocusNode.dispose();
     _locationFocusNode.dispose();
@@ -1050,18 +1129,7 @@ class _CreateCollectionScreenState extends State<CreateCollectionScreen> {
                 const SizedBox(height: 6),
                 Text('Pick a category and add hashtags to help others discover it', style: _hintStyle),
                 const SizedBox(height: 16),
-                _fieldLabel('Category', required: true),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 120,
-                  child: SingleChildScrollView(
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: CategoryType.values.map(_buildCategoryChip).toList(),
-                    ),
-                  ),
-                ),
+                _buildCategoryPicker(),
                 const SizedBox(height: 18),
                 _fieldLabel('Tags', optional: true),
                 const SizedBox(height: 8),
