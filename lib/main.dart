@@ -721,6 +721,14 @@ class _UsernameScreenState extends State<UsernameScreen> {
   final _controller = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  Future<void> _submit(AuthProvider auth) async {
+    if (!_formKey.currentState!.validate()) return;
+    auth.clearError();
+    final success = await auth.setUsername(UsernameUtils.normalize(_controller.text));
+    if (!mounted || success) return;
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -740,19 +748,30 @@ class _UsernameScreenState extends State<UsernameScreen> {
                 inputFormatters: UsernameUtils.inputFormatters,
                 decoration: const InputDecoration(labelText: 'Username'),
                 validator: UsernameUtils.validate,
+                onChanged: (_) {
+                  if (auth.error != null) auth.clearError();
+                },
               ),
+              if (auth.error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  auth.error!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ],
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: auth.isLoading
-                      ? null
-                      : () {
-                          if (!_formKey.currentState!.validate()) return;
-                          auth.setUsername(UsernameUtils.normalize(_controller.text));
-                        },
-                  child: const Text('Continue'),
+                  onPressed: auth.isLoading ? null : () => _submit(auth),
+                  child: auth.isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Continue'),
                 ),
               ),
             ],

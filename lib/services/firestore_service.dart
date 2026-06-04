@@ -107,7 +107,7 @@ class FirestoreService {
         final ownerId = data['userId'] as String? ?? '';
         final title = data['title'] as String? ?? '';
         final collectionCategory = _collectionCategoryFromMap(data);
-        await _sendCommentNotifications(
+        final notifiedUserIds = await _sendCommentNotifications(
           commentId: docRef.id,
           collectionId: collectionId,
           collectionTitle: title,
@@ -129,6 +129,7 @@ class FirestoreService {
           userAvatarUrl: userAvatarUrl,
           text: text,
           mentions: mentions,
+          excludeUserIds: notifiedUserIds,
         );
       }
     } catch (e) {
@@ -144,7 +145,7 @@ class FirestoreService {
     return trimmed;
   }
 
-  Future<void> _sendCommentNotifications({
+  Future<Set<String>> _sendCommentNotifications({
     required String commentId,
     required String collectionId,
     required String collectionTitle,
@@ -160,6 +161,8 @@ class FirestoreService {
     if (resolvedAvatarUrl == null || resolvedAvatarUrl.trim().isEmpty) {
       resolvedAvatarUrl = await _getUserAvatarUrl(userId);
     }
+
+    final notifiedUserIds = <String>{};
 
     Future<void> createNotification({
       required String toUserId,
@@ -185,11 +188,12 @@ class FirestoreService {
         payload['parentCommentId'] = parentCommentId;
       }
       await _firestore.collection('notifications').add(payload);
+      notifiedUserIds.add(toUserId);
     }
 
     if (parentCommentId == null) {
       await createNotification(toUserId: ownerId, type: 'COMMENT');
-      return;
+      return notifiedUserIds;
     }
 
     final parentSnap = await _commentsRef.doc(parentCommentId).get();
@@ -204,6 +208,8 @@ class FirestoreService {
     if (ownerId.isNotEmpty && ownerId != parentAuthorId) {
       await createNotification(toUserId: ownerId, type: 'COMMENT');
     }
+
+    return notifiedUserIds;
   }
 
   Future<List<CommentMention>> _resolveCommentMentions(String text) async {
@@ -236,14 +242,18 @@ class FirestoreService {
     String? userAvatarUrl,
     required String text,
     required List<CommentMention> mentions,
+    Set<String> excludeUserIds = const {},
   }) async {
     var resolvedAvatarUrl = userAvatarUrl;
     if (resolvedAvatarUrl == null || resolvedAvatarUrl.trim().isEmpty) {
       resolvedAvatarUrl = await _getUserAvatarUrl(userId);
     }
 
+    final sentUserIds = <String>{...excludeUserIds};
     for (final mention in mentions) {
       if (mention.userId.isEmpty || mention.userId == userId) continue;
+      if (sentUserIds.contains(mention.userId)) continue;
+      sentUserIds.add(mention.userId);
 
       await _firestore.collection('notifications').add({
         'toUserId': mention.userId,
@@ -2552,6 +2562,96 @@ class FirestoreService {
       // ignore: avoid_print
       print('Error uploading image: $e');
       return null;
+    }
+  }
+
+  /// Permanently deletes all Firestore data associated with [userId].
+  Future<void> deleteUserAccount(String userId) async {
+    debugPrint('FirestoreService: deleteUserAccount $userId');
+
+    final collectionsSnap =
+        await _collectionsRef.where('userId', isEqualTo: userId).get();
+    for (final doc in collectionsSnap.docs) {
+      await _runAccountDeletionStep(
+        'delete collection ${doc.id}',
+        () => deleteCollection(doc.id, userId),
+      );
+    }
+
+    await _runAccountDeletionStep(
+      'delete comments',
+      () => _deleteQueryDocumentsInBatches(
+        _commentsRef.where('userId', isEqualTo: userId),
+      ),
+    );
+
+    await _runAccountDeletionStep(
+      'delete incoming notifications',
+      () => _deleteQueryDocumentsInBatches(
+        _firestore.collection('notifications').where('toUserId', isEqualTo: userId),
+      ),
+    );
+    await _runAccountDeletionStep(
+      'delete outgoing notifications',
+      () => _deleteQueryDocumentsInBatches(
+        _firestore.collection('notifications').where('fromUserId', isEqualTo: userId),
+      ),
+    );
+
+    await _runAccountDeletionStep(
+      'delete reports',
+      () => _deleteQueryDocumentsInBatches(
+        _reportsRef.where('reporterUserId', isEqualTo: userId),
+      ),
+    );
+
+    // Best-effort cleanup on other users' docs — often blocked by security rules.
+    await _runAccountDeletionStep(
+      'remove likes from other collections',
+      () => _updateQueryDocumentsInBatches(
+        _collectionsRef.where('likedBy', arrayContains: userId),
+        {'likedBy': FieldValue.arrayRemove([userId])},
+      ),
+    );
+    await _runAccountDeletionStep(
+      'remove from other users followers',
+      () => _updateQueryDocumentsInBatches(
+        _usersRef.where('followers', arrayContains: userId),
+        {'followers': FieldValue.arrayRemove([userId])},
+      ),
+    );
+    await _runAccountDeletionStep(
+      'remove from other users following',
+      () => _updateQueryDocumentsInBatches(
+        _usersRef.where('following', arrayContains: userId),
+        {'following': FieldValue.arrayRemove([userId])},
+      ),
+    );
+    await _runAccountDeletionStep(
+      'remove pending follow requests',
+      () => _updateQueryDocumentsInBatches(
+        _usersRef.where('followRequests', arrayContains: userId),
+        {'followRequests': FieldValue.arrayRemove([userId])},
+      ),
+    );
+
+    await _runAccountDeletionStep(
+      'delete avatar',
+      () => _storage.ref().child('avatars/$userId.jpg').delete(),
+    );
+
+    await _usersRef.doc(userId).delete();
+  }
+
+  Future<void> _runAccountDeletionStep(
+    String label,
+    Future<void> Function() step,
+  ) async {
+    try {
+      await step();
+    } catch (e, stackTrace) {
+      debugPrint('deleteUserAccount: $label failed: $e');
+      debugPrint('$stackTrace');
     }
   }
 

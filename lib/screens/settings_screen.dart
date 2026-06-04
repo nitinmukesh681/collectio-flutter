@@ -162,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _SettingsInfoRow(
                 icon: Icons.info_outline_rounded,
                 title: 'App Version',
-                subtitle: '1.0.5 (5)',
+                subtitle: '1.0.5 (8)',
               ),
               _SettingsDivider(),
               _SettingsNavRow(
@@ -312,40 +312,143 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showDeleteAccountDialog(BuildContext context) {
+    final auth = context.read<AuthProvider>();
+    final passwordController = TextEditingController();
+    var isDeleting = false;
+    var needsReauth = false;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Delete Account',
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w700,
-            color: AppColors.heartSalmon,
-          ),
-        ),
-        content: Text(
-          'This action cannot be undone. All your data will be permanently deleted.',
-          style: GoogleFonts.plusJakartaSans(
-            color: AppColors.textSecondary,
-            height: 1.4,
-          ),
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.heartSalmon),
-            onPressed: () {
-              // TODO: Implement account deletion
-              Navigator.pop(context);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+      barrierDismissible: !isDeleting,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final usesPassword = auth.usesEmailPassword;
+          final usesGoogle = auth.usesGoogleSignIn;
+
+          Future<void> performDelete({String? password, bool withGoogle = false}) async {
+            setDialogState(() => isDeleting = true);
+            auth.clearError();
+
+            final success = await auth.deleteAccount(
+              password: password,
+              reauthenticateWithGoogle: withGoogle,
+            );
+
+            if (!dialogContext.mounted) return;
+
+            if (success) {
+              Navigator.pop(dialogContext);
+              if (context.mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+                SnackBarUtils.showSuccessSnackBar(
+                  context,
+                  'Your account has been deleted',
+                );
+              }
+              return;
+            }
+
+            setDialogState(() {
+              isDeleting = false;
+              needsReauth = auth.error?.contains('confirm your password') ?? false;
+            });
+          }
+
+          return AlertDialog(
+            title: Text(
+              'Delete Account',
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700,
+                color: AppColors.heartSalmon,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This action cannot be undone. All your data will be permanently deleted.',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                if (usesPassword || needsReauth) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    enabled: !isDeleting,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm your password',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+                if (auth.error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    auth.error!,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.heartSalmon,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            actions: [
+              OutlinedButton(
+                onPressed: isDeleting ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.heartSalmon),
+                onPressed: isDeleting
+                    ? null
+                    : () async {
+                        if (usesPassword || needsReauth) {
+                          final password = passwordController.text.trim();
+                          if (password.isEmpty) {
+                            setDialogState(() {
+                              auth.clearError();
+                            });
+                            SnackBarUtils.showErrorSnackBar(
+                              dialogContext,
+                              'Please enter your password to confirm.',
+                            );
+                            return;
+                          }
+                          await performDelete(password: password);
+                          return;
+                        }
+
+                        if (usesGoogle) {
+                          await performDelete(withGoogle: true);
+                          return;
+                        }
+
+                        await performDelete();
+                      },
+                child: isDeleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(usesGoogle && !usesPassword ? 'Confirm with Google' : 'Delete'),
+              ),
+            ],
+          );
+        },
       ),
-    );
+    ).whenComplete(passwordController.dispose);
   }
 }
 

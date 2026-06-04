@@ -65,6 +65,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   bool _isAddToCollectionsLoading = false;
   bool _isUnauthorized = false;
   bool _isDeletingCollection = false;
+  bool _isSubmittingComment = false;
 
   late TabController _tabController;
   final TextEditingController _commentController = TextEditingController();
@@ -2078,22 +2079,29 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton(
-                    onPressed: () async {
+                    onPressed: _isSubmittingComment
+                        ? null
+                        : () async {
                       final text = _commentController.text.trim();
                       if (text.isEmpty) return;
                       final mentions = List<CommentMention>.from(_commentConfirmedMentions);
                       _commentController.clear();
                       _commentConfirmedMentions = const [];
                       _commentFocusNode.unfocus();
-                      final auth = await _firestoreService.getUser(widget.currentUserId);
-                      await _firestoreService.addComment(
-                        collectionId: widget.collectionId,
-                        userId: widget.currentUserId,
-                        userName: auth?.userName ?? '',
-                        userAvatarUrl: auth?.avatarUrl,
-                        text: text,
-                        confirmedMentions: mentions,
-                      );
+                      setState(() => _isSubmittingComment = true);
+                      try {
+                        final auth = await _firestoreService.getUser(widget.currentUserId);
+                        await _firestoreService.addComment(
+                          collectionId: widget.collectionId,
+                          userId: widget.currentUserId,
+                          userName: auth?.userName ?? '',
+                          userAvatarUrl: auth?.avatarUrl,
+                          text: text,
+                          confirmedMentions: mentions,
+                        );
+                      } finally {
+                        if (mounted) setState(() => _isSubmittingComment = false);
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accentColor,
@@ -2312,6 +2320,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
   }
 
   Future<void> _postReply(CommentEntity targetComment, Map<String, CommentEntity> commentsById) async {
+    if (_isSubmittingComment) return;
     if (_commentDepth(targetComment, commentsById) >= _maxCommentDepth) return;
 
     final text = _replyController.text.trim();
@@ -2320,17 +2329,22 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> with Si
     _replyController.clear();
     _replyConfirmedMentions = const [];
     _replyFocusNode.unfocus();
-    final auth = await _firestoreService.getUser(widget.currentUserId);
-    await _firestoreService.addComment(
-      collectionId: widget.collectionId,
-      userId: widget.currentUserId,
-      userName: auth?.userName ?? '',
-      userAvatarUrl: auth?.avatarUrl,
-      text: text,
-      parentCommentId: targetComment.id,
-      confirmedMentions: mentions,
-    );
-    if (mounted) _cancelReply();
+    setState(() => _isSubmittingComment = true);
+    try {
+      final auth = await _firestoreService.getUser(widget.currentUserId);
+      await _firestoreService.addComment(
+        collectionId: widget.collectionId,
+        userId: widget.currentUserId,
+        userName: auth?.userName ?? '',
+        userAvatarUrl: auth?.avatarUrl,
+        text: text,
+        parentCommentId: targetComment.id,
+        confirmedMentions: mentions,
+      );
+      if (mounted) _cancelReply();
+    } finally {
+      if (mounted) setState(() => _isSubmittingComment = false);
+    }
   }
 
   Widget _buildReplyComposer(CommentEntity targetComment, Map<String, CommentEntity> commentsById) {

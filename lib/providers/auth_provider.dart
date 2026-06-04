@@ -269,6 +269,19 @@ class AuthProvider extends ChangeNotifier {
     _setLoading(true);
     _error = null;
     try {
+      if (username != null && username.trim().isNotEmpty) {
+        final normalized = UsernameUtils.normalize(username);
+        final available = await _firestoreService!.isUsernameAvailable(
+          normalized,
+          excludeUserId: '',
+        );
+        if (!available) {
+          _error = 'This username is already taken.';
+          _setLoading(false);
+          return false;
+        }
+      }
+
       final userCredential = await _authService!.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -324,11 +337,24 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> setUsername(String username) async {
     if (_firebaseUser == null || _firestoreService == null) return false;
     _setLoading(true);
+    _error = null;
     try {
+      final normalized = UsernameUtils.normalize(username);
+      final available = await _firestoreService!.isUsernameAvailable(
+        normalized,
+        excludeUserId: _firebaseUser!.uid,
+      );
+      if (!available) {
+        _error = 'This username is already taken.';
+        _setLoading(false);
+        notifyListeners();
+        return false;
+      }
+
       final user = UserEntity(
         id: _firebaseUser!.uid,
         email: _firebaseUser!.email ?? '',
-        username: UsernameUtils.normalize(username),
+        username: normalized,
       );
       await _firestoreService!.saveUser(user);
       _userEntity = user;
@@ -425,6 +451,78 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Permanently deletes the signed-in user's Firestore data and auth account.
+  Future<bool> deleteAccount({String? password, bool reauthenticateWithGoogle = false}) async {
+    if (_authService == null || _firestoreService == null || _firebaseUser == null) {
+      return false;
+    }
+
+    _setLoading(true);
+    _error = null;
+    final userId = _firebaseUser!.uid;
+
+    try {
+      if (reauthenticateWithGoogle) {
+        await _authService!.reauthenticateWithGoogle();
+      } else if (password != null && password.isNotEmpty) {
+        final email = _firebaseUser!.email;
+        if (email == null || email.isEmpty) {
+          _error = 'Could not verify your identity. Please sign in again.';
+          _setLoading(false);
+          return false;
+        }
+        final credential = EmailAuthProvider.credential(
+          email: email,
+          password: password,
+        );
+        await _firebaseUser!.reauthenticateWithCredential(credential);
+      }
+
+      await _firestoreService!.deleteUserAccount(userId);
+
+      _userSubscription?.cancel();
+      _userSubscription = null;
+
+      await _authService!.deleteAccount();
+
+      _userEntity = null;
+      _needsUsername = false;
+      _firebaseUser = null;
+      _userProfileLoaded = false;
+      _setLoading(false);
+      return true;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        _error = 'For security, please confirm your password to delete your account.';
+      } else if (e.code == 'wrong-password') {
+        _error = 'Incorrect password.';
+      } else {
+        _error = _getErrorMessage(e.code);
+      }
+      _setLoading(false);
+      return false;
+    } catch (e) {
+      debugPrint('deleteAccount error: $e');
+      final message = e.toString();
+      if (message.contains('permission-denied')) {
+        _error =
+            'Could not delete your profile. Please sign out, sign back in, and try again.';
+      } else {
+        _error = 'Could not delete account. Please try again.';
+      }
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  bool get usesEmailPassword =>
+      _firebaseUser?.providerData.any((info) => info.providerId == 'password') ??
+      false;
+
+  bool get usesGoogleSignIn =>
+      _firebaseUser?.providerData.any((info) => info.providerId == 'google.com') ??
+      false;
+
   /// Sign out
   Future<void> signOut() async {
     _userSubscription?.cancel();
@@ -457,6 +555,8 @@ class AuthProvider extends ChangeNotifier {
         return 'Invalid email address.';
       case 'weak-password':
         return 'Password is too weak.';
+      case 'username-already-in-use':
+        return 'This username is already taken.';
       default:
         return 'An error occurred. Please try again.';
     }

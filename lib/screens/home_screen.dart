@@ -151,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (!_isLoadingCollabs && _collabCollections.isNotEmpty) ...[
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 260,
+                        height: CollaborationCard.cardHeight,
                         child: ListView.builder(
                           padding: const EdgeInsets.only(left: 16),
                           scrollDirection: Axis.horizontal,
@@ -166,13 +166,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 10)),
                   ],
 
                   // Your Feed section
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                       child: Text(
                         'Your Feed',
                         style: GoogleFonts.plusJakartaSans(
@@ -444,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (showCollaborate) ...[
             const Divider(height: 1, thickness: 1, color: AppColors.divider),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
               child: Row(
                 children: [
                   Text(

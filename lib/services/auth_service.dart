@@ -93,4 +93,46 @@ class AuthService {
     await _googleSignIn.signOut();
     await _firebaseAuth.signOut();
   }
+
+  /// Re-authenticate with Google (required before sensitive operations).
+  Future<void> reauthenticateWithGoogle() async {
+    final user = currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No signed-in user.',
+      );
+    }
+
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) {
+      throw FirebaseAuthException(
+        code: 'cancelled',
+        message: 'Sign-in cancelled.',
+      );
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  /// Permanently deletes the current Firebase Auth user.
+  Future<void> deleteAccount() async {
+    final user = currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No signed-in user.',
+      );
+    }
+    await user.delete();
+  }
 }

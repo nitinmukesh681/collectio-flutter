@@ -7,6 +7,7 @@ class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  static bool _initialized = false;
 
   Future<String?> _getFcmTokenSafely() async {
     if (kIsWeb) {
@@ -32,6 +33,9 @@ class NotificationService {
   }
 
   Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+
     // Initialize local notifications
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');

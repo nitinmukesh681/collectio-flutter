@@ -8,6 +8,9 @@ import '../utils/category_icons.dart';
 import '../theme/app_theme.dart';
 
 class CollaborationCard extends StatefulWidget {
+  static const double cardWidth = 158;
+  static const double cardHeight = 172;
+
   final CollectionEntity collection;
   final VoidCallback onTap;
 
@@ -18,9 +21,9 @@ class CollaborationCard extends StatefulWidget {
 }
 
 class _CollaborationCardState extends State<CollaborationCard> {
-  static const double _cardWidth = 220;
-  static const double _cardHeight = 260;
-  static const double _cardRadius = 18;
+  static const double _cardWidth = CollaborationCard.cardWidth;
+  static const double _cardHeight = CollaborationCard.cardHeight;
+  static const double _cardRadius = 13;
 
   late Future<String?> _coverUrlFuture;
 
@@ -63,7 +66,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
         title: widget.collection.title,
       ),
       gradientColors: gradientColors,
-      iconSize: 36,
+      iconSize: 26,
     );
   }
 
@@ -98,7 +101,7 @@ class _CollaborationCardState extends State<CollaborationCard> {
       child: Container(
         width: _cardWidth,
         height: _cardHeight,
-        margin: const EdgeInsets.only(right: 16),
+        margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(_cardRadius),
           boxShadow: AppColors.collectionCoverShadow,
@@ -132,34 +135,34 @@ class _CollaborationCardState extends State<CollaborationCard> {
                       Colors.black.withValues(alpha: 0.08),
                       Colors.black.withValues(alpha: 0.72),
                     ],
-                    stops: const [0.45, 0.72, 1.0],
+                    stops: const [0.42, 0.7, 1.0],
                   ),
                 ),
               ),
               Positioned(
-                top: 10,
-                left: 10,
+                top: 8,
+                left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
                     'COLLECTING',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 9,
+                      fontSize: 7.5,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      letterSpacing: 0.8,
+                      letterSpacing: 0.6,
                     ),
                   ),
                 ),
               ),
               Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
+                left: 10,
+                right: 10,
+                bottom: 10,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -167,29 +170,29 @@ class _CollaborationCardState extends State<CollaborationCard> {
                     Text(
                       collection.title,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 18,
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
-                        height: 1.15,
-                        letterSpacing: -0.35,
+                        height: 1.12,
+                        letterSpacing: -0.28,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (location != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 5),
                       Row(
                         children: [
                           Transform.translate(
-                            offset: const Offset(-2, 0),
-                            child: const Icon(Icons.location_on, size: 14, color: Colors.white),
+                            offset: const Offset(-1, 0),
+                            child: const Icon(Icons.location_on, size: 11, color: Colors.white),
                           ),
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
                               location,
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.white.withValues(alpha: 0.92),
                               ),
